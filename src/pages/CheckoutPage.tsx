@@ -5,11 +5,53 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
-import { CheckCircle } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { orderService } from "@/services/orderService";
+import { useToast } from "@/hooks/use-toast";
+import { CheckCircle, Loader2 } from "lucide-react";
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [isComplete, setIsComplete] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [shipping, setShipping] = useState({
+    firstName: "", lastName: "", address: "", city: "", zip: "",
+  });
+
+  const handlePlaceOrder = async () => {
+    if (!user) return;
+    if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
+      toast({ title: "Missing shipping info", description: "Please fill in all shipping fields.", variant: "destructive" });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const order = await orderService.create(user.id, totalPrice);
+      await orderService.addItems(
+        order.id,
+        items.map(({ product, quantity }) => ({
+          title: product.title,
+          price: product.discountPrice ?? product.price,
+          quantity,
+          product_id: product.id,
+          vendor_id: product.vendorId,
+          image: product.images?.[0] ?? "",
+        }))
+      );
+      setOrderId(order.id);
+      clearCart();
+      setIsComplete(true);
+    } catch (err: any) {
+      toast({ title: "Order failed", description: err.message ?? "Something went wrong.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (isComplete) {
     return (
@@ -18,8 +60,12 @@ const CheckoutPage = () => {
           <CheckCircle className="h-10 w-10 text-success" />
         </div>
         <h1 className="text-2xl font-semibold">Order Placed!</h1>
-        <p className="text-muted-foreground mt-2">Thank you for your purchase. You'll receive a confirmation email shortly.</p>
-        <Button className="mt-6" asChild><Link to="/">Continue Shopping</Link></Button>
+        <p className="text-muted-foreground mt-2">Thank you for your purchase. Your order ID is:</p>
+        {orderId && <p className="font-mono text-sm bg-muted px-3 py-1.5 rounded mt-2 inline-block">{orderId.slice(0, 8)}</p>}
+        <div className="mt-6 flex gap-3 justify-center">
+          <Button asChild><Link to="/profile">View Orders</Link></Button>
+          <Button variant="outline" asChild><Link to="/">Continue Shopping</Link></Button>
+        </div>
       </div>
     );
   }
@@ -44,23 +90,23 @@ const CheckoutPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>First Name</Label>
-                <Input placeholder="John" />
+                <Input placeholder="John" value={shipping.firstName} onChange={e => setShipping(s => ({ ...s, firstName: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Last Name</Label>
-                <Input placeholder="Doe" />
+                <Input placeholder="Doe" value={shipping.lastName} onChange={e => setShipping(s => ({ ...s, lastName: e.target.value }))} />
               </div>
               <div className="col-span-2 space-y-2">
                 <Label>Address</Label>
-                <Input placeholder="123 Main Street" />
+                <Input placeholder="123 Main Street" value={shipping.address} onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>City</Label>
-                <Input placeholder="New York" />
+                <Input placeholder="New York" value={shipping.city} onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Zip Code</Label>
-                <Input placeholder="10001" />
+                <Input placeholder="10001" value={shipping.zip} onChange={e => setShipping(s => ({ ...s, zip: e.target.value }))} />
               </div>
             </div>
           </div>
@@ -107,12 +153,10 @@ const CheckoutPage = () => {
             <Button
               size="lg"
               className="w-full mt-6 h-12"
-              onClick={() => {
-                clearCart();
-                setIsComplete(true);
-              }}
+              disabled={submitting}
+              onClick={handlePlaceOrder}
             >
-              Place Order — ${totalPrice.toFixed(2)}
+              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — $${totalPrice.toFixed(2)}`}
             </Button>
           </div>
         </div>
