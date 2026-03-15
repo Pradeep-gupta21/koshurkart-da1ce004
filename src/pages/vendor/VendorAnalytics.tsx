@@ -1,9 +1,10 @@
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Package, DollarSign } from "lucide-react";
+import { BarChart3, TrendingUp, Package, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { productService } from "@/services/productService";
+import { analyticsService } from "@/services/analyticsService";
 
 const VendorAnalytics = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
@@ -26,6 +27,12 @@ const VendorAnalytics = () => {
     enabled: !!vendorId,
   });
 
+  const { data: analytics } = useQuery({
+    queryKey: ['vendor-analytics-events', vendorId],
+    queryFn: () => analyticsService.getVendorAnalytics(vendorId),
+    enabled: !!vendorId,
+  });
+
   const totalRevenue = orderItems.reduce((sum, item: any) => sum + (Number(item.price) * item.quantity), 0);
   const totalUnitsSold = orderItems.reduce((sum, item: any) => sum + item.quantity, 0);
   const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
@@ -41,6 +48,20 @@ const VendorAnalytics = () => {
   }
   const topProducts = Object.values(salesByProduct).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
+  const statsCards = [
+    { label: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign },
+    { label: "Units Sold", value: totalUnitsSold.toString(), icon: TrendingUp },
+    { label: "Active Products", value: activeProducts.toString(), icon: Package },
+    { label: "Total Stock", value: totalStock.toString(), icon: BarChart3 },
+  ];
+
+  const analyticsCards = [
+    { label: "Product Views", value: analytics?.productViews?.toString() ?? '0', icon: Eye },
+    { label: "Ad Impressions", value: analytics?.adImpressions?.toString() ?? '0', icon: Target },
+    { label: "Ad Clicks", value: analytics?.adClicks?.toString() ?? '0', icon: MousePointerClick },
+    { label: "Conversion Rate", value: `${analytics?.conversionRate ?? '0'}%`, icon: ArrowUpRight },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -49,12 +70,7 @@ const VendorAnalytics = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign },
-          { label: "Units Sold", value: totalUnitsSold.toString(), icon: TrendingUp },
-          { label: "Active Products", value: activeProducts.toString(), icon: Package },
-          { label: "Total Stock", value: totalStock.toString(), icon: BarChart3 },
-        ].map(item => (
+        {statsCards.map(item => (
           <Card key={item.label} className="marketplace-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{item.label}</CardTitle>
@@ -65,6 +81,31 @@ const VendorAnalytics = () => {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Ad & Engagement Analytics */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Ad & Engagement Metrics</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {analyticsCards.map(item => (
+            <Card key={item.label} className="marketplace-shadow">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">{item.label}</CardTitle>
+                <item.icon className="h-5 w-5 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{item.value}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        {analytics?.salesGrowth && analytics.salesGrowth !== '0' && (
+          <p className="text-sm text-muted-foreground mt-2">
+            Sales growth (30d): <span className={`font-semibold ${Number(analytics.salesGrowth) >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {Number(analytics.salesGrowth) >= 0 ? '+' : ''}{analytics.salesGrowth}%
+            </span>
+          </p>
+        )}
       </div>
 
       <Card className="marketplace-shadow">

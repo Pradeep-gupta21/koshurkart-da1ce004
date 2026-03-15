@@ -98,6 +98,36 @@ export type Database = {
         }
         Relationships: []
       }
+      analytics_events: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          product_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          product_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          product_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           id: string
@@ -342,6 +372,33 @@ export type Database = {
           },
         ]
       }
+      suspicious_clicks: {
+        Row: {
+          campaign_id: string
+          click_count: number
+          flagged_at: string
+          id: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          campaign_id: string
+          click_count?: number
+          flagged_at?: string
+          id?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          campaign_id?: string
+          click_count?: number
+          flagged_at?: string
+          id?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -410,6 +467,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      record_analytics_event: {
+        Args: {
+          _campaign_id?: string
+          _event_type: string
+          _metadata?: Json
+          _product_id?: string
+        }
+        Returns: undefined
       }
       track_ad_event: {
         Args: { _campaign_id: string; _event_type: string }
