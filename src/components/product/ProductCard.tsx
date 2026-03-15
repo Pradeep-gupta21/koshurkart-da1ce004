@@ -1,0 +1,80 @@
+import { Link } from "react-router-dom";
+import { Star } from "lucide-react";
+import { Product } from "@/types";
+import { Button } from "@/components/ui/button";
+import { useCart } from "@/contexts/CartContext";
+
+interface ProductCardProps {
+  product: Product;
+}
+
+const ProductCard = ({ product }: ProductCardProps) => {
+  const { addToCart } = useCart();
+
+  return (
+    <div className="group relative bg-card rounded-xl marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover overflow-hidden">
+      {product.isSponsored && (
+        <span className="absolute top-2 left-2 z-10 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-muted-foreground border">
+          SPONSORED
+        </span>
+      )}
+      {product.discountPrice && (
+        <span className="absolute top-2 right-2 z-10 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
+          {Math.round((1 - product.discountPrice / product.price) * 100)}% OFF
+        </span>
+      )}
+
+      <Link to={`/product/${product.slug}`}>
+        <div className="aspect-square overflow-hidden bg-muted">
+          <img
+            src={product.images[0]}
+            alt={product.title}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        </div>
+      </Link>
+
+      <div className="p-4">
+        <p className="text-[11px] text-muted-foreground mb-1">{product.vendorName}</p>
+        <Link to={`/product/${product.slug}`}>
+          <h3 className="text-sm font-medium text-card-foreground line-clamp-1 hover:text-primary transition-colors">
+            {product.title}
+          </h3>
+        </Link>
+
+        <div className="flex items-center gap-1 mt-1.5">
+          <Star className="h-3 w-3 fill-accent text-accent" />
+          <span className="text-xs font-medium tabular-nums">{product.rating}</span>
+          <span className="text-xs text-muted-foreground">({product.reviewCount})</span>
+        </div>
+
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-lg font-semibold text-primary tabular-nums">
+              ${(product.discountPrice ?? product.price).toFixed(2)}
+            </span>
+            {product.discountPrice && (
+              <span className="text-xs text-muted-foreground line-through tabular-nums">
+                ${product.price.toFixed(2)}
+              </span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.preventDefault();
+              addToCart(product);
+            }}
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProductCard;
