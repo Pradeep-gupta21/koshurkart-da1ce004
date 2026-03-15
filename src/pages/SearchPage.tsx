@@ -33,6 +33,7 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     description: "",
     status: "active",
     isSponsored: true,
+    createdAt: c.created_at ?? "",
   };
 };
 
