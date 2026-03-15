@@ -23,6 +23,7 @@ import VendorProducts from "@/pages/vendor/VendorProducts";
 import VendorCampaigns from "@/pages/vendor/VendorCampaigns";
 import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
 import VendorPayments from "@/pages/vendor/VendorPayments";
+import VendorOrders from "@/pages/vendor/VendorOrders";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import AdminVendors from "@/pages/admin/AdminVendors";
@@ -58,6 +59,7 @@ const App = () => (
                   <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
                     <Route index element={<VendorOverview />} />
                     <Route path="products" element={<VendorProducts />} />
+                    <Route path="orders" element={<VendorOrders />} />
                     <Route path="campaigns" element={<VendorCampaigns />} />
                     <Route path="analytics" element={<VendorAnalytics />} />
                     <Route path="payments" element={<VendorPayments />} />
