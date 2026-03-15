@@ -44,6 +44,10 @@ const CheckoutPage = () => {
           image: product.images?.[0] ?? "",
         }))
       );
+      // Track purchase events for each item
+      for (const { product, quantity } of items) {
+        analyticsService.trackEvent('purchase', product.id, undefined, { quantity, price: product.discountPrice ?? product.price });
+      }
       setOrderId(order.id);
       clearCart();
       setIsComplete(true);

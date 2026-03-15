@@ -62,12 +62,21 @@ const ProductDetailPage = () => {
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const trackedRef = useRef(false);
 
   const { data: product, isLoading, error } = useQuery({
     queryKey: ['product', slug],
     queryFn: () => productService.getBySlug(slug!),
     enabled: !!slug,
   });
+
+  // Track product view once
+  useEffect(() => {
+    if (product?.id && !trackedRef.current) {
+      trackedRef.current = true;
+      analyticsService.trackEvent('product_view', product.id);
+    }
+  }, [product?.id]);
 
   const { data: reviews = [] } = useQuery({
     queryKey: ['reviews', product?.id],
