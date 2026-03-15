@@ -14,7 +14,48 @@ import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 
-const ProductDetailPage = () => {
+const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
+  const p = c.products;
+  return {
+    campaignId: c.id,
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    price: Number(p.price),
+    discountPrice: p.discount_price ? Number(p.discount_price) : undefined,
+    images: p.images ?? [],
+    rating: Number(p.rating ?? 0),
+    reviewCount: p.review_count ?? 0,
+    category: p.category,
+    vendorId: p.vendor_id,
+    vendorName: p.vendors?.store_name ?? "",
+    stock: 0,
+    description: "",
+    status: "active",
+    isSponsored: true,
+    createdAt: c.created_at ?? "",
+  };
+};
+
+const SponsoredSuggestionsInline = () => {
+  const { data: campaigns = [] } = useQuery({
+    queryKey: ['ads', 'product'],
+    queryFn: () => adService.getApprovedByPlacement('product'),
+  });
+  const ads = campaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
+  if (ads.length === 0) return null;
+  return (
+    <section className="mt-14">
+      <h2 className="text-xl font-semibold mb-6">Sponsored Suggestions</h2>
+      <ProductGrid>
+        {ads.slice(0, 4).map(ad => (
+          <SponsoredProductCard key={ad.campaignId} product={ad} campaignId={ad.campaignId} />
+        ))}
+      </ProductGrid>
+    </section>
+  );
+};
+
   const { slug } = useParams();
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
