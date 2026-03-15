@@ -56,8 +56,41 @@ const VendorCampaigns = () => {
     }
   };
 
+  const totalImpressions = campaigns.reduce((s: number, c: any) => s + (c.impressions ?? 0), 0);
+  const totalClicks = campaigns.reduce((s: number, c: any) => s + (c.clicks ?? 0), 0);
+  const totalBudget = campaigns.reduce((s: number, c: any) => s + Number(c.budget ?? 0), 0);
+  const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0.00";
+
   return (
     <div className="space-y-6">
+      {/* Analytics Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Total Budget</p>
+            <p className="text-2xl font-bold">${totalBudget.toFixed(2)}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Impressions</p>
+            <p className="text-2xl font-bold">{totalImpressions.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Clicks</p>
+            <p className="text-2xl font-bold">{totalClicks.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">CTR</p>
+            <p className="text-2xl font-bold">{ctr}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ad Campaigns</h1>
