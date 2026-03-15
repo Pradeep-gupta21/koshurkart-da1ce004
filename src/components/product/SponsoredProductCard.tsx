@@ -7,6 +7,7 @@ import RatingStars from "./RatingStars";
 import PriceDisplay from "./PriceDisplay";
 import { Sparkles } from "lucide-react";
 import { adService } from "@/services/adService";
+import { analyticsService } from "@/services/analyticsService";
 
 interface SponsoredProductCardProps {
   product: Product;
@@ -19,12 +20,14 @@ const SponsoredProductCard = ({ product, campaignId }: SponsoredProductCardProps
   useEffect(() => {
     if (campaignId) {
       adService.trackImpression(campaignId);
+      analyticsService.trackEvent('ad_view', product.id, campaignId);
     }
-  }, [campaignId]);
+  }, [campaignId, product.id]);
 
   const handleClick = () => {
     if (campaignId) {
       adService.trackClick(campaignId);
+      analyticsService.trackEvent('ad_click', product.id, campaignId);
     }
   };
 

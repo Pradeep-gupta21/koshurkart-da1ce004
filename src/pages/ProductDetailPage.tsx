@@ -12,7 +12,8 @@ import { adService } from "@/services/adService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { analyticsService } from "@/services/analyticsService";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
   const p = c.products;
