@@ -1,17 +1,32 @@
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import RatingStars from "./RatingStars";
 import PriceDisplay from "./PriceDisplay";
 import { Sparkles } from "lucide-react";
+import { adService } from "@/services/adService";
 
 interface SponsoredProductCardProps {
   product: Product;
+  campaignId?: string;
 }
 
-const SponsoredProductCard = ({ product }: SponsoredProductCardProps) => {
+const SponsoredProductCard = ({ product, campaignId }: SponsoredProductCardProps) => {
   const { addToCart } = useCart();
+
+  useEffect(() => {
+    if (campaignId) {
+      adService.trackImpression(campaignId);
+    }
+  }, [campaignId]);
+
+  const handleClick = () => {
+    if (campaignId) {
+      adService.trackClick(campaignId);
+    }
+  };
 
   return (
     <div className="group relative bg-card rounded-xl marketplace-shadow overflow-hidden ring-1 ring-accent/20 transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover">
@@ -24,7 +39,7 @@ const SponsoredProductCard = ({ product }: SponsoredProductCardProps) => {
         </span>
       )}
 
-      <Link to={`/product/${product.slug}`}>
+      <Link to={`/product/${product.slug}`} onClick={handleClick}>
         <div className="aspect-square overflow-hidden bg-muted">
           <img
             src={product.images[0]}
@@ -37,7 +52,7 @@ const SponsoredProductCard = ({ product }: SponsoredProductCardProps) => {
 
       <div className="p-4">
         <p className="text-[11px] text-muted-foreground mb-1">{product.vendorName}</p>
-        <Link to={`/product/${product.slug}`}>
+        <Link to={`/product/${product.slug}`} onClick={handleClick}>
           <h3 className="text-sm font-medium text-card-foreground line-clamp-1 hover:text-primary transition-colors">
             {product.title}
           </h3>

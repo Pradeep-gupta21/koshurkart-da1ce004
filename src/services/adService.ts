@@ -39,4 +39,22 @@ export const adService = {
     if (error) throw error;
     return count ?? 0;
   },
+
+  async getApprovedByPlacement(placement: string) {
+    const { data, error } = await supabase
+      .from('ad_campaigns')
+      .select('*, products(id, title, slug, price, discount_price, images, rating, review_count, category, vendor_id, vendors(store_name))')
+      .eq('placement', placement)
+      .eq('status', 'approved');
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async trackImpression(campaignId: string) {
+    await supabase.rpc('track_ad_event', { _campaign_id: campaignId, _event_type: 'impression' });
+  },
+
+  async trackClick(campaignId: string) {
+    await supabase.rpc('track_ad_event', { _campaign_id: campaignId, _event_type: 'click' });
+  },
 };

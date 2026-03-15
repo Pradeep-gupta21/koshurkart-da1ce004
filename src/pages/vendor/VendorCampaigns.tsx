@@ -56,8 +56,41 @@ const VendorCampaigns = () => {
     }
   };
 
+  const totalImpressions = campaigns.reduce((s: number, c: any) => s + (c.impressions ?? 0), 0);
+  const totalClicks = campaigns.reduce((s: number, c: any) => s + (c.clicks ?? 0), 0);
+  const totalBudget = campaigns.reduce((s: number, c: any) => s + Number(c.budget ?? 0), 0);
+  const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0.00";
+
   return (
     <div className="space-y-6">
+      {/* Analytics Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Total Budget</p>
+            <p className="text-2xl font-bold">${totalBudget.toFixed(2)}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Impressions</p>
+            <p className="text-2xl font-bold">{totalImpressions.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">Clicks</p>
+            <p className="text-2xl font-bold">{totalClicks.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card className="marketplace-shadow">
+          <CardContent className="py-4">
+            <p className="text-sm text-muted-foreground">CTR</p>
+            <p className="text-2xl font-bold">{ctr}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ad Campaigns</h1>
@@ -123,22 +156,26 @@ const VendorCampaigns = () => {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {campaigns.map(c => (
-            <Card key={c.id} className="marketplace-shadow">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">{(c as any).products?.title ?? "Product"}</h3>
-                  <Badge className={statusColor(c.status)}>{c.status}</Badge>
-                </div>
-                <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                  <span className="capitalize">{c.placement}</span>
-                  <span>Budget: ${c.budget}</span>
-                  <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions}</span>
-                  <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {campaigns.map(c => {
+            const campCtr = (c.impressions ?? 0) > 0 ? (((c.clicks ?? 0) / (c.impressions ?? 1)) * 100).toFixed(2) : "0.00";
+            return (
+              <Card key={c.id} className="marketplace-shadow">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">{(c as any).products?.title ?? "Product"}</h3>
+                    <Badge className={statusColor(c.status)}>{c.status}</Badge>
+                  </div>
+                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                    <span className="capitalize">{c.placement}</span>
+                    <span>Budget: ${c.budget}</span>
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
+                    <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
+                    <span>CTR: {campCtr}%</span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

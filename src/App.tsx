@@ -27,6 +27,7 @@ import VendorOrders from "@/pages/vendor/VendorOrders";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import AdminVendors from "@/pages/admin/AdminVendors";
+import AdminCampaigns from "@/pages/admin/AdminCampaigns";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ const App = () => (
                   <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
                     <Route index element={<AdminOverview />} />
                     <Route path="vendors" element={<AdminVendors />} />
+                    <Route path="campaigns" element={<AdminCampaigns />} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />

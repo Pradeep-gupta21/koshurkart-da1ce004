@@ -6,10 +6,36 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ProductCard from "@/components/product/ProductCard";
+import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import { productService, type SortOption } from "@/services/productService";
+import { adService } from "@/services/adService";
+import type { Product } from "@/types";
 
 const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+
+const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
+  const p = c.products;
+  return {
+    campaignId: c.id,
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    price: Number(p.price),
+    discountPrice: p.discount_price ? Number(p.discount_price) : undefined,
+    images: p.images ?? [],
+    rating: Number(p.rating ?? 0),
+    reviewCount: p.review_count ?? 0,
+    category: p.category,
+    vendorId: p.vendor_id,
+    vendorName: p.vendors?.store_name ?? "",
+    stock: 0,
+    description: "",
+    status: "active",
+    isSponsored: true,
+    createdAt: c.created_at ?? "",
+  };
+};
 
 const SearchPage = () => {
   const [searchParams] = useSearchParams();
@@ -36,6 +62,36 @@ const SearchPage = () => {
       sort: sortBy === "relevance" ? "newest" : sortBy,
     }),
   });
+
+  const { data: sponsoredCampaigns = [] } = useQuery({
+    queryKey: ['ads', 'search'],
+    queryFn: () => adService.getApprovedByPlacement('search'),
+  });
+
+  const sponsoredAds = sponsoredCampaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
+
+  // Intersperse sponsored ads into results
+  const interspersed: React.ReactNode[] = [];
+  let adIndex = 0;
+  products.forEach((product, i) => {
+    // Insert a sponsored ad every 4 items
+    if (i > 0 && i % 4 === 0 && adIndex < sponsoredAds.length) {
+      const ad = sponsoredAds[adIndex];
+      interspersed.push(
+        <SponsoredProductCard key={`ad-${ad.campaignId}`} product={ad} campaignId={ad.campaignId} />
+      );
+      adIndex++;
+    }
+    interspersed.push(<ProductCard key={product.id} product={product} />);
+  });
+  // Append remaining ads at the end
+  while (adIndex < sponsoredAds.length) {
+    const ad = sponsoredAds[adIndex];
+    interspersed.push(
+      <SponsoredProductCard key={`ad-${ad.campaignId}`} product={ad} campaignId={ad.campaignId} />
+    );
+    adIndex++;
+  }
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -104,9 +160,7 @@ const SearchPage = () => {
       </p>
 
       <ProductGrid loading={isLoading}>
-        {products.map(product => (
-          <ProductCard key={product.id} product={product} />
-        ))}
+        {interspersed}
       </ProductGrid>
 
       {!isLoading && products.length === 0 && (

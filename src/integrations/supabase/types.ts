@@ -411,6 +411,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      track_ad_event: {
+        Args: { _campaign_id: string; _event_type: string }
+        Returns: undefined
+      }
       vendor_apply: {
         Args: {
           _description?: string
