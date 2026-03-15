@@ -40,38 +40,28 @@ const AuthPage = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
+
+    const metadata: Record<string, string> = { name: signupName };
+    if (isVendorSignup && storeName) {
+      metadata.store_name = storeName;
+      metadata.store_slug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    }
+
+    const { error } = await supabase.auth.signUp({
       email: signupEmail,
       password: signupPassword,
       options: {
-        data: { name: signupName },
+        data: metadata,
         emailRedirectTo: window.location.origin,
       },
     });
+
+    setLoading(false);
     if (error) {
-      setLoading(false);
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
       return;
     }
 
-    // If vendor signup, create vendor record
-    if (isVendorSignup && data.user) {
-      const slug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      const { error: vendorError } = await supabase.from("vendors").insert({
-        user_id: data.user.id,
-        store_name: storeName,
-        store_slug: slug,
-      });
-      if (!vendorError) {
-        // Add vendor role
-        await supabase.from("user_roles").insert({
-          user_id: data.user.id,
-          role: "vendor" as any,
-        });
-      }
-    }
-
-    setLoading(false);
     toast({
       title: "Account created!",
       description: "Please check your email to verify your account.",
