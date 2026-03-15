@@ -156,22 +156,26 @@ const VendorCampaigns = () => {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {campaigns.map(c => (
-            <Card key={c.id} className="marketplace-shadow">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">{(c as any).products?.title ?? "Product"}</h3>
-                  <Badge className={statusColor(c.status)}>{c.status}</Badge>
-                </div>
-                <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                  <span className="capitalize">{c.placement}</span>
-                  <span>Budget: ${c.budget}</span>
-                  <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions}</span>
-                  <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {campaigns.map(c => {
+            const campCtr = (c.impressions ?? 0) > 0 ? (((c.clicks ?? 0) / (c.impressions ?? 1)) * 100).toFixed(2) : "0.00";
+            return (
+              <Card key={c.id} className="marketplace-shadow">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">{(c as any).products?.title ?? "Product"}</h3>
+                    <Badge className={statusColor(c.status)}>{c.status}</Badge>
+                  </div>
+                  <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                    <span className="capitalize">{c.placement}</span>
+                    <span>Budget: ${c.budget}</span>
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
+                    <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
+                    <span>CTR: {campCtr}%</span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
