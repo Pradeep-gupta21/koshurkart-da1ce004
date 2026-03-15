@@ -23,6 +23,7 @@ import VendorProducts from "@/pages/vendor/VendorProducts";
 import VendorCampaigns from "@/pages/vendor/VendorCampaigns";
 import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
 import VendorPayments from "@/pages/vendor/VendorPayments";
+import VendorOrders from "@/pages/vendor/VendorOrders";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import AdminVendors from "@/pages/admin/AdminVendors";
