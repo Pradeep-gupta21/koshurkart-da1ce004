@@ -190,7 +190,7 @@ const ProductDetailPage = () => {
       </section>
 
       {/* Sponsored Suggestions */}
-      <SponsoredSuggestionsSection />
+      <SponsoredSuggestionsInline />
 
       {/* Similar */}
       {similarProducts.length > 0 && (
