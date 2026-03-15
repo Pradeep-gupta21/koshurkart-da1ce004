@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, Package, Megaphone, BarChart3, Wallet, Bell } from "lucide-react";
+import { LayoutDashboard, Package, Megaphone, BarChart3, Wallet, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
