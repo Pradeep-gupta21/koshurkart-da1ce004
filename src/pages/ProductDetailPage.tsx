@@ -189,6 +189,9 @@ const ProductDetailPage = () => {
         )}
       </section>
 
+      {/* Sponsored Suggestions */}
+      <SponsoredSuggestionsSection />
+
       {/* Similar */}
       {similarProducts.length > 0 && (
         <section className="mt-14 pb-8">

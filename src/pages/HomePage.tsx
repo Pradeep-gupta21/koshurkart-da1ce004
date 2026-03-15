@@ -4,13 +4,38 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import ProductCard from "@/components/product/ProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
+import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import { productService } from "@/services/productService";
+import { adService } from "@/services/adService";
 import heroBanner from "@/assets/hero-banner.jpg";
+import type { Product } from "@/types";
+
+const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
+  const p = c.products;
+  return {
+    campaignId: c.id,
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    price: Number(p.price),
+    discountPrice: p.discount_price ? Number(p.discount_price) : undefined,
+    images: p.images ?? [],
+    rating: Number(p.rating ?? 0),
+    reviewCount: p.review_count ?? 0,
+    category: p.category,
+    vendorId: p.vendor_id,
+    vendorName: p.vendors?.store_name ?? "",
+    stock: 0,
+    description: "",
+    status: "active",
+    isSponsored: true,
+  };
+};
 
 const HomePage = () => {
-  const { data: sponsoredProducts = [], isLoading: loadingSponsored } = useQuery({
-    queryKey: ['products', 'sponsored'],
-    queryFn: () => productService.getAll({ sponsored: true, limit: 4 }),
+  const { data: sponsoredCampaigns = [] } = useQuery({
+    queryKey: ['ads', 'homepage'],
+    queryFn: () => adService.getApprovedByPlacement('homepage'),
   });
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
@@ -27,6 +52,8 @@ const HomePage = () => {
     queryKey: ['vendors', 'featured'],
     queryFn: () => productService.getVendors(),
   });
+
+  const sponsoredProducts = sponsoredCampaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
 
   return (
     <div>
@@ -56,7 +83,7 @@ const HomePage = () => {
       </section>
 
       {/* Sponsored */}
-      {(loadingSponsored || sponsoredProducts.length > 0) && (
+      {sponsoredProducts.length > 0 && (
         <section className="container mx-auto px-4 mt-12">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -67,9 +94,9 @@ const HomePage = () => {
               <Link to="/search">View All <ChevronRight className="h-4 w-4 ml-1" /></Link>
             </Button>
           </div>
-          <ProductGrid loading={loadingSponsored} skeletonCount={4}>
-            {sponsoredProducts.map(product => (
-              <ProductCard key={product.id} product={product} />
+          <ProductGrid>
+            {sponsoredProducts.map((p) => (
+              <SponsoredProductCard key={p.campaignId} product={p} campaignId={p.campaignId} />
             ))}
           </ProductGrid>
         </section>

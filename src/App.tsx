@@ -70,6 +70,7 @@ const App = () => (
                   <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
                     <Route index element={<AdminOverview />} />
                     <Route path="vendors" element={<AdminVendors />} />
+                    <Route path="campaigns" element={<AdminCampaigns />} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
