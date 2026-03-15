@@ -1,0 +1,115 @@
+import { Link } from "react-router-dom";
+import { Search, ShoppingCart, User, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useCart } from "@/contexts/CartContext";
+import { useState } from "react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+
+const Header = () => {
+  const { totalItems } = useCart();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
+    }
+  };
+
+  return (
+    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+      {/* Top bar */}
+      <div className="bg-primary text-primary-foreground">
+        <div className="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
+          <span className="hidden sm:inline">Free shipping on orders over $50</span>
+          <div className="flex items-center gap-4">
+            <Link to="/vendor" className="hover:underline">Sell on Nexus</Link>
+            <Link to="/admin" className="hover:underline">Admin</Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Main header */}
+      <div className="container mx-auto px-4 py-3">
+        <div className="flex items-center gap-4">
+          {/* Mobile menu */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="lg:hidden">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72">
+              <nav className="mt-8 flex flex-col gap-2">
+                <Link to="/" className="text-lg font-semibold text-primary mb-4">Nexus Market</Link>
+                {categories.map(cat => (
+                  <Link key={cat} to={`/search?category=${cat}`} className="py-2 px-3 rounded-lg hover:bg-muted transition-colors text-sm">
+                    {cat}
+                  </Link>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2 shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-sm">N</span>
+            </div>
+            <span className="text-xl font-bold tracking-tight hidden sm:inline">Nexus Market</span>
+          </Link>
+
+          {/* Search */}
+          <form onSubmit={handleSearch} className="flex-1 max-w-2xl mx-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products, brands, categories..."
+                className="pl-10 h-10 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </form>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" asChild>
+              <Link to="/profile">
+                <User className="h-5 w-5" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" className="relative" asChild>
+              <Link to="/cart">
+                <ShoppingCart className="h-5 w-5" />
+                {totalItems > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-accent text-accent-foreground text-[10px] font-bold flex items-center justify-center">
+                    {totalItems}
+                  </span>
+                )}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Category bar - desktop */}
+      <nav className="hidden lg:block border-t">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-6 py-2">
+            {categories.map(cat => (
+              <Link key={cat} to={`/search?category=${cat}`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                {cat}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </nav>
+    </header>
+  );
+};
+
+export default Header;
