@@ -13,6 +13,7 @@ export interface Product {
   rating: number;
   reviewCount: number;
   isSponsored?: boolean;
+  status?: string;
   createdAt: string;
 }
 

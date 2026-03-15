@@ -1,9 +1,13 @@
 import { useParams, Link } from "react-router-dom";
 import { Star, ShoppingCart, ChevronRight, CheckCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import ProductCard from "@/components/product/ProductCard";
-import { mockProducts, mockReviews } from "@/data/mock-data";
+import ProductGrid from "@/components/product/ProductGrid";
+import { productService } from "@/services/productService";
+import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 
@@ -11,12 +15,53 @@ const ProductDetailPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
+  const [selectedImage, setSelectedImage] = useState(0);
 
-  const product = mockProducts.find(p => p.slug === slug);
-  const reviews = mockReviews.filter(r => r.productId === product?.id);
-  const similarProducts = mockProducts.filter(p => p.category === product?.category && p.id !== product?.id).slice(0, 4);
+  const { data: product, isLoading, error } = useQuery({
+    queryKey: ['product', slug],
+    queryFn: () => productService.getBySlug(slug!),
+    enabled: !!slug,
+  });
 
-  if (!product) {
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['reviews', product?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('reviews')
+        .select('*, profiles(name)')
+        .eq('product_id', product!.id)
+        .order('created_at', { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!product?.id,
+  });
+
+  const { data: similarProducts = [] } = useQuery({
+    queryKey: ['products', 'similar', product?.category, product?.id],
+    queryFn: () => productService.getAll({ category: product!.category, limit: 4 }),
+    enabled: !!product?.category,
+    select: (data) => data.filter(p => p.id !== product?.id).slice(0, 4),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <Skeleton className="h-4 w-64 mb-6" />
+        <div className="grid md:grid-cols-2 gap-8">
+          <Skeleton className="aspect-square rounded-xl" />
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
     return (
       <div className="container mx-auto px-4 py-20 text-center">
         <h1 className="text-2xl font-semibold">Product Not Found</h1>
@@ -37,9 +82,24 @@ const ProductDetailPage = () => {
       </nav>
 
       <div className="grid md:grid-cols-2 gap-8">
-        {/* Image */}
-        <div className="aspect-square rounded-xl overflow-hidden bg-muted marketplace-shadow">
-          <img src={product.images[0]} alt={product.title} className="w-full h-full object-cover" />
+        {/* Images */}
+        <div className="space-y-3">
+          <div className="aspect-square rounded-xl overflow-hidden bg-muted marketplace-shadow">
+            <img src={product.images[selectedImage] || '/placeholder.svg'} alt={product.title} className="w-full h-full object-cover" />
+          </div>
+          {product.images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto">
+              {product.images.map((img, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedImage(i)}
+                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 shrink-0 ${i === selectedImage ? 'border-primary' : 'border-transparent'}`}
+                >
+                  <img src={img} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Details */}
@@ -88,7 +148,7 @@ const ProductDetailPage = () => {
               <span className="px-4 py-2 text-sm font-medium tabular-nums">{quantity}</span>
               <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(quantity + 1)}>+</button>
             </div>
-            <Button size="lg" className="flex-1 h-12 gap-2" onClick={() => addToCart(product, quantity)}>
+            <Button size="lg" className="flex-1 h-12 gap-2" disabled={product.stock === 0} onClick={() => addToCart(product, quantity)}>
               <ShoppingCart className="h-4 w-4" />
               Add to Cart
             </Button>
@@ -101,16 +161,16 @@ const ProductDetailPage = () => {
         <h2 className="text-xl font-semibold mb-6">Customer Reviews</h2>
         {reviews.length > 0 ? (
           <div className="space-y-4">
-            {reviews.map(review => (
+            {reviews.map((review: any) => (
               <div key={review.id} className="bg-card rounded-xl marketplace-shadow p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{review.userName}</span>
-                    {review.isVerifiedPurchase && (
+                    <span className="font-medium text-sm">{review.profiles?.name || 'Anonymous'}</span>
+                    {review.is_verified_purchase && (
                       <span className="text-[10px] font-medium text-success bg-success/10 px-1.5 py-0.5 rounded">Verified</span>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
                 </div>
                 <div className="flex mt-1.5">
                   {[1, 2, 3, 4, 5].map(i => (
@@ -126,15 +186,15 @@ const ProductDetailPage = () => {
         )}
       </section>
 
-      {/* Similar Sponsored Products */}
+      {/* Similar */}
       {similarProducts.length > 0 && (
-        <section className="mt-14">
+        <section className="mt-14 pb-8">
           <h2 className="text-xl font-semibold mb-6">Similar Products</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <ProductGrid>
             {similarProducts.map(p => (
               <ProductCard key={p.id} product={p} />
             ))}
-          </div>
+          </ProductGrid>
         </section>
       )}
     </div>

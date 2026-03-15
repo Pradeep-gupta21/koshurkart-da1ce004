@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ProductCard from "@/components/product/ProductCard";
-import { mockProducts } from "@/data/mock-data";
+import ProductGrid from "@/components/product/ProductGrid";
+import { productService, type SortOption } from "@/services/productService";
 
-const categories = ["All", "Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
 const SearchPage = () => {
   const [searchParams] = useSearchParams();
@@ -16,31 +18,24 @@ const SearchPage = () => {
 
   const [query, setQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [sortBy, setSortBy] = useState("relevance");
+  const [sortBy, setSortBy] = useState<SortOption>("relevance");
   const [showFilters, setShowFilters] = useState(false);
 
-  const filteredProducts = useMemo(() => {
-    let products = [...mockProducts];
+  const { data: dbCategories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => productService.getCategories(),
+  });
 
-    if (query) {
-      products = products.filter(p =>
-        p.title.toLowerCase().includes(query.toLowerCase()) ||
-        p.category.toLowerCase().includes(query.toLowerCase())
-      );
-    }
-    if (selectedCategory !== "All") {
-      products = products.filter(p => p.category === selectedCategory);
-    }
+  const categories = ["All", ...(dbCategories.length > 0 ? dbCategories : defaultCategories)];
 
-    // Sort sponsored first
-    products.sort((a, b) => (b.isSponsored ? 1 : 0) - (a.isSponsored ? 1 : 0));
-
-    if (sortBy === "price-low") products.sort((a, b) => (a.discountPrice ?? a.price) - (b.discountPrice ?? b.price));
-    if (sortBy === "price-high") products.sort((a, b) => (b.discountPrice ?? b.price) - (a.discountPrice ?? a.price));
-    if (sortBy === "rating") products.sort((a, b) => b.rating - a.rating);
-
-    return products;
-  }, [query, selectedCategory, sortBy]);
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['products', 'search', query, selectedCategory, sortBy],
+    queryFn: () => productService.getAll({
+      search: query || undefined,
+      category: selectedCategory !== "All" ? selectedCategory : undefined,
+      sort: sortBy === "relevance" ? "newest" : sortBy,
+    }),
+  });
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -82,7 +77,7 @@ const SearchPage = () => {
               </Button>
             ))}
           </div>
-          <Select value={sortBy} onValueChange={setSortBy}>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
             <SelectTrigger className="w-40 h-8">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -91,6 +86,8 @@ const SearchPage = () => {
               <SelectItem value="price-low">Price: Low to High</SelectItem>
               <SelectItem value="price-high">Price: High to Low</SelectItem>
               <SelectItem value="rating">Top Rated</SelectItem>
+              <SelectItem value="popularity">Most Popular</SelectItem>
+              <SelectItem value="newest">Newest</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -98,17 +95,21 @@ const SearchPage = () => {
 
       {/* Results */}
       <p className="text-sm text-muted-foreground mb-4">
-        {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
-        {query && <> for "<span className="font-medium text-foreground">{query}</span>"</>}
+        {isLoading ? "Searching..." : (
+          <>
+            {products.length} product{products.length !== 1 ? "s" : ""} found
+            {query && <> for "<span className="font-medium text-foreground">{query}</span>"</>}
+          </>
+        )}
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredProducts.map(product => (
+      <ProductGrid loading={isLoading}>
+        {products.map(product => (
           <ProductCard key={product.id} product={product} />
         ))}
-      </div>
+      </ProductGrid>
 
-      {filteredProducts.length === 0 && (
+      {!isLoading && products.length === 0 && (
         <div className="text-center py-20">
           <p className="text-lg font-medium">No products found</p>
           <p className="text-muted-foreground text-sm mt-1">Try adjusting your search or filters</p>

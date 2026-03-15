@@ -228,6 +228,7 @@ export type Database = {
           rating: number | null
           review_count: number | null
           slug: string
+          status: string
           stock: number
           title: string
           vendor_id: string
@@ -244,6 +245,7 @@ export type Database = {
           rating?: number | null
           review_count?: number | null
           slug: string
+          status?: string
           stock?: number
           title: string
           vendor_id: string
@@ -260,6 +262,7 @@ export type Database = {
           rating?: number | null
           review_count?: number | null
           slug?: string
+          status?: string
           stock?: number
           title?: string
           vendor_id?: string

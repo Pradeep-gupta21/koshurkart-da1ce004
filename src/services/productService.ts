@@ -1,16 +1,72 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Product } from '@/types';
+
+// Maps a DB row to the frontend Product type
+export function mapDbProduct(row: any): Product {
+  return {
+    id: row.id,
+    vendorId: row.vendor_id,
+    vendorName: row.vendors?.store_name ?? '',
+    title: row.title,
+    slug: row.slug,
+    description: row.description ?? '',
+    images: row.images ?? [],
+    price: Number(row.price),
+    discountPrice: row.discount_price ? Number(row.discount_price) : undefined,
+    stock: row.stock,
+    category: row.category,
+    rating: Number(row.rating ?? 0),
+    reviewCount: row.review_count ?? 0,
+    isSponsored: row.is_sponsored ?? false,
+    createdAt: row.created_at,
+    status: row.status ?? 'active',
+  };
+}
+
+export type SortOption = 'newest' | 'price-low' | 'price-high' | 'rating' | 'popularity' | 'relevance';
 
 export const productService = {
-  async getAll(options?: { category?: string; search?: string; limit?: number }) {
+  async getAll(options?: {
+    category?: string;
+    search?: string;
+    limit?: number;
+    sort?: SortOption;
+    status?: string;
+    sponsored?: boolean;
+  }) {
     let query = supabase.from('products').select('*, vendors(store_name)');
+
+    // Default to active products for storefront
+    const status = options?.status ?? 'active';
+    if (status !== 'all') query = query.eq('status', status);
 
     if (options?.category) query = query.eq('category', options.category);
     if (options?.search) query = query.ilike('title', `%${options.search}%`);
+    if (options?.sponsored !== undefined) query = query.eq('is_sponsored', options.sponsored);
     if (options?.limit) query = query.limit(options.limit);
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    // Sorting
+    const sort = options?.sort ?? 'newest';
+    switch (sort) {
+      case 'price-low':
+        query = query.order('price', { ascending: true });
+        break;
+      case 'price-high':
+        query = query.order('price', { ascending: false });
+        break;
+      case 'rating':
+        query = query.order('rating', { ascending: false, nullsFirst: false });
+        break;
+      case 'popularity':
+        query = query.order('review_count', { ascending: false, nullsFirst: false });
+        break;
+      default:
+        query = query.order('created_at', { ascending: false });
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
-    return data;
+    return (data ?? []).map(mapDbProduct);
   },
 
   async getBySlug(slug: string) {
@@ -20,17 +76,27 @@ export const productService = {
       .eq('slug', slug)
       .single();
     if (error) throw error;
-    return data;
+    return mapDbProduct(data);
   },
 
   async getByVendor(vendorId: string) {
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, vendors(store_name)')
       .eq('vendor_id', vendorId)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []).map(mapDbProduct);
+  },
+
+  async getCategories() {
+    const { data, error } = await supabase
+      .from('products')
+      .select('category')
+      .eq('status', 'active');
+    if (error) throw error;
+    const cats = [...new Set((data ?? []).map((r: any) => r.category))].filter(Boolean).sort();
+    return cats as string[];
   },
 
   async create(product: {
@@ -43,20 +109,41 @@ export const productService = {
     stock: number;
     category: string;
     images: string[];
+    status?: string;
   }) {
-    const { data, error } = await supabase.from('products').insert(product).select().single();
+    const { data, error } = await supabase.from('products').insert(product).select('*, vendors(store_name)').single();
     if (error) throw error;
-    return data;
+    return mapDbProduct(data);
   },
 
   async update(id: string, updates: Record<string, unknown>) {
-    const { data, error } = await supabase.from('products').update(updates).eq('id', id).select().single();
+    const { data, error } = await supabase.from('products').update(updates).eq('id', id).select('*, vendors(store_name)').single();
     if (error) throw error;
-    return data;
+    return mapDbProduct(data);
   },
 
   async remove(id: string) {
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  async uploadImage(file: File, userId: string): Promise<string> {
+    const ext = file.name.split('.').pop();
+    const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file);
+    if (error) throw error;
+    const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+    return urlData.publicUrl;
+  },
+
+  async getVendors() {
+    const { data, error } = await supabase
+      .from('vendors')
+      .select('*')
+      .eq('verification_status', 'approved')
+      .order('total_sales', { ascending: false })
+      .limit(6);
+    if (error) throw error;
+    return data ?? [];
   },
 };

@@ -8,6 +8,7 @@ export const productSchema = z.object({
   stock: z.number().int().min(0, 'Stock cannot be negative'),
   category: z.string().min(1, 'Category is required'),
   images: z.array(z.string().url('Invalid image URL')).default([]),
+  status: z.enum(['active', 'draft', 'archived']).default('active'),
 });
 
 export type ProductFormData = z.infer<typeof productSchema>;
