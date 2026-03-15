@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProductCard from "@/components/product/ProductCard";
+import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import { productService } from "@/services/productService";
+import { adService } from "@/services/adService";
 import { supabase } from "@/integrations/supabase/client";
+import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
 import { useState } from "react";
 
