@@ -56,6 +56,7 @@ const SponsoredSuggestionsInline = () => {
   );
 };
 
+const ProductDetailPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
