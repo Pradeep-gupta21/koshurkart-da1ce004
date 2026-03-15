@@ -408,6 +408,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      vendor_apply: {
+        Args: {
+          _description?: string
+          _store_name: string
+          _store_slug: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "user" | "vendor" | "admin"
