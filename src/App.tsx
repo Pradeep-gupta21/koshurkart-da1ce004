@@ -28,6 +28,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import AdminVendors from "@/pages/admin/AdminVendors";
 import AdminCampaigns from "@/pages/admin/AdminCampaigns";
+import AdminPayouts from "@/pages/admin/AdminPayouts";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
