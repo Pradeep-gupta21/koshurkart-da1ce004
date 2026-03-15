@@ -59,6 +59,7 @@ const App = () => (
                   <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
                     <Route index element={<VendorOverview />} />
                     <Route path="products" element={<VendorProducts />} />
+                    <Route path="orders" element={<VendorOrders />} />
                     <Route path="campaigns" element={<VendorCampaigns />} />
                     <Route path="analytics" element={<VendorAnalytics />} />
                     <Route path="payments" element={<VendorPayments />} />
