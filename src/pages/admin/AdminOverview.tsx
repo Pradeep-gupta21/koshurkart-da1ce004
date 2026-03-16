@@ -195,6 +195,43 @@ const AdminOverview = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Inventory Health */}
+      <Card className={lowStockProducts.length > 0 ? 'ring-1 ring-destructive/20' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Archive className="h-5 w-5 text-muted-foreground" />
+            Inventory Health
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {lowStockProducts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">All products are well-stocked.</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground mb-3">{lowStockProducts.length} product(s) need attention</p>
+              {lowStockProducts.slice(0, 15).map((p: any) => {
+                const avail = p.stock - (p.reserved_stock ?? 0);
+                return (
+                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                    <div>
+                      <span className="font-medium">{p.title}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">{p.vendors?.store_name ?? 'Unknown vendor'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">Total: {p.stock}</span>
+                      {(p.reserved_stock ?? 0) > 0 && <span className="text-xs text-primary">Reserved: {p.reserved_stock}</span>}
+                      <Badge variant={avail <= 0 ? "destructive" : "outline"} className="text-xs">
+                        {avail <= 0 ? "Out of Stock" : `${avail} left`}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
