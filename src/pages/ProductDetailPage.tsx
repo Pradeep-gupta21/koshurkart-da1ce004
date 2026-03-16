@@ -3,6 +3,7 @@ import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldChe
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
