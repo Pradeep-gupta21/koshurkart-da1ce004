@@ -4,3 +4,4 @@ export { adService } from './adService';
 export { vendorService } from './vendorService';
 export { paymentService } from './paymentService';
 export { analyticsService } from './analyticsService';
+export { inventoryService } from './inventoryService';
