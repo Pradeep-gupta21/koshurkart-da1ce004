@@ -142,6 +142,7 @@ const VendorProducts = () => {
         price: parseFloat(form.price),
         discount_price: form.discountPrice ? parseFloat(form.discountPrice) : null,
         stock: parseInt(form.stock),
+        low_stock_threshold: parseInt(form.lowStockThreshold) || 5,
         category: form.category,
         images: imageUrls,
         status: form.status,

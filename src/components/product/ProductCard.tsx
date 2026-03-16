@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { Star } from "lucide-react";
+import { Star, AlertTriangle } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
 
 interface ProductCardProps {
@@ -10,6 +11,9 @@ interface ProductCardProps {
 
 const ProductCard = ({ product }: ProductCardProps) => {
   const { addToCart } = useCart();
+  const availableStock = product.stock - (product.reservedStock ?? 0);
+  const isOutOfStock = availableStock <= 0;
+  const isLowStock = !isOutOfStock && availableStock <= (product.lowStockThreshold ?? 5);
 
   return (
     <div className="group relative bg-card rounded-xl marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover overflow-hidden">
@@ -18,14 +22,19 @@ const ProductCard = ({ product }: ProductCardProps) => {
           SPONSORED
         </span>
       )}
-      {product.discountPrice && (
+      {isOutOfStock && (
+        <span className="absolute top-2 right-2 z-10 bg-destructive text-destructive-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
+          OUT OF STOCK
+        </span>
+      )}
+      {!isOutOfStock && product.discountPrice && (
         <span className="absolute top-2 right-2 z-10 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
           {Math.round((1 - product.discountPrice / product.price) * 100)}% OFF
         </span>
       )}
 
       <Link to={`/product/${product.slug}`}>
-        <div className="aspect-square overflow-hidden bg-muted">
+        <div className={`aspect-square overflow-hidden bg-muted ${isOutOfStock ? 'opacity-50' : ''}`}>
           <img
             src={product.images[0]}
             alt={product.title}
@@ -49,6 +58,13 @@ const ProductCard = ({ product }: ProductCardProps) => {
           <span className="text-xs text-muted-foreground">({product.reviewCount})</span>
         </div>
 
+        {isLowStock && (
+          <div className="flex items-center gap-1 mt-1.5">
+            <AlertTriangle className="h-3 w-3 text-amber-500" />
+            <span className="text-[11px] font-medium text-amber-500">Only {availableStock} left</span>
+          </div>
+        )}
+
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-baseline gap-1.5">
             <span className="text-lg font-semibold text-primary tabular-nums">
@@ -64,12 +80,13 @@ const ProductCard = ({ product }: ProductCardProps) => {
             size="sm"
             variant="outline"
             className="h-8 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+            disabled={isOutOfStock}
             onClick={(e) => {
               e.preventDefault();
               addToCart(product);
             }}
           >
-            Add
+            {isOutOfStock ? "Sold Out" : "Add"}
           </Button>
         </div>
       </div>
