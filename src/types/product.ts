@@ -9,6 +9,8 @@ export interface Product {
   price: number;
   discountPrice?: number;
   stock: number;
+  reservedStock: number;
+  lowStockThreshold: number;
   category: string;
   rating: number;
   reviewCount: number;

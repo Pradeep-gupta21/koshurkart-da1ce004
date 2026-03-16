@@ -14,6 +14,8 @@ export function mapDbProduct(row: any): Product {
     price: Number(row.price),
     discountPrice: row.discount_price ? Number(row.discount_price) : undefined,
     stock: row.stock,
+    reservedStock: row.reserved_stock ?? 0,
+    lowStockThreshold: row.low_stock_threshold ?? 5,
     category: row.category,
     rating: Number(row.rating ?? 0),
     reviewCount: row.review_count ?? 0,
