@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
-import { Star, AlertTriangle } from "lucide-react";
+import { Star, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProductCardProps {
   product: Product;
