@@ -33,7 +33,19 @@ const AuthPage = () => {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Welcome back!" });
-      navigate("/");
+      // Role-based redirect
+      const { data: rolesData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "");
+      const userRoles = rolesData?.map((r: any) => r.role) ?? [];
+      if (userRoles.includes("admin")) {
+        navigate("/admin");
+      } else if (userRoles.includes("vendor")) {
+        navigate("/vendor");
+      } else {
+        navigate("/");
+      }
     }
   };
 
