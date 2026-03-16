@@ -33,6 +33,7 @@ import AdminPayouts from "@/pages/admin/AdminPayouts";
 import AdminPlacements from "@/pages/admin/AdminPlacements";
 import AdminReviews from "@/pages/admin/AdminReviews";
 import NotFound from "@/pages/NotFound";
+import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 
 const queryClient = new QueryClient();
 
