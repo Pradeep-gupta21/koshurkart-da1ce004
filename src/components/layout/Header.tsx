@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
-import { Search, ShoppingCart, User, Menu } from "lucide-react";
+import { Search, ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
+import { useTheme } from "@/hooks/useTheme";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -10,6 +11,7 @@ const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty
 
 const Header = () => {
   const { totalItems } = useCart();
+  const { theme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
@@ -50,6 +52,13 @@ const Header = () => {
                     {cat}
                   </Link>
                 ))}
+                <button
+                  onClick={toggleTheme}
+                  className="mt-4 py-2 px-3 rounded-lg hover:bg-muted transition-colors text-sm flex items-center gap-2 text-left"
+                >
+                  {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                  {theme === "light" ? "Dark Mode" : "Light Mode"}
+                </button>
               </nav>
             </SheetContent>
           </Sheet>
@@ -77,6 +86,9 @@ const Header = () => {
 
           {/* Actions */}
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden sm:inline-flex">
+              {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+            </Button>
             <Button variant="ghost" size="icon" asChild>
               <Link to="/profile">
                 <User className="h-5 w-5" />

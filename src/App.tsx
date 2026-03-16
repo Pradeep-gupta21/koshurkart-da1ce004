@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CartProvider } from "@/contexts/CartContext";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import RoleRoute from "@/components/auth/RoleRoute";
 import Header from "@/components/layout/Header";
@@ -38,55 +39,57 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
-        <CartProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <div className="min-h-screen flex flex-col">
-              <Header />
-              <main className="flex-1">
-                <Routes>
-                  {/* Public routes */}
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/search" element={<SearchPage />} />
-                  <Route path="/product/:slug" element={<ProductDetailPage />} />
-                  <Route path="/cart" element={<CartPage />} />
-                  <Route path="/auth" element={<AuthPage />} />
+      <ThemeProvider>
+        <AuthProvider>
+          <CartProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <div className="min-h-screen flex flex-col">
+                <Header />
+                <main className="flex-1">
+                  <Routes>
+                    {/* Public routes */}
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/search" element={<SearchPage />} />
+                    <Route path="/product/:slug" element={<ProductDetailPage />} />
+                    <Route path="/cart" element={<CartPage />} />
+                    <Route path="/auth" element={<AuthPage />} />
 
-                  {/* Authenticated routes */}
-                  <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-                  <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-                  <Route path="/vendor/apply" element={<ProtectedRoute><VendorApplyPage /></ProtectedRoute>} />
+                    {/* Authenticated routes */}
+                    <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+                    <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                    <Route path="/vendor/apply" element={<ProtectedRoute><VendorApplyPage /></ProtectedRoute>} />
 
-                  {/* Vendor routes */}
-                  <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
-                    <Route index element={<VendorOverview />} />
-                    <Route path="products" element={<VendorProducts />} />
-                    <Route path="orders" element={<VendorOrders />} />
-                    <Route path="campaigns" element={<VendorCampaigns />} />
-                    <Route path="analytics" element={<VendorAnalytics />} />
-                    <Route path="payments" element={<VendorPayments />} />
-                  </Route>
+                    {/* Vendor routes */}
+                    <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
+                      <Route index element={<VendorOverview />} />
+                      <Route path="products" element={<VendorProducts />} />
+                      <Route path="orders" element={<VendorOrders />} />
+                      <Route path="campaigns" element={<VendorCampaigns />} />
+                      <Route path="analytics" element={<VendorAnalytics />} />
+                      <Route path="payments" element={<VendorPayments />} />
+                    </Route>
 
-                  {/* Admin routes */}
-                  <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
-                    <Route index element={<AdminOverview />} />
-                    <Route path="vendors" element={<AdminVendors />} />
-                    <Route path="campaigns" element={<AdminCampaigns />} />
-                    <Route path="placements" element={<AdminPlacements />} />
-                    <Route path="payouts" element={<AdminPayouts />} />
-                    <Route path="reviews" element={<AdminReviews />} />
-                  </Route>
+                    {/* Admin routes */}
+                    <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
+                      <Route index element={<AdminOverview />} />
+                      <Route path="vendors" element={<AdminVendors />} />
+                      <Route path="campaigns" element={<AdminCampaigns />} />
+                      <Route path="placements" element={<AdminPlacements />} />
+                      <Route path="payouts" element={<AdminPayouts />} />
+                      <Route path="reviews" element={<AdminReviews />} />
+                    </Route>
 
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-              <Footer />
-            </div>
-          </BrowserRouter>
-        </CartProvider>
-      </AuthProvider>
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </main>
+                <Footer />
+              </div>
+            </BrowserRouter>
+          </CartProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

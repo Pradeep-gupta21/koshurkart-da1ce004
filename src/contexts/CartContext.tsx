@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { CartItem, Product } from "@/types";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const CART_STORAGE_KEY = "marketplace_cart";
 
@@ -26,7 +26,6 @@ function loadCart(): CartItem[] {
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(loadCart);
-  const { toast } = useToast();
 
   useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
@@ -44,11 +43,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return [...prev, { product, quantity }];
     });
-    toast({ title: "Added to cart", description: `${product.title} has been added.` });
-  }, [toast]);
+    toast.success("Added to cart", { description: `${product.title} has been added.` });
+  }, []);
 
   const removeFromCart = useCallback((productId: string) => {
-    setItems(prev => prev.filter(item => item.product.id !== productId));
+    setItems(prev => {
+      const item = prev.find(i => i.product.id === productId);
+      if (item) toast("Removed from cart", { description: `${item.product.title} was removed.` });
+      return prev.filter(i => i.product.id !== productId);
+    });
   }, []);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
@@ -66,6 +69,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearCart = useCallback(() => {
     setItems([]);
     localStorage.removeItem(CART_STORAGE_KEY);
+    toast("Cart cleared");
   }, []);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
