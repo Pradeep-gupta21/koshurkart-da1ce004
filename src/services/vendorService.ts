@@ -44,4 +44,29 @@ export const vendorService = {
       campaigns: campaignRes.count ?? 0,
     };
   },
+
+  async getTrustMetrics(vendorId: string) {
+    const { data, error } = await supabase
+      .from('vendors')
+      .select('trust_score, delivery_rate, cancellation_rate, return_rate, review_rating, is_verified')
+      .eq('id', vendorId)
+      .single();
+    if (error) throw error;
+    return {
+      trustScore: Number(data?.trust_score ?? 0),
+      deliveryRate: Number(data?.delivery_rate ?? 100),
+      cancellationRate: Number(data?.cancellation_rate ?? 0),
+      returnRate: Number(data?.return_rate ?? 0),
+      reviewRating: Number(data?.review_rating ?? 0),
+      isVerified: data?.is_verified ?? false,
+    };
+  },
+
+  async setVerified(vendorId: string, isVerified: boolean) {
+    const { error } = await supabase
+      .from('vendors')
+      .update({ is_verified: isVerified })
+      .eq('id', vendorId);
+    if (error) throw error;
+  },
 };

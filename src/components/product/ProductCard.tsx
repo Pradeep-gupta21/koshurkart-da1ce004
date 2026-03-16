@@ -62,7 +62,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
       </Link>
 
       <div className="p-4">
-        <p className="text-[11px] text-muted-foreground mb-1">{product.vendorName}</p>
+        <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
+          {product.vendorName}
+          {isVerified && <ShieldCheck className="h-3 w-3 text-primary" />}
+        </p>
         <Link to={`/product/${product.slug}`}>
           <h3 className="text-sm font-medium text-card-foreground line-clamp-1 hover:text-primary transition-colors">
             {product.title}
