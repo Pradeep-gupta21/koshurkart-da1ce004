@@ -193,6 +193,7 @@ const ProductDetailPage = () => {
               </span>
             )}
           </div>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">{product.title}</h1>
 
           <div className="flex items-center gap-2 mt-3">
             <div className="flex">
