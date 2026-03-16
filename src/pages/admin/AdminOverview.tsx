@@ -46,8 +46,21 @@ const AdminOverview = () => {
       setAbnormalPurchases(data ?? []);
     };
 
+    const fetchInventoryHealth = async () => {
+      const { data: products } = await supabase
+        .from("products")
+        .select("id, title, stock, reserved_stock, low_stock_threshold, vendor_id, vendors(store_name)")
+        .eq("status", "active");
+      
+      const lowStock = (products ?? []).filter(
+        (p: any) => (p.stock - (p.reserved_stock ?? 0)) <= (p.low_stock_threshold ?? 5)
+      );
+      setLowStockProducts(lowStock);
+    };
+
     fetchStats();
     fetchFraud();
+    fetchInventoryHealth();
   }, []);
 
   const cards = [

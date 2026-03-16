@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, Package, ShoppingCart, TrendingUp } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle } from "lucide-react";
 
 const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
 
   useEffect(() => {
     if (!vendorId) return;
@@ -20,11 +22,11 @@ const VendorOverview = () => {
       setStats({
         products: prodRes.count ?? 0,
         totalSales: vendorRes.data?.total_sales ?? 0,
-        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5, // mock avg
+        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5,
         campaigns: campaignRes.count ?? 0,
       });
 
-      // Fetch recent order items for this vendor
+      // Fetch recent order items
       const { data: orderItems } = await supabase
         .from("order_items")
         .select("*, order_id")
@@ -32,6 +34,18 @@ const VendorOverview = () => {
         .order("id", { ascending: false })
         .limit(5);
       setRecentOrders(orderItems ?? []);
+
+      // Fetch low stock products
+      const { data: products } = await supabase
+        .from("products")
+        .select("id, title, stock, reserved_stock, low_stock_threshold")
+        .eq("vendor_id", vendorId)
+        .eq("status", "active");
+      
+      const lowStock = (products ?? []).filter(
+        (p: any) => (p.stock - (p.reserved_stock ?? 0)) <= (p.low_stock_threshold ?? 5)
+      );
+      setLowStockProducts(lowStock);
     };
     fetchStats();
   }, [vendorId]);
@@ -63,6 +77,37 @@ const VendorOverview = () => {
           </Card>
         ))}
       </div>
+
+      {/* Low Stock Alerts */}
+      {lowStockProducts.length > 0 && (
+        <Card className="marketplace-shadow ring-1 ring-destructive/20">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Low Stock Alerts ({lowStockProducts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {lowStockProducts.map((p: any) => {
+                const avail = p.stock - (p.reserved_stock ?? 0);
+                return (
+                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <p className="font-medium text-sm">{p.title}</p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">Total: {p.stock}</span>
+                      {(p.reserved_stock ?? 0) > 0 && <span className="text-xs text-primary">Reserved: {p.reserved_stock}</span>}
+                      <Badge variant={avail <= 0 ? "destructive" : "outline"} className="text-xs">
+                        {avail <= 0 ? "Out of Stock" : `${avail} left`}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="marketplace-shadow">
         <CardHeader>

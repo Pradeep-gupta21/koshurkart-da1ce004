@@ -295,9 +295,28 @@ const VendorProducts = () => {
                     <h3 className="font-semibold truncate">{p.title}</h3>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                       <span>${p.price}</span>
-                      <span>Stock: {p.stock}</span>
+                      {(() => {
+                        const avail = p.stock - (p.reservedStock ?? 0);
+                        const isLow = avail > 0 && avail <= (p.lowStockThreshold ?? 5);
+                        const isOut = avail <= 0;
+                        return (
+                          <>
+                            <span>Stock: {p.stock}</span>
+                            {(p.reservedStock ?? 0) > 0 && <span className="text-primary">Reserved: {p.reservedStock}</span>}
+                            <span className={isOut ? 'text-destructive font-medium' : isLow ? 'text-destructive/70 font-medium' : ''}>
+                              Avail: {avail}
+                            </span>
+                          </>
+                        );
+                      })()}
                       <Badge variant="secondary" className="text-xs">{p.category}</Badge>
                       <Badge variant={statusOpt?.variant || "secondary"} className="text-xs">{statusOpt?.label || p.status}</Badge>
+                      {(() => {
+                        const avail = p.stock - (p.reservedStock ?? 0);
+                        if (avail <= 0) return <Badge variant="destructive" className="text-xs">Out of Stock</Badge>;
+                        if (avail <= (p.lowStockThreshold ?? 5)) return <Badge variant="outline" className="text-xs border-destructive/50 text-destructive"><AlertTriangle className="h-3 w-3 mr-1" />Low Stock</Badge>;
+                        return null;
+                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
