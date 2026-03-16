@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star, ChevronRight } from "lucide-react";
+import { Star, ChevronRight, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import ProductCard from "@/components/product/ProductCard";
