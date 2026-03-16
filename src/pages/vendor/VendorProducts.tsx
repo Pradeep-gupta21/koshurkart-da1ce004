@@ -85,6 +85,7 @@ const VendorProducts = () => {
       price: String(p.price),
       discountPrice: p.discountPrice ? String(p.discountPrice) : "",
       stock: String(p.stock),
+      lowStockThreshold: String(p.lowStockThreshold ?? 5),
       category: p.category,
       status: p.status || "active",
     });
