@@ -6,8 +6,9 @@ import { Users, Store, ShoppingCart, DollarSign, Megaphone, AlertTriangle, Troph
 import { analyticsService } from "@/services/analyticsService";
 
 const AdminOverview = () => {
-  const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0 });
+  const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
+  const [abnormalPurchases, setAbnormalPurchases] = useState<any[]>([]);
 
   const { data: analytics } = useQuery({
     queryKey: ['admin-analytics'],
@@ -21,10 +22,11 @@ const AdminOverview = () => {
 
   useEffect(() => {
     const fetchStats = async () => {
-      const [profiles, vendors, orders] = await Promise.all([
+      const [profiles, vendors, orders, products] = await Promise.all([
         supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase.from("vendors").select("id", { count: "exact", head: true }),
         supabase.from("orders").select("total_amount"),
+        supabase.from("products").select("id", { count: "exact", head: true }),
       ]);
 
       setStats({
@@ -32,15 +34,24 @@ const AdminOverview = () => {
         vendors: vendors.count ?? 0,
         orders: orders.data?.length ?? 0,
         revenue: orders.data?.reduce((sum, o) => sum + Number(o.total_amount), 0) ?? 0,
+        products: products.count ?? 0,
       });
       setLoading(false);
     };
+
+    const fetchFraud = async () => {
+      const { data } = await supabase.rpc("detect_abnormal_purchases");
+      setAbnormalPurchases(data ?? []);
+    };
+
     fetchStats();
+    fetchFraud();
   }, []);
 
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
+    { label: "Products", value: stats.products, icon: ShoppingCart, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-accent" },
     { label: "Revenue", value: `$${stats.revenue.toFixed(2)}`, icon: DollarSign, color: "text-secondary" },
   ];
