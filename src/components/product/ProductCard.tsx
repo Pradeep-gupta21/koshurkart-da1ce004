@@ -60,8 +60,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
         {isLowStock && (
           <div className="flex items-center gap-1 mt-1.5">
-            <AlertTriangle className="h-3 w-3 text-amber-500" />
-            <span className="text-[11px] font-medium text-amber-500">Only {availableStock} left</span>
+            <AlertTriangle className="h-3 w-3 text-destructive/70" />
+            <span className="text-[11px] font-medium text-destructive/70">Only {availableStock} left</span>
           </div>
         )}
 

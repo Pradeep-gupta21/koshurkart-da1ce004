@@ -208,8 +208,8 @@ const ProductDetailPage = () => {
                       </>
                     ) : isLowStock ? (
                       <>
-                        <span className="h-4 w-4 rounded-full bg-amber-500" />
-                        <span className="text-amber-600 font-medium">Low Stock — Only {availableStock} left</span>
+                        <span className="h-4 w-4 rounded-full bg-destructive/60" />
+                        <span className="text-destructive/80 font-medium">Low Stock — Only {availableStock} left</span>
                       </>
                     ) : (
                       <>
