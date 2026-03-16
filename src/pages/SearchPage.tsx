@@ -31,6 +31,8 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     vendorId: p.vendor_id,
     vendorName: p.vendors?.store_name ?? "",
     stock: 0,
+    reservedStock: 0,
+    lowStockThreshold: 5,
     description: "",
     status: "active",
     isSponsored: true,
