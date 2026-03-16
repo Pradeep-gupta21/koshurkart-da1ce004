@@ -18,6 +18,8 @@ const productImages = [
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
 export const mockProducts: Product[] = Array.from({ length: 24 }, (_, i) => ({
+  reservedStock: 0,
+  lowStockThreshold: 5,
   id: `prod-${i + 1}`,
   vendorId: `vendor-${(i % 6) + 1}`,
   vendorName: [`TechNova`, `StyleHouse`, `HomeBliss`, `SportEdge`, `GlowUp`, `ReadMore`][i % 6],
