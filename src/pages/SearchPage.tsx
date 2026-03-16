@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X, SearchX } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
+import EmptyState from "@/components/ui/EmptyState";
 import { productService, type SortOption } from "@/services/productService";
 import { adService } from "@/services/adService";
 import type { Product } from "@/types";
@@ -119,7 +120,7 @@ const SearchPage = () => {
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex flex-wrap gap-3 mb-6 p-4 bg-muted/50 rounded-xl">
+        <div className="flex flex-wrap gap-3 mb-6 p-4 bg-muted/50 rounded-xl animate-fade-in">
           <div className="flex flex-wrap gap-2">
             {categories.map(cat => (
               <Button
@@ -164,10 +165,13 @@ const SearchPage = () => {
       </ProductGrid>
 
       {!isLoading && products.length === 0 && (
-        <div className="text-center py-20">
-          <p className="text-lg font-medium">No products found</p>
-          <p className="text-muted-foreground text-sm mt-1">Try adjusting your search or filters</p>
-        </div>
+        <EmptyState
+          icon={SearchX}
+          title="No products found"
+          description="Try adjusting your search or filters to find what you're looking for."
+          actionLabel="Clear Filters"
+          onAction={() => { setQuery(""); setSelectedCategory("All"); }}
+        />
       )}
     </div>
   );

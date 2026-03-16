@@ -3,17 +3,21 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
+import EmptyState from "@/components/ui/EmptyState";
 
 const CartPage = () => {
   const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
 
   if (items.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-20 text-center">
-        <ShoppingBag className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
-        <h1 className="text-2xl font-semibold">Your cart is empty</h1>
-        <p className="text-muted-foreground mt-2">Start shopping to add items to your cart.</p>
-        <Button className="mt-6" asChild><Link to="/search">Browse Products</Link></Button>
+      <div className="container mx-auto px-4">
+        <EmptyState
+          icon={ShoppingBag}
+          title="Your cart is empty"
+          description="Start shopping to add items to your cart."
+          actionLabel="Browse Products"
+          actionHref="/search"
+        />
       </div>
     );
   }
@@ -26,13 +30,13 @@ const CartPage = () => {
         {/* Items */}
         <div className="lg:col-span-2 space-y-4">
           {items.map(({ product, quantity }) => (
-            <div key={product.id} className="bg-card rounded-xl marketplace-shadow p-4 flex gap-4">
+            <div key={product.id} className="bg-card rounded-xl marketplace-shadow p-4 flex gap-4 animate-fade-in">
               <Link to={`/product/${product.slug}`} className="shrink-0">
-                <img src={product.images[0]} alt={product.title} className="h-24 w-24 rounded-lg object-cover" />
+                <img src={product.images[0]} alt={product.title} className="h-20 w-20 sm:h-24 sm:w-24 rounded-lg object-cover" />
               </Link>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground">{product.vendorName}</p>
                     <Link to={`/product/${product.slug}`}>
                       <h3 className="text-sm font-medium truncate hover:text-primary transition-colors">{product.title}</h3>

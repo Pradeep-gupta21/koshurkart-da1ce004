@@ -1,12 +1,12 @@
 import { useParams, Link } from "react-router-dom";
-import { Star, ShoppingCart, ChevronRight, CheckCircle } from "lucide-react";
+import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
+import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,6 +57,23 @@ const SponsoredSuggestionsInline = () => {
   );
 };
 
+/* Loading skeleton for the detail page */
+const DetailSkeleton = () => (
+  <div className="container mx-auto px-4 py-6 animate-fade-in">
+    <div className="h-4 w-64 rounded-md shimmer mb-6" />
+    <div className="grid md:grid-cols-2 gap-8">
+      <div className="aspect-square rounded-xl shimmer" />
+      <div className="space-y-4">
+        <div className="h-4 w-32 rounded-md shimmer" />
+        <div className="h-8 w-3/4 rounded-md shimmer" />
+        <div className="h-4 w-40 rounded-md shimmer" />
+        <div className="h-10 w-48 rounded-md shimmer" />
+        <div className="h-20 w-full rounded-md shimmer" />
+      </div>
+    </div>
+  </div>
+);
+
 const ProductDetailPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
@@ -98,23 +115,7 @@ const ProductDetailPage = () => {
     select: (data) => data.filter(p => p.id !== product?.id).slice(0, 4),
   });
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-6">
-        <Skeleton className="h-4 w-64 mb-6" />
-        <div className="grid md:grid-cols-2 gap-8">
-          <Skeleton className="aspect-square rounded-xl" />
-          <div className="space-y-4">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-8 w-3/4" />
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-10 w-48" />
-            <Skeleton className="h-20 w-full" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <DetailSkeleton />;
 
   if (error || !product) {
     return (
@@ -126,14 +127,14 @@ const ProductDetailPage = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-4 py-6 animate-fade-in">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-        <Link to="/" className="hover:text-foreground">Home</Link>
+        <Link to="/" className="hover:text-foreground transition-colors">Home</Link>
         <ChevronRight className="h-3 w-3" />
-        <Link to={`/search?category=${product.category}`} className="hover:text-foreground">{product.category}</Link>
+        <Link to={`/search?category=${product.category}`} className="hover:text-foreground transition-colors">{product.category}</Link>
         <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{product.title}</span>
+        <span className="text-foreground truncate max-w-[200px]">{product.title}</span>
       </nav>
 
       <div className="grid md:grid-cols-2 gap-8">
@@ -143,12 +144,12 @@ const ProductDetailPage = () => {
             <img src={product.images[selectedImage] || '/placeholder.svg'} alt={product.title} className="w-full h-full object-cover" />
           </div>
           {product.images.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto">
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {product.images.map((img, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedImage(i)}
-                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 shrink-0 ${i === selectedImage ? 'border-primary' : 'border-transparent'}`}
+                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 shrink-0 transition-colors ${i === selectedImage ? 'border-primary' : 'border-transparent hover:border-muted-foreground/30'}`}
                 >
                   <img src={img} alt="" className="h-full w-full object-cover" />
                 </button>
@@ -197,8 +198,8 @@ const ProductDetailPage = () => {
             </div>
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <div className="flex items-center border rounded-lg">
+          <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="flex items-center border rounded-lg self-start">
               <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
               <span className="px-4 py-2 text-sm font-medium tabular-nums">{quantity}</span>
               <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(quantity + 1)}>+</button>
@@ -217,7 +218,7 @@ const ProductDetailPage = () => {
         {reviews.length > 0 ? (
           <div className="space-y-4">
             {reviews.map((review: any) => (
-              <div key={review.id} className="bg-card rounded-xl marketplace-shadow p-5">
+              <div key={review.id} className="bg-card rounded-xl marketplace-shadow p-5 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{review.profiles?.name || 'Anonymous'}</span>
@@ -237,7 +238,12 @@ const ProductDetailPage = () => {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No reviews yet for this product.</p>
+          <EmptyState
+            icon={MessageSquare}
+            title="No reviews yet"
+            description="Be the first to review this product."
+            className="py-12"
+          />
         )}
       </section>
 
