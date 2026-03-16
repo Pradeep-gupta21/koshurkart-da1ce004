@@ -61,7 +61,7 @@ const AdminOverview = () => {
       <h1 className="text-2xl font-bold text-foreground">Platform Overview</h1>
 
       {/* Core stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {cards.map(({ label, value, icon: Icon, color }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
