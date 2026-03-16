@@ -111,6 +111,19 @@ const ProductDetailPage = () => {
     enabled: !!product?.id,
   });
 
+  const { data: vendorTrust } = useQuery({
+    queryKey: ['vendor-trust', product?.vendorId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vendors')
+        .select('trust_score, is_verified, review_rating')
+        .eq('id', product!.vendorId)
+        .single();
+      return data;
+    },
+    enabled: !!product?.vendorId,
+  });
+
   const { data: similarProducts = [] } = useQuery({
     queryKey: ['products', 'similar', product?.category, product?.id],
     queryFn: () => productService.getAll({ category: product!.category, limit: 4 }),
