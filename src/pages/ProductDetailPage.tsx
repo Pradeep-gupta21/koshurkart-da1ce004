@@ -176,8 +176,23 @@ const ProductDetailPage = () => {
 
         {/* Details */}
         <div>
-          <p className="text-sm text-muted-foreground">{product.vendorName}</p>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">{product.title}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-muted-foreground">{product.vendorName}</p>
+            {vendorTrust?.is_verified && (
+              <Badge className="gap-1 text-[10px] h-5">
+                <ShieldCheck className="h-3 w-3" /> Verified Vendor
+              </Badge>
+            )}
+            {vendorTrust?.trust_score != null && (
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                vendorTrust.trust_score >= 80 ? "text-success bg-success/10" :
+                vendorTrust.trust_score >= 60 ? "text-accent bg-accent/10" :
+                "text-destructive bg-destructive/10"
+              }`}>
+                Trust {Math.round(vendorTrust.trust_score)}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-2 mt-3">
             <div className="flex">
