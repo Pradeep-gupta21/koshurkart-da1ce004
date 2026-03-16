@@ -86,6 +86,7 @@ const App = () => (
                   </Routes>
                 </main>
                 <Footer />
+                <DevRoleSwitcher />
               </div>
             </BrowserRouter>
           </CartProvider>
