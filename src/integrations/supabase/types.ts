@@ -425,38 +425,56 @@ export type Database = {
       }
       vendors: {
         Row: {
+          cancellation_rate: number | null
           created_at: string
+          delivery_rate: number | null
           description: string | null
           id: string
+          is_verified: boolean | null
           logo: string | null
           rating: number | null
+          return_rate: number | null
+          review_rating: number | null
           store_name: string
           store_slug: string
           total_sales: number | null
+          trust_score: number | null
           user_id: string
           verification_status: string
         }
         Insert: {
+          cancellation_rate?: number | null
           created_at?: string
+          delivery_rate?: number | null
           description?: string | null
           id?: string
+          is_verified?: boolean | null
           logo?: string | null
           rating?: number | null
+          return_rate?: number | null
+          review_rating?: number | null
           store_name: string
           store_slug: string
           total_sales?: number | null
+          trust_score?: number | null
           user_id: string
           verification_status?: string
         }
         Update: {
+          cancellation_rate?: number | null
           created_at?: string
+          delivery_rate?: number | null
           description?: string | null
           id?: string
+          is_verified?: boolean | null
           logo?: string | null
           rating?: number | null
+          return_rate?: number | null
+          review_rating?: number | null
           store_name?: string
           store_slug?: string
           total_sales?: number | null
+          trust_score?: number | null
           user_id?: string
           verification_status?: string
         }
@@ -489,6 +507,10 @@ export type Database = {
         Returns: boolean
       }
       promote_to_admin: { Args: { _email: string }; Returns: undefined }
+      recalculate_vendor_trust_score: {
+        Args: { p_vendor_id: string }
+        Returns: undefined
+      }
       record_analytics_event: {
         Args: {
           _campaign_id?: string

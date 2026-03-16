@@ -1,8 +1,9 @@
 import { useParams, Link } from "react-router-dom";
-import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare } from "lucide-react";
+import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
@@ -110,6 +111,19 @@ const ProductDetailPage = () => {
     enabled: !!product?.id,
   });
 
+  const { data: vendorTrust } = useQuery({
+    queryKey: ['vendor-trust', product?.vendorId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vendors')
+        .select('trust_score, is_verified, review_rating')
+        .eq('id', product!.vendorId)
+        .single();
+      return data;
+    },
+    enabled: !!product?.vendorId,
+  });
+
   const { data: similarProducts = [] } = useQuery({
     queryKey: ['products', 'similar', product?.category, product?.id],
     queryFn: () => productService.getAll({ category: product!.category, limit: 4 }),
@@ -162,7 +176,23 @@ const ProductDetailPage = () => {
 
         {/* Details */}
         <div>
-          <p className="text-sm text-muted-foreground">{product.vendorName}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm text-muted-foreground">{product.vendorName}</p>
+            {vendorTrust?.is_verified && (
+              <Badge className="gap-1 text-[10px] h-5">
+                <ShieldCheck className="h-3 w-3" /> Verified Vendor
+              </Badge>
+            )}
+            {vendorTrust?.trust_score != null && (
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                vendorTrust.trust_score >= 80 ? "text-success bg-success/10" :
+                vendorTrust.trust_score >= 60 ? "text-accent bg-accent/10" :
+                "text-destructive bg-destructive/10"
+              }`}>
+                Trust {Math.round(vendorTrust.trust_score)}
+              </span>
+            )}
+          </div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">{product.title}</h1>
 
           <div className="flex items-center gap-2 mt-3">

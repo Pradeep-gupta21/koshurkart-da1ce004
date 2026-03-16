@@ -39,4 +39,10 @@ export interface Vendor {
   rating: number;
   totalSales: number;
   verificationStatus: 'pending' | 'approved' | 'rejected';
+  trustScore: number;
+  deliveryRate: number;
+  cancellationRate: number;
+  returnRate: number;
+  reviewRating: number;
+  isVerified: boolean;
 }

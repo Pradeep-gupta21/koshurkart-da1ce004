@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
-import { Star, AlertTriangle } from "lucide-react";
+import { Star, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProductCardProps {
   product: Product;
@@ -14,6 +16,21 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const availableStock = product.stock - (product.reservedStock ?? 0);
   const isOutOfStock = availableStock <= 0;
   const isLowStock = !isOutOfStock && availableStock <= (product.lowStockThreshold ?? 5);
+
+  const { data: vendorData } = useQuery({
+    queryKey: ['vendor-verified', product.vendorId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vendors')
+        .select('is_verified')
+        .eq('id', product.vendorId)
+        .single();
+      return data;
+    },
+    enabled: !!product.vendorId,
+    staleTime: 60000,
+  });
+  const isVerified = vendorData?.is_verified ?? false;
 
   return (
     <div className="group relative bg-card rounded-xl marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover overflow-hidden">
@@ -45,7 +62,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
       </Link>
 
       <div className="p-4">
-        <p className="text-[11px] text-muted-foreground mb-1">{product.vendorName}</p>
+        <p className="text-[11px] text-muted-foreground mb-1 flex items-center gap-1">
+          {product.vendorName}
+          {isVerified && <ShieldCheck className="h-3 w-3 text-primary" />}
+        </p>
         <Link to={`/product/${product.slug}`}>
           <h3 className="text-sm font-medium text-card-foreground line-clamp-1 hover:text-primary transition-colors">
             {product.title}

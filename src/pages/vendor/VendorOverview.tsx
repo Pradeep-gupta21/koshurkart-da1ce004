@@ -3,13 +3,24 @@ import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb } from "lucide-react";
+import { vendorService } from "@/services/vendorService";
+
+const scoreColor = (score: number) => {
+  if (score >= 80) return "text-success";
+  if (score >= 60) return "text-accent";
+  return "text-destructive";
+};
 
 const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [trustMetrics, setTrustMetrics] = useState<{
+    trustScore: number; deliveryRate: number; cancellationRate: number;
+    returnRate: number; reviewRating: number; isVerified: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!vendorId) return;
@@ -26,7 +37,6 @@ const VendorOverview = () => {
         campaigns: campaignRes.count ?? 0,
       });
 
-      // Fetch recent order items
       const { data: orderItems } = await supabase
         .from("order_items")
         .select("*, order_id")
@@ -35,19 +45,27 @@ const VendorOverview = () => {
         .limit(5);
       setRecentOrders(orderItems ?? []);
 
-      // Fetch low stock products
       const { data: products } = await supabase
         .from("products")
         .select("id, title, stock, reserved_stock, low_stock_threshold")
         .eq("vendor_id", vendorId)
         .eq("status", "active");
-      
+
       const lowStock = (products ?? []).filter(
         (p: any) => (p.stock - (p.reserved_stock ?? 0)) <= (p.low_stock_threshold ?? 5)
       );
       setLowStockProducts(lowStock);
     };
+
+    const fetchTrust = async () => {
+      try {
+        const metrics = await vendorService.getTrustMetrics(vendorId);
+        setTrustMetrics(metrics);
+      } catch {}
+    };
+
     fetchStats();
+    fetchTrust();
   }, [vendorId]);
 
   const cards = [
@@ -57,12 +75,86 @@ const VendorOverview = () => {
     { title: "Active Campaigns", value: stats.campaigns, icon: TrendingUp, color: "text-primary" },
   ];
 
+  const suggestions = trustMetrics ? [
+    trustMetrics.deliveryRate < 90 && "Improve your delivery rate by fulfilling orders promptly.",
+    trustMetrics.cancellationRate > 5 && "Reduce cancellations to boost your trust score.",
+    trustMetrics.returnRate > 5 && "Lower return rates by improving product quality descriptions.",
+    trustMetrics.reviewRating < 4 && "Focus on customer satisfaction to improve your review rating.",
+  ].filter(Boolean) as string[] : [];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard Overview</h1>
         <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
       </div>
+
+      {/* Trust Score Card */}
+      {trustMetrics && (
+        <Card className="marketplace-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              Trust Score
+              {trustMetrics.isVerified && (
+                <Badge className="gap-1">
+                  <ShieldCheck className="h-3 w-3" /> Verified
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              {/* Score circle */}
+              <div className="relative h-24 w-24 shrink-0">
+                <svg className="h-24 w-24 -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="8" />
+                  <circle
+                    cx="50" cy="50" r="42" fill="none"
+                    stroke={trustMetrics.trustScore >= 80 ? "hsl(var(--success, 142 76% 36%))" : trustMetrics.trustScore >= 60 ? "hsl(var(--accent))" : "hsl(var(--destructive))"}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${trustMetrics.trustScore * 2.64} 264`}
+                  />
+                </svg>
+                <span className={`absolute inset-0 flex items-center justify-center text-2xl font-bold ${scoreColor(trustMetrics.trustScore)}`}>
+                  {Math.round(trustMetrics.trustScore)}
+                </span>
+              </div>
+
+              {/* Metrics breakdown */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm flex-1">
+                <div>
+                  <p className="text-muted-foreground">Delivery Rate</p>
+                  <p className="font-semibold">{trustMetrics.deliveryRate.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Review Rating</p>
+                  <p className="font-semibold">{trustMetrics.reviewRating.toFixed(1)} / 5</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Cancellation Rate</p>
+                  <p className="font-semibold">{trustMetrics.cancellationRate.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Return Rate</p>
+                  <p className="font-semibold">{trustMetrics.returnRate.toFixed(1)}%</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Suggestions */}
+            {suggestions.length > 0 && (
+              <div className="mt-4 space-y-2 border-t pt-4">
+                <p className="text-sm font-medium flex items-center gap-1.5">
+                  <Lightbulb className="h-4 w-4 text-accent" /> Suggestions to improve
+                </p>
+                {suggestions.map((s, i) => (
+                  <p key={i} className="text-sm text-muted-foreground pl-5">• {s}</p>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(card => (
