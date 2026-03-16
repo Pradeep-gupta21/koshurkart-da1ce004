@@ -109,6 +109,7 @@ export const productService = {
     price: number;
     discount_price: number | null;
     stock: number;
+    low_stock_threshold?: number;
     category: string;
     images: string[];
     status?: string;
