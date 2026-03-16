@@ -17,6 +17,21 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const isOutOfStock = availableStock <= 0;
   const isLowStock = !isOutOfStock && availableStock <= (product.lowStockThreshold ?? 5);
 
+  const { data: vendorData } = useQuery({
+    queryKey: ['vendor-verified', product.vendorId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vendors')
+        .select('is_verified')
+        .eq('id', product.vendorId)
+        .single();
+      return data;
+    },
+    enabled: !!product.vendorId,
+    staleTime: 60000,
+  });
+  const isVerified = vendorData?.is_verified ?? false;
+
   return (
     <div className="group relative bg-card rounded-xl marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover overflow-hidden">
       {product.isSponsored && (
