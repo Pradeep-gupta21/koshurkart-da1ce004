@@ -139,7 +139,10 @@ const HomePage = () => {
                     {vendor.store_name?.[0]}
                   </div>
                 )}
-                <h3 className="text-sm font-medium">{vendor.store_name}</h3>
+                <h3 className="text-sm font-medium flex items-center justify-center gap-1">
+                  {vendor.store_name}
+                  {vendor.is_verified && <ShieldCheck className="h-3.5 w-3.5 text-primary" />}
+                </h3>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   <Star className="h-3 w-3 fill-accent text-accent" />
                   <span className="text-xs tabular-nums">{vendor.rating ?? 0}</span>
