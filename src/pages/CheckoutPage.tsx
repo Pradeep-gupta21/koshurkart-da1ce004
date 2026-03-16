@@ -8,6 +8,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/hooks/useAuth";
 import { orderService } from "@/services/orderService";
 import { analyticsService } from "@/services/analyticsService";
+import { inventoryService } from "@/services/inventoryService";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Loader2 } from "lucide-react";
 
@@ -31,7 +32,16 @@ const CheckoutPage = () => {
     }
 
     setSubmitting(true);
+    const reservedItems: { productId: string; quantity: number }[] = [];
+
     try {
+      // Step 1: Reserve stock for all items
+      for (const { product, quantity } of items) {
+        await inventoryService.reserveStock(product.id, quantity);
+        reservedItems.push({ productId: product.id, quantity });
+      }
+
+      // Step 2: Create the order
       const order = await orderService.create(user.id, totalPrice);
       await orderService.addItems(
         order.id,
@@ -44,15 +54,33 @@ const CheckoutPage = () => {
           image: product.images?.[0] ?? "",
         }))
       );
-      // Track purchase events for each item
+
+      // Step 3: Confirm stock (payment success)
+      for (const { productId, quantity } of reservedItems) {
+        await inventoryService.confirmStock(productId, quantity);
+      }
+
+      // Track purchase events
       for (const { product, quantity } of items) {
         analyticsService.trackEvent('purchase', product.id, undefined, { quantity, price: product.discountPrice ?? product.price });
       }
+
       setOrderId(order.id);
       clearCart();
       setIsComplete(true);
     } catch (err: any) {
-      toast({ title: "Order failed", description: err.message ?? "Something went wrong.", variant: "destructive" });
+      // Release any reserved stock on failure
+      for (const { productId, quantity } of reservedItems) {
+        try {
+          await inventoryService.releaseStock(productId, quantity);
+        } catch (_) {
+          // best-effort release
+        }
+      }
+      const msg = err.message?.includes('Insufficient stock')
+        ? err.message
+        : err.message ?? "Something went wrong.";
+      toast({ title: "Order failed", description: msg, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

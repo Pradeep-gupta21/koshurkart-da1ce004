@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { productService } from "@/services/productService";
-import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle } from "lucide-react";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 const statusOptions = [
@@ -33,7 +33,7 @@ const VendorProducts = () => {
   const [uploading, setUploading] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [form, setForm] = useState({
-    title: "", description: "", price: "", discountPrice: "", stock: "", category: "Electronics", status: "active",
+    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active",
   });
 
   const { data: products = [], isLoading } = useQuery({
@@ -73,7 +73,7 @@ const VendorProducts = () => {
   const closeDialog = () => {
     setOpen(false);
     setEditing(null);
-    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", category: "Electronics", status: "active" });
+    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active" });
     setImageUrls([]);
   };
 
@@ -85,6 +85,7 @@ const VendorProducts = () => {
       price: String(p.price),
       discountPrice: p.discountPrice ? String(p.discountPrice) : "",
       stock: String(p.stock),
+      lowStockThreshold: String(p.lowStockThreshold ?? 5),
       category: p.category,
       status: p.status || "active",
     });
@@ -126,6 +127,7 @@ const VendorProducts = () => {
           price: parseFloat(form.price),
           discount_price: form.discountPrice ? parseFloat(form.discountPrice) : null,
           stock: parseInt(form.stock),
+          low_stock_threshold: parseInt(form.lowStockThreshold) || 5,
           category: form.category,
           images: imageUrls,
           status: form.status,
@@ -140,6 +142,7 @@ const VendorProducts = () => {
         price: parseFloat(form.price),
         discount_price: form.discountPrice ? parseFloat(form.discountPrice) : null,
         stock: parseInt(form.stock),
+        low_stock_threshold: parseInt(form.lowStockThreshold) || 5,
         category: form.category,
         images: imageUrls,
         status: form.status,
@@ -193,6 +196,10 @@ const VendorProducts = () => {
                   <Input type="number" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} required />
                 </div>
                 <div className="space-y-2">
+                  <Label>Low Stock Alert</Label>
+                  <Input type="number" value={form.lowStockThreshold} onChange={e => setForm(f => ({ ...f, lowStockThreshold: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
                   <Label>Category</Label>
                   <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -201,15 +208,15 @@ const VendorProducts = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Image upload */}
@@ -278,9 +285,28 @@ const VendorProducts = () => {
                     <h3 className="font-semibold truncate">{p.title}</h3>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                       <span>${p.price}</span>
-                      <span>Stock: {p.stock}</span>
+                      {(() => {
+                        const avail = p.stock - (p.reservedStock ?? 0);
+                        const isLow = avail > 0 && avail <= (p.lowStockThreshold ?? 5);
+                        const isOut = avail <= 0;
+                        return (
+                          <>
+                            <span>Stock: {p.stock}</span>
+                            {(p.reservedStock ?? 0) > 0 && <span className="text-primary">Reserved: {p.reservedStock}</span>}
+                            <span className={isOut ? 'text-destructive font-medium' : isLow ? 'text-destructive/70 font-medium' : ''}>
+                              Avail: {avail}
+                            </span>
+                          </>
+                        );
+                      })()}
                       <Badge variant="secondary" className="text-xs">{p.category}</Badge>
                       <Badge variant={statusOpt?.variant || "secondary"} className="text-xs">{statusOpt?.label || p.status}</Badge>
+                      {(() => {
+                        const avail = p.stock - (p.reservedStock ?? 0);
+                        if (avail <= 0) return <Badge variant="destructive" className="text-xs">Out of Stock</Badge>;
+                        if (avail <= (p.lowStockThreshold ?? 5)) return <Badge variant="outline" className="text-xs border-destructive/50 text-destructive"><AlertTriangle className="h-3 w-3 mr-1" />Low Stock</Badge>;
+                        return null;
+                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">

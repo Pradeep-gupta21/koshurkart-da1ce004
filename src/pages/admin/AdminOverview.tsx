@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Store, ShoppingCart, Package, DollarSign, Megaphone, AlertTriangle, Trophy } from "lucide-react";
+import { Users, Store, ShoppingCart, Package, DollarSign, Megaphone, AlertTriangle, Trophy, Archive } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { analyticsService } from "@/services/analyticsService";
 
 const AdminOverview = () => {
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
   const [abnormalPurchases, setAbnormalPurchases] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
 
   const { data: analytics } = useQuery({
     queryKey: ['admin-analytics'],
@@ -44,8 +46,21 @@ const AdminOverview = () => {
       setAbnormalPurchases(data ?? []);
     };
 
+    const fetchInventoryHealth = async () => {
+      const { data: products } = await supabase
+        .from("products")
+        .select("id, title, stock, reserved_stock, low_stock_threshold, vendor_id, vendors(store_name)")
+        .eq("status", "active");
+      
+      const lowStock = (products ?? []).filter(
+        (p: any) => (p.stock - (p.reserved_stock ?? 0)) <= (p.low_stock_threshold ?? 5)
+      );
+      setLowStockProducts(lowStock);
+    };
+
     fetchStats();
     fetchFraud();
+    fetchInventoryHealth();
   }, []);
 
   const cards = [
@@ -180,6 +195,43 @@ const AdminOverview = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Inventory Health */}
+      <Card className={lowStockProducts.length > 0 ? 'ring-1 ring-destructive/20' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Archive className="h-5 w-5 text-muted-foreground" />
+            Inventory Health
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {lowStockProducts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">All products are well-stocked.</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground mb-3">{lowStockProducts.length} product(s) need attention</p>
+              {lowStockProducts.slice(0, 15).map((p: any) => {
+                const avail = p.stock - (p.reserved_stock ?? 0);
+                return (
+                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                    <div>
+                      <span className="font-medium">{p.title}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">{p.vendors?.store_name ?? 'Unknown vendor'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">Total: {p.stock}</span>
+                      {(p.reserved_stock ?? 0) > 0 && <span className="text-xs text-primary">Reserved: {p.reserved_stock}</span>}
+                      <Badge variant={avail <= 0 ? "destructive" : "outline"} className="text-xs">
+                        {avail <= 0 ? "Out of Stock" : `${avail} left`}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

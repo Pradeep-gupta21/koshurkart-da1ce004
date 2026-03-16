@@ -31,6 +31,8 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     vendorId: p.vendor_id,
     vendorName: p.vendors?.store_name ?? "",
     stock: 0,
+    reservedStock: 0,
+    lowStockThreshold: 5,
     description: "",
     status: "active",
     isSponsored: true,
@@ -191,24 +193,47 @@ const ProductDetailPage = () => {
 
           <p className="text-sm text-muted-foreground leading-relaxed">{product.description}</p>
 
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-success" />
-              <span>{product.stock > 0 ? `In Stock (${product.stock} available)` : "Out of Stock"}</span>
-            </div>
-          </div>
+          {(() => {
+            const availableStock = product.stock - (product.reservedStock ?? 0);
+            const isOutOfStock = availableStock <= 0;
+            const isLowStock = !isOutOfStock && availableStock <= (product.lowStockThreshold ?? 5);
+            return (
+              <>
+                <div className="mt-6 space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    {isOutOfStock ? (
+                      <>
+                        <span className="h-4 w-4 rounded-full bg-destructive" />
+                        <span className="text-destructive font-medium">Out of Stock</span>
+                      </>
+                    ) : isLowStock ? (
+                      <>
+                        <span className="h-4 w-4 rounded-full bg-destructive/60" />
+                        <span className="text-destructive/80 font-medium">Low Stock — Only {availableStock} left</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-success" />
+                        <span>In Stock ({availableStock} available)</span>
+                      </>
+                    )}
+                  </div>
+                </div>
 
-          <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="flex items-center border rounded-lg self-start">
-              <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
-              <span className="px-4 py-2 text-sm font-medium tabular-nums">{quantity}</span>
-              <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(quantity + 1)}>+</button>
-            </div>
-            <Button size="lg" className="flex-1 h-12 gap-2" disabled={product.stock === 0} onClick={() => addToCart(product, quantity)}>
-              <ShoppingCart className="h-4 w-4" />
-              Add to Cart
-            </Button>
-          </div>
+                <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="flex items-center border rounded-lg self-start">
+                    <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
+                    <span className="px-4 py-2 text-sm font-medium tabular-nums">{quantity}</span>
+                    <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(Math.min(availableStock, quantity + 1))}>+</button>
+                  </div>
+                  <Button size="lg" className="flex-1 h-12 gap-2" disabled={isOutOfStock} onClick={() => addToCart(product, quantity)}>
+                    <ShoppingCart className="h-4 w-4" />
+                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
