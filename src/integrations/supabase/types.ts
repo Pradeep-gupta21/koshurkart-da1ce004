@@ -254,8 +254,10 @@ export type Database = {
           id: string
           images: string[] | null
           is_sponsored: boolean | null
+          low_stock_threshold: number
           price: number
           rating: number | null
+          reserved_stock: number
           review_count: number | null
           slug: string
           status: string
@@ -271,8 +273,10 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_sponsored?: boolean | null
+          low_stock_threshold?: number
           price?: number
           rating?: number | null
+          reserved_stock?: number
           review_count?: number | null
           slug: string
           status?: string
@@ -288,8 +292,10 @@ export type Database = {
           id?: string
           images?: string[] | null
           is_sponsored?: boolean | null
+          low_stock_threshold?: number
           price?: number
           rating?: number | null
+          reserved_stock?: number
           review_count?: number | null
           slug?: string
           status?: string
@@ -461,6 +467,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      confirm_stock: {
+        Args: { p_product_id: string; p_quantity: number }
+        Returns: undefined
+      }
       detect_abnormal_purchases: {
         Args: never
         Returns: {
@@ -486,6 +496,14 @@ export type Database = {
           _metadata?: Json
           _product_id?: string
         }
+        Returns: undefined
+      }
+      release_stock: {
+        Args: { p_product_id: string; p_quantity: number }
+        Returns: undefined
+      }
+      reserve_stock: {
+        Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
       }
       track_ad_event: {
