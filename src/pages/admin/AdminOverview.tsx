@@ -51,8 +51,8 @@ const AdminOverview = () => {
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
-    { label: "Products", value: stats.products, icon: ShoppingCart, color: "text-accent" },
-    { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-accent" },
+    { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
+    { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
     { label: "Revenue", value: `$${stats.revenue.toFixed(2)}`, icon: DollarSign, color: "text-secondary" },
   ];
 
