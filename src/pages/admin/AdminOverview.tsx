@@ -10,6 +10,7 @@ const AdminOverview = () => {
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
   const [abnormalPurchases, setAbnormalPurchases] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
 
   const { data: analytics } = useQuery({
     queryKey: ['admin-analytics'],
