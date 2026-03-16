@@ -1,11 +1,13 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare } from "lucide-react";
 
 const navItems = [
   { to: "/admin", icon: LayoutDashboard, label: "Overview", end: true },
-  { to: "/admin/vendors", icon: Users, label: "Vendor Approvals" },
+  { to: "/admin/vendors", icon: Users, label: "Vendors" },
   { to: "/admin/campaigns", icon: Megaphone, label: "Campaigns" },
+  { to: "/admin/placements", icon: LayoutGrid, label: "Ad Pricing" },
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
+  { to: "/admin/reviews", icon: MessageSquare, label: "Reviews" },
 ];
 
 const AdminDashboard = () => {

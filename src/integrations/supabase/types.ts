@@ -461,6 +461,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      detect_abnormal_purchases: {
+        Args: never
+        Returns: {
+          order_count: number
+          user_email: string
+          user_id: string
+          user_name: string
+          window_start: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
