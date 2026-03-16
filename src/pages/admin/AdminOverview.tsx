@@ -140,12 +140,39 @@ const AdminOverview = () => {
               {suspiciousClicks.slice(0, 10).map((sc: any) => (
                 <div key={sc.id} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
                   <div>
-                    <span className="font-medium">{(sc as any).profiles?.name || (sc as any).profiles?.email || 'Unknown user'}</span>
+                    <span className="font-medium">{sc.profiles?.name || sc.profiles?.email || 'Unknown user'}</span>
                     <span className="text-muted-foreground ml-2">on campaign {sc.campaign_id?.slice(0, 8)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-destructive font-semibold">{sc.click_count} clicks</span>
                     <span className="text-xs text-muted-foreground">{new Date(sc.flagged_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Abnormal purchase patterns */}
+      {abnormalPurchases.length > 0 && (
+        <Card className="ring-1 ring-destructive/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Abnormal Purchase Patterns
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {abnormalPurchases.map((ap: any, i: number) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
+                  <div>
+                    <span className="font-medium">{ap.user_name || ap.user_email || 'Unknown'}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-destructive font-semibold">{ap.order_count} orders/hr</span>
+                    <span className="text-xs text-muted-foreground">{new Date(ap.window_start).toLocaleString()}</span>
                   </div>
                 </div>
               ))}
