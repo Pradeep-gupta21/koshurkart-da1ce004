@@ -10,33 +10,30 @@ import { adService } from "@/services/adService";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 
-const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
-  const p = c.products;
-  return {
-    campaignId: c.id,
-    id: p.id,
-    title: p.title,
-    slug: p.slug,
-    price: Number(p.price),
-    discountPrice: p.discount_price ? Number(p.discount_price) : undefined,
-    images: p.images ?? [],
-    rating: Number(p.rating ?? 0),
-    reviewCount: p.review_count ?? 0,
-    category: p.category,
-    vendorId: p.vendor_id,
-    vendorName: p.vendors?.store_name ?? "",
-    stock: 0,
-    reservedStock: 0,
-    lowStockThreshold: 5,
-    description: "",
-    status: "active",
-    isSponsored: true,
-    createdAt: c.created_at ?? "",
-    salesCount: 0,
-    viewCount: 0,
-    trendingScore: 0,
-  };
-};
+const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
+  campaignId: c.campaign_id,
+  id: c.product_id,
+  title: c.title,
+  slug: c.slug,
+  price: Number(c.price),
+  discountPrice: c.discount_price ? Number(c.discount_price) : undefined,
+  images: c.images ?? [],
+  rating: Number(c.rating ?? 0),
+  reviewCount: c.review_count ?? 0,
+  category: c.category,
+  vendorId: c.vendor_id,
+  vendorName: c.store_name ?? "",
+  stock: 0,
+  reservedStock: 0,
+  lowStockThreshold: 5,
+  description: "",
+  status: "active",
+  isSponsored: true,
+  createdAt: c.created_at ?? "",
+  salesCount: 0,
+  viewCount: 0,
+  trendingScore: 0,
+});
 
 const HomePage = () => {
   const { data: sponsoredCampaigns = [] } = useQuery({
