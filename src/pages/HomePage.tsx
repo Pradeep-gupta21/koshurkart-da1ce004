@@ -38,7 +38,7 @@ const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => 
 const HomePage = () => {
   const { data: sponsoredCampaigns = [] } = useQuery({
     queryKey: ['ads', 'homepage'],
-    queryFn: () => adService.getApprovedByPlacement('homepage'),
+    queryFn: () => adService.getAuctionWinners('homepage', 4),
   });
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
