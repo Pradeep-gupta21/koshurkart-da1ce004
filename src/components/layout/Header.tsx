@@ -90,6 +90,7 @@ const Header = () => {
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden sm:inline-flex">
               {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
+            <NotificationBell />
             <Button variant="ghost" size="icon" asChild>
               <Link to="/profile">
                 <User className="h-5 w-5" />

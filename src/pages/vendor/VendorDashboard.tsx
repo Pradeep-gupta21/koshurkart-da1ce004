@@ -10,6 +10,7 @@ const navItems = [
   { to: "/vendor/campaigns", icon: Megaphone, label: "Ad Campaigns" },
   { to: "/vendor/analytics", icon: BarChart3, label: "Analytics" },
   { to: "/vendor/payments", icon: Wallet, label: "Payments" },
+  { to: "/vendor/notifications", icon: Bell, label: "Notifications" },
 ];
 
 const VendorDashboard = () => {
