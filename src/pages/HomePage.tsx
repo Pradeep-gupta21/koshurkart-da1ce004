@@ -7,6 +7,8 @@ import ProductGrid from "@/components/product/ProductGrid";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
+import { recommendationService } from "@/services/recommendationService";
+import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 
