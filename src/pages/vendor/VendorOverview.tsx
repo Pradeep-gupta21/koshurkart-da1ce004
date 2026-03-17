@@ -3,8 +3,9 @@ import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb, BarChart3 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import { pricingService, PricingSuggestion } from "@/services/pricingService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
 
