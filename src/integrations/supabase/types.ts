@@ -353,8 +353,11 @@ export type Database = {
         Row: {
           comment: string | null
           created_at: string
+          flagged_reason: string | null
           id: string
+          is_suspicious: boolean | null
           is_verified_purchase: boolean | null
+          moderation_status: string | null
           product_id: string
           rating: number
           user_id: string
@@ -362,8 +365,11 @@ export type Database = {
         Insert: {
           comment?: string | null
           created_at?: string
+          flagged_reason?: string | null
           id?: string
+          is_suspicious?: boolean | null
           is_verified_purchase?: boolean | null
+          moderation_status?: string | null
           product_id: string
           rating?: number
           user_id: string
@@ -371,8 +377,11 @@ export type Database = {
         Update: {
           comment?: string | null
           created_at?: string
+          flagged_reason?: string | null
           id?: string
+          is_suspicious?: boolean | null
           is_verified_purchase?: boolean | null
+          moderation_status?: string | null
           product_id?: string
           rating?: number
           user_id?: string
