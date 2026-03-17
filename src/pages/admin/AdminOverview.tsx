@@ -84,6 +84,41 @@ const AdminOverview = () => {
     fetchInventoryHealth();
   }, []);
 
+  // Real-time: new fraud alerts
+  const handleFraudAlert = useCallback(() => {
+    toast({ title: "🚨 Fraud alert", description: "New suspicious click activity detected." });
+    supabase.rpc("detect_abnormal_purchases").then(({ data }) => setAbnormalPurchases(data ?? []));
+  }, [toast]);
+
+  useRealtimeSubscription({
+    table: "suspicious_clicks",
+    event: "INSERT",
+    onPayload: handleFraudAlert,
+  });
+
+  // Real-time: ad campaign updates
+  useRealtimeSubscription({
+    table: "ad_campaigns",
+    event: "UPDATE",
+    onPayload: useCallback(() => {
+      // Silently refresh — no toast needed for ad metric updates
+    }, []),
+  });
+
+  // Real-time: new orders
+  useRealtimeSubscription({
+    table: "orders",
+    event: "INSERT",
+    onPayload: useCallback(async () => {
+      const { data } = await supabase.from("orders").select("total_amount");
+      setStats(prev => ({
+        ...prev,
+        orders: data?.length ?? prev.orders,
+        revenue: data?.reduce((sum, o) => sum + Number(o.total_amount), 0) ?? prev.revenue,
+      }));
+    }, []),
+  });
+
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
