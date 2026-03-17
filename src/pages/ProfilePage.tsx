@@ -131,6 +131,7 @@ const typeIcon: Record<string, string> = {
 
 const ProfilePage = () => {
   const { user, loading, isVendor, signOut } = useAuth();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
