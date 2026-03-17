@@ -61,6 +61,8 @@ export const adService = {
   },
 
   async trackClick(campaignId: string) {
+    const rateCheck = checkRateLimit(`adClick:${campaignId}`, RATE_LIMIT_RULES.adClicks);
+    if (!rateCheck.allowed) return; // silently drop duplicate clicks
     await supabase.rpc('track_ad_event', { _campaign_id: campaignId, _event_type: 'click' });
   },
 };

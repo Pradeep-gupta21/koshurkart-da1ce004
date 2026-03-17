@@ -32,7 +32,11 @@ const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({
+      ...form,
+      title: sanitizeText(form.title),
+      description: sanitizeText(form.description),
+    });
   };
 
   return (
