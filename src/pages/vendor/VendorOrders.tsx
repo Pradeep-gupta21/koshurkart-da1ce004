@@ -16,6 +16,7 @@ import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface VendorOrderItem {
   id: string;
