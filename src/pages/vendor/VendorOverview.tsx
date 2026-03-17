@@ -243,6 +243,39 @@ const VendorOverview = () => {
         </Card>
       )}
 
+      {/* Pricing Insights */}
+      {pricingSuggestions.length > 0 && (
+        <Card className="marketplace-shadow">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-accent" />
+              Pricing Insights ({pricingSuggestions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pricingSuggestions.slice(0, 5).map((s) => (
+                <div key={s.productId} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div>
+                    <p className="font-medium text-sm">{s.title}</p>
+                    <p className="text-xs text-muted-foreground">{s.reason}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Base: ${s.basePrice.toFixed(2)}</p>
+                    <p className="font-semibold text-sm text-primary">
+                      Suggested: ${s.dynamicPrice?.toFixed(2) ?? '—'}
+                    </p>
+                    <Badge variant="outline" className="text-xs mt-1">
+                      Demand: {s.demandScore.toFixed(0)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="marketplace-shadow">
         <CardHeader>
           <CardTitle className="text-lg">Recent Orders</CardTitle>
