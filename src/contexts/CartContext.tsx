@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { CartItem, Product } from "@/types";
 import { toast } from "sonner";
+import { analyticsService } from "@/services/analyticsService";
 
 const CART_STORAGE_KEY = "marketplace_cart";
 
