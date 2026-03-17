@@ -71,6 +71,7 @@ const VendorOverview = () => {
 
     fetchStats();
     fetchTrust();
+    pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
   }, [vendorId]);
 
   const handleNewOrder = useCallback(() => {
