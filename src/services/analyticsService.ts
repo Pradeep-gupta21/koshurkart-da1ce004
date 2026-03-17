@@ -192,7 +192,7 @@ export const analyticsService = {
     const prodRevMap: Record<string, { title: string; revenue: number; units: number }> = {};
     for (const item of orderItems) {
       const pid = item.product_id || 'unknown';
-      if (!prodRevMap[pid]) prodRevMap[pid] = { title: productMap[pid]?.title || item.title, revenue: 0, units: 0 };
+      if (!prodRevMap[pid]) prodRevMap[pid] = { title: productMap[pid]?.title || 'Unknown', revenue: 0, units: 0 };
       prodRevMap[pid].revenue += Number(item.price) * item.quantity;
       prodRevMap[pid].units += item.quantity;
     }
