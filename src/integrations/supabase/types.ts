@@ -259,11 +259,14 @@ export type Database = {
           rating: number | null
           reserved_stock: number
           review_count: number | null
+          sales_count: number
           slug: string
           status: string
           stock: number
           title: string
+          trending_score: number | null
           vendor_id: string
+          view_count: number
         }
         Insert: {
           category?: string
@@ -278,11 +281,14 @@ export type Database = {
           rating?: number | null
           reserved_stock?: number
           review_count?: number | null
+          sales_count?: number
           slug: string
           status?: string
           stock?: number
           title: string
+          trending_score?: number | null
           vendor_id: string
+          view_count?: number
         }
         Update: {
           category?: string
@@ -297,11 +303,14 @@ export type Database = {
           rating?: number | null
           reserved_stock?: number
           review_count?: number | null
+          sales_count?: number
           slug?: string
           status?: string
           stock?: number
           title?: string
+          trending_score?: number | null
           vendor_id?: string
+          view_count?: number
         }
         Relationships: [
           {
@@ -485,6 +494,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_product_scores: { Args: never; Returns: undefined }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
@@ -497,6 +507,59 @@ export type Database = {
           user_id: string
           user_name: string
           window_start: string
+        }[]
+      }
+      get_ranked_products: {
+        Args: { p_category?: string; p_limit?: number; p_search?: string }
+        Returns: {
+          category: string
+          created_at: string
+          description: string
+          discount_price: number
+          id: string
+          images: string[]
+          is_sponsored: boolean
+          low_stock_threshold: number
+          price: number
+          rank_score: number
+          rating: number
+          reserved_stock: number
+          review_count: number
+          sales_count: number
+          slug: string
+          status: string
+          stock: number
+          store_name: string
+          title: string
+          trending_score: number
+          vendor_id: string
+          view_count: number
+        }[]
+      }
+      get_trending_products: {
+        Args: { p_limit?: number }
+        Returns: {
+          category: string
+          created_at: string
+          description: string
+          discount_price: number
+          id: string
+          images: string[]
+          is_sponsored: boolean
+          low_stock_threshold: number
+          price: number
+          rating: number
+          reserved_stock: number
+          review_count: number
+          sales_count: number
+          slug: string
+          status: string
+          stock: number
+          store_name: string
+          title: string
+          trending_score: number
+          vendor_id: string
+          view_count: number
         }[]
       }
       has_role: {
