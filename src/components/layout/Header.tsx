@@ -12,14 +12,6 @@ const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty
 const Header = () => {
   const { totalItems } = useCart();
   const { theme, toggleTheme } = useTheme();
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
-    }
-  };
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
