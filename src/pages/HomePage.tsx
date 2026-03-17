@@ -56,7 +56,7 @@ const HomePage = () => {
     queryFn: () => productService.getVendors(),
   });
 
-  const sponsoredProducts = sponsoredCampaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
+  const sponsoredProducts = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
   return (
     <div>

@@ -12,6 +12,7 @@ interface Placement {
   placement_name: string;
   price_per_click: number | null;
   price_per_impression: number | null;
+  minimum_bid: number | null;
   is_active: boolean | null;
 }
 
@@ -22,13 +23,13 @@ const AdminPlacements = () => {
   const [edits, setEdits] = useState<Record<string, Partial<Placement>>>({});
   const { toast } = useToast();
 
-  const fetch = async () => {
+  const fetchData = async () => {
     const { data } = await supabase.from("ad_placements").select("*").order("placement_name");
     setPlacements((data as Placement[]) ?? []);
     setLoading(false);
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleEdit = (id: string, field: keyof Placement, value: any) => {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
@@ -46,7 +47,7 @@ const AdminPlacements = () => {
     }
     toast({ title: "Placement updated" });
     setEdits((prev) => { const n = { ...prev }; delete n[id]; return n; });
-    fetch();
+    fetchData();
   };
 
   const toggleActive = async (id: string, current: boolean | null) => {
@@ -56,7 +57,7 @@ const AdminPlacements = () => {
       toast({ title: "Toggle failed", description: error.message, variant: "destructive" });
       return;
     }
-    fetch();
+    fetchData();
   };
 
   return (
@@ -107,6 +108,16 @@ const AdminPlacements = () => {
                         className="w-24"
                         defaultValue={p.price_per_impression ?? 0}
                         onChange={(ev) => handleEdit(p.id, "price_per_impression", Number(ev.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Min Bid ($)</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        className="w-24"
+                        defaultValue={p.minimum_bid ?? 0.01}
+                        onChange={(ev) => handleEdit(p.id, "minimum_bid" as any, Number(ev.target.value))}
                       />
                     </div>
                     {edits[p.id] && (

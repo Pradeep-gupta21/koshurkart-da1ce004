@@ -79,7 +79,7 @@ const SearchPage = () => {
     queryFn: () => adService.getAuctionWinners('search', 6),
   });
 
-  const sponsoredAds = sponsoredCampaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
+  const sponsoredAds = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
   // Intersperse sponsored ads into results
   const interspersed: React.ReactNode[] = [];
