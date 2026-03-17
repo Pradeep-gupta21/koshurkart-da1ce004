@@ -119,21 +119,32 @@ const TrackingTimeline = ({ orderId }: { orderId: string }) => {
   );
 };
 
+const typeIcon: Record<string, string> = {
+  order_placed: "🛒",
+  order_shipped: "📦",
+  order_delivered: "✅",
+  vendor_verified: "🛡️",
+  review_submitted: "⭐",
+};
+
 const ProfilePage = () => {
   const { user, loading, isVendor, signOut } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [profRes, orderData] = await Promise.all([
+      const [profRes, orderData, notifs] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
         orderService.getUserOrders(user.id),
+        notificationService.getUserNotifications(user.id, 10),
       ]);
       setProfile(profRes.data);
       setOrders(orderData);
+      setNotifications(notifs);
     };
     fetchData();
   }, [user]);
