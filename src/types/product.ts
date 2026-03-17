@@ -17,6 +17,9 @@ export interface Product {
   isSponsored?: boolean;
   status?: string;
   createdAt: string;
+  salesCount: number;
+  viewCount: number;
+  trendingScore: number;
 }
 
 export interface Review {

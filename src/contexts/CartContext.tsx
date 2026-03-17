@@ -45,6 +45,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return [...prev, { product, quantity }];
     });
     toast.success("Added to cart", { description: `${product.title} has been added.` });
+    analyticsService.trackEvent('add_to_cart', product.id).catch(() => {});
   }, []);
 
   const removeFromCart = useCallback((productId: string) => {

@@ -152,4 +152,20 @@ export const productService = {
     if (error) throw error;
     return data ?? [];
   },
+
+  async getRanked(options?: { category?: string; search?: string; limit?: number }) {
+    const { data, error } = await supabase.rpc('get_ranked_products', {
+      p_limit: options?.limit ?? 20,
+      p_category: options?.category ?? null,
+      p_search: options?.search ?? null,
+    });
+    if (error) throw error;
+    return (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+  },
+
+  async getTrending(limit = 8) {
+    const { data, error } = await supabase.rpc('get_trending_products', { p_limit: limit });
+    if (error) throw error;
+    return (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+  },
 };

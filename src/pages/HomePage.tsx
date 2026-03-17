@@ -43,12 +43,12 @@ const HomePage = () => {
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
     queryKey: ['products', 'trending'],
-    queryFn: () => productService.getAll({ sort: 'popularity', limit: 8 }),
+    queryFn: () => productService.getTrending(8),
   });
 
   const { data: allProducts = [], isLoading: loadingAll } = useQuery({
-    queryKey: ['products', 'latest'],
-    queryFn: () => productService.getAll({ sort: 'newest', limit: 16 }),
+    queryKey: ['products', 'ranked'],
+    queryFn: () => productService.getRanked({ limit: 16 }),
   });
 
   const { data: vendors = [] } = useQuery({
