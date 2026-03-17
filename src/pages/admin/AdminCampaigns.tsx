@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, MousePointer, CheckCircle, XCircle } from "lucide-react";
+import { Eye, MousePointer, CheckCircle, XCircle, TrendingUp, Target, DollarSign } from "lucide-react";
 
 const AdminCampaigns = () => {
   const { toast } = useToast();
@@ -39,6 +39,9 @@ const AdminCampaigns = () => {
 
   const filtered = tab === "all" ? campaigns : campaigns.filter((c: any) => c.status === tab);
 
+  // Sort approved by effective_score for ranking
+  const approvedSorted = [...campaigns].filter((c: any) => c.status === 'approved').sort((a: any, b: any) => (b.effective_score ?? 0) - (a.effective_score ?? 0));
+
   const statusColor = (s: string) => {
     switch (s) {
       case "approved": return "bg-secondary text-secondary-foreground";
@@ -70,53 +73,67 @@ const AdminCampaigns = () => {
           ) : filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground">No campaigns in this category.</p>
           ) : (
-            filtered.map((c: any) => (
-              <Card key={c.id} className="marketplace-shadow">
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold truncate">{c.products?.title ?? "Unknown Product"}</h3>
-                        <Badge className={statusColor(c.status)}>{c.status}</Badge>
+            filtered.map((c: any) => {
+              const rank = approvedSorted.findIndex((x: any) => x.id === c.id);
+              return (
+                <Card key={c.id} className="marketplace-shadow">
+                  <CardContent className="py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold truncate">{c.products?.title ?? "Unknown Product"}</h3>
+                          {rank >= 0 && (
+                            <Badge variant="outline" className="text-xs shrink-0">
+                              <TrendingUp className="h-3 w-3 mr-1" /> #{rank + 1}
+                            </Badge>
+                          )}
+                          <Badge className={statusColor(c.status)}>{c.status}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Vendor: <span className="font-medium text-foreground">{c.vendors?.store_name ?? "—"}</span>
+                          {" · "}Placement: <span className="capitalize">{c.placement}</span>
+                          {" · "}Budget: <span className="font-medium">${c.budget}</span>
+                          {c.daily_limit > 0 && <> · Daily: ${c.daily_limit}</>}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
+                          <span>{c.start_date} → {c.end_date || "Ongoing"}</span>
+                          <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />Bid: ${Number(c.bid_amount ?? 0).toFixed(2)}</span>
+                          <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
+                          <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
+                          <span className="flex items-center gap-1"><Target className="h-3 w-3" />{c.conversions ?? 0} conv.</span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                          <span>Quality: {Number(c.quality_score ?? 0).toFixed(1)}</span>
+                          <span>Effective: {Number(c.effective_score ?? 0).toFixed(3)}</span>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Vendor: <span className="font-medium text-foreground">{c.vendors?.store_name ?? "—"}</span>
-                        {" · "}Placement: <span className="capitalize">{c.placement}</span>
-                        {" · "}Budget: <span className="font-medium">${c.budget}</span>
-                        {c.daily_limit > 0 && <> · Daily: ${c.daily_limit}</>}
-                      </p>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span>{c.start_date} → {c.end_date || "Ongoing"}</span>
-                        <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
-                        <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      {c.status === "pending" && (
-                        <>
+                      <div className="flex gap-2 shrink-0">
+                        {c.status === "pending" && (
+                          <>
+                            <Button size="sm" onClick={() => updateStatus.mutate({ id: c.id, status: "approved" })}>
+                              <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => updateStatus.mutate({ id: c.id, status: "rejected" })}>
+                              <XCircle className="h-4 w-4 mr-1" /> Reject
+                            </Button>
+                          </>
+                        )}
+                        {c.status === "approved" && (
+                          <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: c.id, status: "paused" })}>
+                            Pause
+                          </Button>
+                        )}
+                        {c.status === "paused" && (
                           <Button size="sm" onClick={() => updateStatus.mutate({ id: c.id, status: "approved" })}>
-                            <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                            Resume
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => updateStatus.mutate({ id: c.id, status: "rejected" })}>
-                            <XCircle className="h-4 w-4 mr-1" /> Reject
-                          </Button>
-                        </>
-                      )}
-                      {c.status === "approved" && (
-                        <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: c.id, status: "paused" })}>
-                          Pause
-                        </Button>
-                      )}
-                      {c.status === "paused" && (
-                        <Button size="sm" onClick={() => updateStatus.mutate({ id: c.id, status: "approved" })}>
-                          Resume
-                        </Button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </TabsContent>
       </Tabs>

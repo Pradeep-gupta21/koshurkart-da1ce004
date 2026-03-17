@@ -16,43 +16,55 @@ export type Database = {
     Tables: {
       ad_campaigns: {
         Row: {
+          bid_amount: number
           budget: number
           clicks: number | null
+          conversions: number | null
           created_at: string
           daily_limit: number | null
+          effective_score: number | null
           end_date: string | null
           id: string
           impressions: number | null
           placement: string
           product_id: string
+          quality_score: number | null
           start_date: string
           status: string
           vendor_id: string
         }
         Insert: {
+          bid_amount?: number
           budget?: number
           clicks?: number | null
+          conversions?: number | null
           created_at?: string
           daily_limit?: number | null
+          effective_score?: number | null
           end_date?: string | null
           id?: string
           impressions?: number | null
           placement?: string
           product_id: string
+          quality_score?: number | null
           start_date?: string
           status?: string
           vendor_id: string
         }
         Update: {
+          bid_amount?: number
           budget?: number
           clicks?: number | null
+          conversions?: number | null
           created_at?: string
           daily_limit?: number | null
+          effective_score?: number | null
           end_date?: string | null
           id?: string
           impressions?: number | null
           placement?: string
           product_id?: string
+          quality_score?: number | null
           start_date?: string
           status?: string
           vendor_id?: string
@@ -78,6 +90,7 @@ export type Database = {
         Row: {
           id: string
           is_active: boolean | null
+          minimum_bid: number | null
           placement_name: string
           price_per_click: number | null
           price_per_impression: number | null
@@ -85,6 +98,7 @@ export type Database = {
         Insert: {
           id?: string
           is_active?: boolean | null
+          minimum_bid?: number | null
           placement_name: string
           price_per_click?: number | null
           price_per_impression?: number | null
@@ -92,6 +106,7 @@ export type Database = {
         Update: {
           id?: string
           is_active?: boolean | null
+          minimum_bid?: number | null
           placement_name?: string
           price_per_click?: number | null
           price_per_impression?: number | null
@@ -518,6 +533,30 @@ export type Database = {
           window_start: string
         }[]
       }
+      get_auction_winners: {
+        Args: { p_limit?: number; p_placement: string }
+        Returns: {
+          bid_amount: number
+          campaign_id: string
+          category: string
+          clicks: number
+          conversions: number
+          created_at: string
+          discount_price: number
+          effective_score: number
+          images: string[]
+          impressions: number
+          price: number
+          product_id: string
+          quality_score: number
+          rating: number
+          review_count: number
+          slug: string
+          store_name: string
+          title: string
+          vendor_id: string
+        }[]
+      }
       get_ranked_products: {
         Args: { p_category?: string; p_limit?: number; p_search?: string }
         Returns: {
@@ -579,6 +618,10 @@ export type Database = {
         Returns: boolean
       }
       promote_to_admin: { Args: { _email: string }; Returns: undefined }
+      recalculate_ad_quality_score: {
+        Args: { p_campaign_id: string }
+        Returns: undefined
+      }
       recalculate_vendor_trust_score: {
         Args: { p_vendor_id: string }
         Returns: undefined
