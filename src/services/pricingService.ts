@@ -68,9 +68,7 @@ export const pricingService = {
     if (error) throw error;
     return data as PricingRule;
   },
-    if (error) throw error;
-    return data as PricingRule;
-  },
+
 
   async recalculatePrices() {
     const { error } = await supabase.rpc('calculate_dynamic_prices');
