@@ -62,9 +62,12 @@ export const pricingService = {
   async createPricingRule(rule: Partial<PricingRule>) {
     const { data, error } = await supabase
       .from('pricing_rules')
-      .insert(rule)
+      .insert([rule as any])
       .select()
       .single();
+    if (error) throw error;
+    return data as PricingRule;
+  },
     if (error) throw error;
     return data as PricingRule;
   },
