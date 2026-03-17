@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 
@@ -11,6 +11,7 @@ const navItems = [
   { to: "/admin/placements", icon: LayoutGrid, label: "Ad Pricing" },
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
   { to: "/admin/reviews", icon: MessageSquare, label: "Reviews", hasBadge: true },
+  { to: "/admin/pricing", icon: DollarSign, label: "Dynamic Pricing" },
 ];
 
 const AdminDashboard = () => {

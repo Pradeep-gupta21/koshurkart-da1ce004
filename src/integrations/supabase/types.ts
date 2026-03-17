@@ -311,12 +311,66 @@ export type Database = {
           },
         ]
       }
+      pricing_rules: {
+        Row: {
+          created_at: string | null
+          demand_threshold_high: number
+          demand_threshold_low: number
+          high_demand_multiplier: number
+          high_stock_multiplier: number
+          id: string
+          is_active: boolean | null
+          low_demand_multiplier: number
+          low_stock_multiplier: number
+          max_decrease_pct: number
+          max_increase_pct: number
+          rule_name: string
+          stock_threshold_high: number
+          stock_threshold_low: number
+        }
+        Insert: {
+          created_at?: string | null
+          demand_threshold_high?: number
+          demand_threshold_low?: number
+          high_demand_multiplier?: number
+          high_stock_multiplier?: number
+          id?: string
+          is_active?: boolean | null
+          low_demand_multiplier?: number
+          low_stock_multiplier?: number
+          max_decrease_pct?: number
+          max_increase_pct?: number
+          rule_name: string
+          stock_threshold_high?: number
+          stock_threshold_low?: number
+        }
+        Update: {
+          created_at?: string | null
+          demand_threshold_high?: number
+          demand_threshold_low?: number
+          high_demand_multiplier?: number
+          high_stock_multiplier?: number
+          id?: string
+          is_active?: boolean | null
+          low_demand_multiplier?: number
+          low_stock_multiplier?: number
+          max_decrease_pct?: number
+          max_increase_pct?: number
+          rule_name?: string
+          stock_threshold_high?: number
+          stock_threshold_low?: number
+        }
+        Relationships: []
+      }
       products: {
         Row: {
+          base_price: number | null
           category: string
           created_at: string
+          demand_score: number | null
           description: string | null
           discount_price: number | null
+          dynamic_price: number | null
           id: string
           images: string[] | null
           is_sponsored: boolean | null
@@ -337,10 +391,13 @@ export type Database = {
           view_count: number
         }
         Insert: {
+          base_price?: number | null
           category?: string
           created_at?: string
+          demand_score?: number | null
           description?: string | null
           discount_price?: number | null
+          dynamic_price?: number | null
           id?: string
           images?: string[] | null
           is_sponsored?: boolean | null
@@ -361,10 +418,13 @@ export type Database = {
           view_count?: number
         }
         Update: {
+          base_price?: number | null
           category?: string
           created_at?: string
+          demand_score?: number | null
           description?: string | null
           discount_price?: number | null
+          dynamic_price?: number | null
           id?: string
           images?: string[] | null
           is_sponsored?: boolean | null
@@ -610,6 +670,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_dynamic_prices: { Args: never; Returns: undefined }
       calculate_product_scores: { Args: never; Returns: undefined }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }

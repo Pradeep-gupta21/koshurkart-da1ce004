@@ -3,8 +3,9 @@ import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb, BarChart3 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import { pricingService, PricingSuggestion } from "@/services/pricingService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,6 +21,7 @@ const VendorOverview = () => {
   const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [pricingSuggestions, setPricingSuggestions] = useState<PricingSuggestion[]>([]);
   const [trustMetrics, setTrustMetrics] = useState<{
     trustScore: number; deliveryRate: number; cancellationRate: number;
     returnRate: number; reviewRating: number; isVerified: boolean;
@@ -69,6 +71,7 @@ const VendorOverview = () => {
 
     fetchStats();
     fetchTrust();
+    pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
   }, [vendorId]);
 
   const handleNewOrder = useCallback(() => {
@@ -235,6 +238,39 @@ const VendorOverview = () => {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pricing Insights */}
+      {pricingSuggestions.length > 0 && (
+        <Card className="marketplace-shadow">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-accent" />
+              Pricing Insights ({pricingSuggestions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pricingSuggestions.slice(0, 5).map((s) => (
+                <div key={s.productId} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div>
+                    <p className="font-medium text-sm">{s.title}</p>
+                    <p className="text-xs text-muted-foreground">{s.reason}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Base: ${s.basePrice.toFixed(2)}</p>
+                    <p className="font-semibold text-sm text-primary">
+                      Suggested: ${s.dynamicPrice?.toFixed(2) ?? '—'}
+                    </p>
+                    <Badge variant="outline" className="text-xs mt-1">
+                      Demand: {s.demandScore.toFixed(0)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

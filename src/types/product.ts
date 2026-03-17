@@ -21,6 +21,9 @@ export interface Product {
   viewCount: number;
   trendingScore: number;
   tags?: string[];
+  basePrice?: number;
+  dynamicPrice?: number;
+  demandScore?: number;
 }
 
 export interface Review {

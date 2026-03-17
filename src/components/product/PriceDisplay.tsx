@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 interface PriceDisplayProps {
   price: number;
   discountPrice?: number | null;
+  dynamicPrice?: number | null;
+  basePrice?: number | null;
   size?: "sm" | "md" | "lg";
   showSavings?: boolean;
   className?: string;
@@ -14,27 +16,35 @@ const sizeMap = {
   lg: { main: "text-3xl", original: "text-lg", savings: "text-sm" },
 };
 
-const PriceDisplay = ({ price, discountPrice, size = "md", showSavings = false, className }: PriceDisplayProps) => {
+const PriceDisplay = ({ price, discountPrice, dynamicPrice, basePrice, size = "md", showSavings = false, className }: PriceDisplayProps) => {
   const styles = sizeMap[size];
-  const displayPrice = discountPrice ?? price;
-  const savingsPercent = discountPrice ? Math.round((1 - discountPrice / price) * 100) : 0;
+  // Priority: discountPrice > dynamicPrice > price
+  const effectivePrice = discountPrice ?? dynamicPrice ?? price;
+  const referencePrice = discountPrice ? price : (dynamicPrice && basePrice ? basePrice : null);
+  const savingsPercent = referencePrice ? Math.round((1 - effectivePrice / referencePrice) * 100) : 0;
+  const isDynamic = !discountPrice && dynamicPrice != null && dynamicPrice !== price;
 
   return (
     <div className={cn("flex items-baseline gap-1.5 flex-wrap", className)}>
       <span className={cn("font-semibold text-primary tabular-nums", styles.main)}>
-        ${displayPrice.toFixed(2)}
+        ${effectivePrice.toFixed(2)}
       </span>
-      {discountPrice && (
+      {referencePrice && (
         <>
           <span className={cn("text-muted-foreground line-through tabular-nums", styles.original)}>
-            ${price.toFixed(2)}
+            ${referencePrice.toFixed(2)}
           </span>
           {showSavings && savingsPercent > 0 && (
             <span className={cn("font-semibold text-secondary", styles.savings)}>
-              Save {savingsPercent}%
+              Save {Math.abs(savingsPercent)}%
             </span>
           )}
         </>
+      )}
+      {isDynamic && (
+        <span className={cn("text-accent font-medium", styles.savings)}>
+          Dynamic
+        </span>
       )}
     </div>
   );

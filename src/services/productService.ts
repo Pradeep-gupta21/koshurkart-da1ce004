@@ -27,6 +27,9 @@ export function mapDbProduct(row: any): Product {
     viewCount: row.view_count ?? 0,
     trendingScore: Number(row.trending_score ?? 0),
     tags: row.tags ?? [],
+    basePrice: row.base_price ? Number(row.base_price) : undefined,
+    dynamicPrice: row.dynamic_price ? Number(row.dynamic_price) : undefined,
+    demandScore: row.demand_score ? Number(row.demand_score) : undefined,
   };
 }
 
