@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 
 // Maps a DB row to the frontend Product type
@@ -6,7 +7,7 @@ export function mapDbProduct(row: any): Product {
   return {
     id: row.id,
     vendorId: row.vendor_id,
-    vendorName: row.vendors?.store_name ?? '',
+    vendorName: row.vendors?.store_name ?? row.store_name ?? '',
     title: row.title,
     slug: row.slug,
     description: row.description ?? '',
@@ -40,9 +41,12 @@ export const productService = {
     status?: string;
     sponsored?: boolean;
   }) {
+    const cacheKey = `products:all:${JSON.stringify(options ?? {})}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     let query = supabase.from('products').select('*, vendors(store_name)');
 
-    // Default to active products for storefront
     const status = options?.status ?? 'active';
     if (status !== 'all') query = query.eq('status', status);
 
@@ -51,7 +55,6 @@ export const productService = {
     if (options?.sponsored !== undefined) query = query.eq('is_sponsored', options.sponsored);
     if (options?.limit) query = query.limit(options.limit);
 
-    // Sorting
     const sort = options?.sort ?? 'newest';
     switch (sort) {
       case 'price-low':
@@ -72,17 +75,25 @@ export const productService = {
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []).map(mapDbProduct);
+    const result = (data ?? []).map(mapDbProduct);
+    cacheService.set(cacheKey, result, CACHE_TTL.HOMEPAGE);
+    return result;
   },
 
   async getBySlug(slug: string) {
+    const cacheKey = `product:slug:${slug}`;
+    const cached = cacheService.get<Product>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase
       .from('products')
       .select('*, vendors(store_name)')
       .eq('slug', slug)
       .single();
     if (error) throw error;
-    return mapDbProduct(data);
+    const result = mapDbProduct(data);
+    cacheService.set(cacheKey, result, CACHE_TTL.PRODUCT_DETAIL);
+    return result;
   },
 
   async getByVendor(vendorId: string) {
@@ -96,13 +107,18 @@ export const productService = {
   },
 
   async getCategories() {
+    const cacheKey = 'products:categories';
+    const cached = cacheService.get<string[]>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase
       .from('products')
       .select('category')
       .eq('status', 'active');
     if (error) throw error;
-    const cats = [...new Set((data ?? []).map((r: any) => r.category))].filter(Boolean).sort();
-    return cats as string[];
+    const cats = [...new Set((data ?? []).map((r: any) => r.category))].filter(Boolean).sort() as string[];
+    cacheService.set(cacheKey, cats, CACHE_TTL.HOMEPAGE);
+    return cats;
   },
 
   async create(product: {
@@ -120,18 +136,30 @@ export const productService = {
   }) {
     const { data, error } = await supabase.from('products').insert(product).select('*, vendors(store_name)').single();
     if (error) throw error;
+    cacheService.invalidatePattern('products:');
+    cacheService.invalidatePattern('search:');
+    cacheService.invalidatePattern('suggestions:');
     return mapDbProduct(data);
   },
 
   async update(id: string, updates: Record<string, unknown>) {
     const { data, error } = await supabase.from('products').update(updates).eq('id', id).select('*, vendors(store_name)').single();
     if (error) throw error;
+    cacheService.invalidatePattern('products:');
+    cacheService.invalidatePattern('product:');
+    cacheService.invalidatePattern('search:');
+    cacheService.invalidatePattern('suggestions:');
+    cacheService.invalidatePattern('similar:');
     return mapDbProduct(data);
   },
 
   async remove(id: string) {
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) throw error;
+    cacheService.invalidatePattern('products:');
+    cacheService.invalidatePattern('product:');
+    cacheService.invalidatePattern('search:');
+    cacheService.invalidatePattern('suggestions:');
   },
 
   async uploadImage(file: File, userId: string): Promise<string> {
@@ -155,18 +183,30 @@ export const productService = {
   },
 
   async getRanked(options?: { category?: string; search?: string; limit?: number }) {
+    const cacheKey = `products:ranked:${JSON.stringify(options ?? {})}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase.rpc('get_ranked_products', {
       p_limit: options?.limit ?? 20,
       p_category: options?.category ?? null,
       p_search: options?.search ?? null,
     });
     if (error) throw error;
-    return (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    const result = (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    cacheService.set(cacheKey, result, CACHE_TTL.HOMEPAGE);
+    return result;
   },
 
   async getTrending(limit = 8) {
+    const cacheKey = `products:trending:${limit}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase.rpc('get_trending_products', { p_limit: limit });
     if (error) throw error;
-    return (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    const result = (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    cacheService.set(cacheKey, result, CACHE_TTL.TRENDING);
+    return result;
   },
 };

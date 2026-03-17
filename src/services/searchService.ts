@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { mapDbProduct } from './productService';
+import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 
 const SEARCH_HISTORY_KEY = 'nexus_search_history';
@@ -21,6 +22,10 @@ export const searchService = {
     sort: SearchSortOption = 'relevance',
     limit = 30
   ): Promise<Product[]> {
+    const cacheKey = `search:${query}:${JSON.stringify(filters)}:${sort}:${limit}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase.rpc('search_products', {
       p_query: query || null,
       p_category: filters.category || null,
@@ -36,11 +41,17 @@ export const searchService = {
       return [];
     }
 
-    return (data ?? []).map((row: any) => mapDbProduct(row));
+    const result = (data ?? []).map((row: any) => mapDbProduct(row));
+    cacheService.set(cacheKey, result, CACHE_TTL.SEARCH);
+    return result;
   },
 
   async getSearchSuggestions(query: string): Promise<{ suggestion: string; type: string }[]> {
     if (!query || query.length < 2) return [];
+
+    const cacheKey = `suggestions:${query}`;
+    const cached = cacheService.get<{ suggestion: string; type: string }[]>(cacheKey);
+    if (cached) return cached;
 
     const { data, error } = await supabase.rpc('get_search_suggestions', {
       p_query: query,
@@ -52,10 +63,12 @@ export const searchService = {
       return [];
     }
 
-    return (data ?? []).map((r: any) => ({
+    const result = (data ?? []).map((r: any) => ({
       suggestion: r.suggestion,
       type: r.suggestion_type,
     }));
+    cacheService.set(cacheKey, result, CACHE_TTL.SUGGESTIONS);
+    return result;
   },
 
   getSearchHistory(): string[] {
