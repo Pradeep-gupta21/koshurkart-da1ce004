@@ -97,6 +97,28 @@ const VendorOrders = () => {
 
   useEffect(() => { if (vendorId) fetchOrders(); }, [vendorId]);
 
+  // Live: new order items for this vendor
+  const handleRealtimeOrder = useCallback(() => {
+    fetchOrders();
+    toast({ title: "📦 Orders updated", description: "New order activity detected." });
+  }, []);
+
+  useRealtimeSubscription({
+    table: "order_items",
+    event: "INSERT",
+    filter: `vendor_id=eq.${vendorId}`,
+    onPayload: handleRealtimeOrder,
+    enabled: !!vendorId,
+  });
+
+  // Live: order status changes
+  useRealtimeSubscription({
+    table: "orders",
+    event: "UPDATE",
+    onPayload: handleRealtimeOrder,
+    enabled: !!vendorId,
+  });
+
   const advanceShipping = async (orderId: string, currentStatus: string) => {
     const next = nextShippingStatus[currentStatus];
     if (!next) return;

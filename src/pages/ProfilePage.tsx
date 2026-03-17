@@ -152,6 +152,22 @@ const ProfilePage = () => {
     fetchData();
   }, [user]);
 
+  // Real-time order status updates
+  const handleOrderUpdate = useCallback(async () => {
+    if (!user) return;
+    const orderData = await orderService.getUserOrders(user.id);
+    setOrders(orderData);
+    toast({ title: "📦 Order updated", description: "Your order status has changed." });
+  }, [user, toast]);
+
+  useRealtimeSubscription({
+    table: "orders",
+    event: "UPDATE",
+    filter: user ? `user_id=eq.${user.id}` : undefined,
+    onPayload: handleOrderUpdate,
+    enabled: !!user,
+  });
+
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   if (!user) return <Navigate to="/auth" replace />;
 
