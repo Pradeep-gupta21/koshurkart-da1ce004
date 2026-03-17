@@ -200,27 +200,42 @@ export type Database = {
       }
       orders: {
         Row: {
+          courier_api_config: Json | null
           created_at: string
+          estimated_delivery: string | null
           id: string
           order_status: string
           payment_status: string
+          shipping_provider: string | null
+          shipping_status: string
           total_amount: number
+          tracking_id: string | null
           user_id: string
         }
         Insert: {
+          courier_api_config?: Json | null
           created_at?: string
+          estimated_delivery?: string | null
           id?: string
           order_status?: string
           payment_status?: string
+          shipping_provider?: string | null
+          shipping_status?: string
           total_amount?: number
+          tracking_id?: string | null
           user_id: string
         }
         Update: {
+          courier_api_config?: Json | null
           created_at?: string
+          estimated_delivery?: string | null
           id?: string
           order_status?: string
           payment_status?: string
+          shipping_provider?: string | null
+          shipping_status?: string
           total_amount?: number
+          tracking_id?: string | null
           user_id?: string
         }
         Relationships: []
@@ -407,6 +422,41 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipment_events: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          location: string | null
+          order_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          order_id: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          order_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipment_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
