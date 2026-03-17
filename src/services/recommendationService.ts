@@ -1,15 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
 import { mapDbProduct } from './productService';
 import { productService } from './productService';
+import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 
 export const recommendationService = {
-  /**
-   * Personalized recommendations based on view history & purchases.
-   * Falls back to trending products if no history exists.
-   */
   async getPersonalizedRecommendations(userId: string, limit = 8): Promise<Product[]> {
-    // 1. Get recently viewed product IDs
+    // No caching — user-specific and changes frequently
     const { data: viewEvents } = await supabase
       .from('analytics_events')
       .select('product_id')
@@ -20,7 +17,6 @@ export const recommendationService = {
 
     const viewedIds = [...new Set((viewEvents ?? []).map(e => e.product_id).filter(Boolean))] as string[];
 
-    // 2. Get purchased product IDs
     const { data: orders } = await supabase
       .from('orders')
       .select('id')
@@ -37,7 +33,6 @@ export const recommendationService = {
       purchasedIds = [...new Set((items ?? []).map(i => i.product_id).filter(Boolean))] as string[];
     }
 
-    // 3. Get categories & tags from viewed/purchased products
     const seedIds = [...new Set([...viewedIds, ...purchasedIds])];
     if (seedIds.length === 0) {
       return productService.getTrending(limit);
@@ -49,9 +44,7 @@ export const recommendationService = {
       .in('id', seedIds.slice(0, 30));
 
     const categories = [...new Set((seedProducts ?? []).map(p => p.category).filter(Boolean))];
-    const tags = [...new Set((seedProducts ?? []).flatMap(p => (p.tags as string[]) ?? []))];
 
-    // 4. Fetch recommendations matching categories, excluding already seen
     const excludeIds = seedIds.slice(0, 50);
     let query = supabase
       .from('products')
@@ -68,7 +61,6 @@ export const recommendationService = {
     const { data } = await query;
     const results = (data ?? []).map(mapDbProduct);
 
-    // If not enough results, pad with trending
     if (results.length < limit) {
       const trending = await productService.getTrending(limit - results.length);
       const existingIds = new Set(results.map(r => r.id));
@@ -82,10 +74,11 @@ export const recommendationService = {
     return results;
   },
 
-  /**
-   * Products similar to a given product (same category or overlapping tags).
-   */
   async getSimilarProducts(productId: string, limit = 4): Promise<Product[]> {
+    const cacheKey = `similar:${productId}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     const { data: source } = await supabase
       .from('products')
       .select('category, tags')
@@ -104,14 +97,16 @@ export const recommendationService = {
       .order('sales_count', { ascending: false })
       .limit(limit);
 
-    return (data ?? []).map(mapDbProduct);
+    const result = (data ?? []).map(mapDbProduct);
+    cacheService.set(cacheKey, result, CACHE_TTL.SIMILAR);
+    return result;
   },
 
-  /**
-   * Products frequently bought together with a given product.
-   */
   async getFrequentlyBoughtTogether(productId: string, limit = 4): Promise<Product[]> {
-    // Find orders that contain this product
+    const cacheKey = `fbt:${productId}`;
+    const cached = cacheService.get<Product[]>(cacheKey);
+    if (cached) return cached;
+
     const { data: orderItems } = await supabase
       .from('order_items')
       .select('order_id')
@@ -122,7 +117,6 @@ export const recommendationService = {
 
     const orderIds = [...new Set(orderItems.map(oi => oi.order_id))];
 
-    // Find other products in those orders
     const { data: coItems } = await supabase
       .from('order_items')
       .select('product_id')
@@ -131,7 +125,6 @@ export const recommendationService = {
 
     if (!coItems || coItems.length === 0) return [];
 
-    // Count frequency
     const freq: Record<string, number> = {};
     for (const item of coItems) {
       if (item.product_id) {
@@ -152,6 +145,8 @@ export const recommendationService = {
       .in('id', topIds)
       .eq('status', 'active');
 
-    return (data ?? []).map(mapDbProduct);
+    const result = (data ?? []).map(mapDbProduct);
+    cacheService.set(cacheKey, result, CACHE_TTL.FBT);
+    return result;
   },
 };

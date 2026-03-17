@@ -1,3 +1,4 @@
+export { cacheService, CACHE_TTL } from './cacheService';
 export { productService } from './productService';
 export { orderService } from './orderService';
 export { adService } from './adService';
