@@ -25,6 +25,7 @@ export function mapDbProduct(row: any): Product {
     salesCount: row.sales_count ?? 0,
     viewCount: row.view_count ?? 0,
     trendingScore: Number(row.trending_score ?? 0),
+    tags: row.tags ?? [],
   };
 }
 

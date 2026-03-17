@@ -20,6 +20,7 @@ export interface Product {
   salesCount: number;
   viewCount: number;
   trendingScore: number;
+  tags?: string[];
 }
 
 export interface Review {

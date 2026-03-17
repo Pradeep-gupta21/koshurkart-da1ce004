@@ -314,6 +314,18 @@ const ProductDetailPage = () => {
       {/* Sponsored Suggestions */}
       <SponsoredSuggestionsInline />
 
+      {/* Frequently Bought Together */}
+      {boughtTogether.length > 0 && (
+        <section className="mt-14">
+          <h2 className="text-xl font-semibold mb-6">Frequently Bought Together</h2>
+          <ProductGrid>
+            {boughtTogether.map(p => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </ProductGrid>
+        </section>
+      )}
+
       {/* Similar */}
       {similarProducts.length > 0 && (
         <section className="mt-14 pb-8">
