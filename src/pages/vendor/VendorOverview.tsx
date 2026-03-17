@@ -21,6 +21,7 @@ const VendorOverview = () => {
   const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
+  const [pricingSuggestions, setPricingSuggestions] = useState<PricingSuggestion[]>([]);
   const [trustMetrics, setTrustMetrics] = useState<{
     trustScore: number; deliveryRate: number; cancellationRate: number;
     returnRate: number; reviewRating: number; isVerified: boolean;
