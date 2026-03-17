@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { CartItem, Product } from "@/types";
 import { toast } from "sonner";
+import { analyticsService } from "@/services/analyticsService";
 
 const CART_STORAGE_KEY = "marketplace_cart";
 
@@ -44,6 +45,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return [...prev, { product, quantity }];
     });
     toast.success("Added to cart", { description: `${product.title} has been added.` });
+    analyticsService.trackEvent('add_to_cart', product.id).catch(() => {});
   }, []);
 
   const removeFromCart = useCallback((productId: string) => {

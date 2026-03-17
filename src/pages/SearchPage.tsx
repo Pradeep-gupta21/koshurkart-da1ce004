@@ -37,6 +37,9 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     status: "active",
     isSponsored: true,
     createdAt: c.created_at ?? "",
+    salesCount: 0,
+    viewCount: 0,
+    trendingScore: 0,
   };
 };
 
@@ -59,11 +62,19 @@ const SearchPage = () => {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products', 'search', query, selectedCategory, sortBy],
-    queryFn: () => productService.getAll({
-      search: query || undefined,
-      category: selectedCategory !== "All" ? selectedCategory : undefined,
-      sort: sortBy === "relevance" ? "newest" : sortBy,
-    }),
+    queryFn: () => {
+      if (sortBy === 'relevance') {
+        return productService.getRanked({
+          search: query || undefined,
+          category: selectedCategory !== "All" ? selectedCategory : undefined,
+        });
+      }
+      return productService.getAll({
+        search: query || undefined,
+        category: selectedCategory !== "All" ? selectedCategory : undefined,
+        sort: sortBy,
+      });
+    },
   });
 
   const { data: sponsoredCampaigns = [] } = useQuery({

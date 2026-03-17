@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export const analyticsService = {
   /** Track an analytics event via the security-definer function */
   async trackEvent(
-    eventType: 'product_view' | 'ad_view' | 'ad_click' | 'purchase',
+    eventType: 'product_view' | 'ad_view' | 'ad_click' | 'purchase' | 'add_to_cart',
     productId?: string,
     campaignId?: string,
     metadata?: Record<string, any>
