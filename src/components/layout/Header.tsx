@@ -1,11 +1,10 @@
 import { Link } from "react-router-dom";
-import { Search, ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
+import { ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
 import { useTheme } from "@/hooks/useTheme";
-import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
