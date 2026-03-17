@@ -76,7 +76,7 @@ const SearchPage = () => {
 
   const { data: sponsoredCampaigns = [] } = useQuery({
     queryKey: ['ads', 'search'],
-    queryFn: () => adService.getApprovedByPlacement('search'),
+    queryFn: () => adService.getAuctionWinners('search', 6),
   });
 
   const sponsoredAds = sponsoredCampaigns.filter((c: any) => c.products).map(mapCampaignToProduct);
