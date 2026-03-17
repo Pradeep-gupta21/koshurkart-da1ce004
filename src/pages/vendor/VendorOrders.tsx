@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { orderService } from "@/services/orderService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Truck, CheckCircle2, Loader2 } from "lucide-react";
+import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import type { ShippingStatus } from "@/types/order";
 
 interface VendorOrderItem {
   id: string;
@@ -23,14 +32,40 @@ interface VendorOrderItem {
     payment_status: string;
     total_amount: number;
     user_id: string;
+    shipping_provider: string | null;
+    tracking_id: string | null;
+    shipping_status: string;
+    estimated_delivery: string | null;
   };
 }
 
+const SHIPPING_STATUSES: ShippingStatus[] = ["pending", "shipped", "in_transit", "out_for_delivery", "delivered"];
+
 const statusColor: Record<string, string> = {
+  pending: "bg-muted text-muted-foreground",
   processing: "bg-warning/15 text-warning border-warning/30",
   shipped: "bg-primary/15 text-primary border-primary/30",
+  in_transit: "bg-accent/15 text-accent-foreground border-accent/30",
+  out_for_delivery: "bg-warning/15 text-warning border-warning/30",
   delivered: "bg-success/15 text-success border-success/30",
   cancelled: "bg-destructive/15 text-destructive border-destructive/30",
+};
+
+const statusLabel: Record<string, string> = {
+  pending: "Pending",
+  shipped: "Shipped",
+  in_transit: "In Transit",
+  out_for_delivery: "Out for Delivery",
+  delivered: "Delivered",
+};
+
+const PROVIDERS = ["FedEx", "UPS", "DHL", "USPS", "Other"];
+
+const nextShippingStatus: Record<string, ShippingStatus> = {
+  pending: "shipped",
+  shipped: "in_transit",
+  in_transit: "out_for_delivery",
+  out_for_delivery: "delivered",
 };
 
 const VendorOrders = () => {
@@ -39,6 +74,10 @@ const VendorOrders = () => {
   const [items, setItems] = useState<VendorOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  const [editingOrder, setEditingOrder] = useState<string | null>(null);
+  const [trackingInput, setTrackingInput] = useState("");
+  const [providerInput, setProviderInput] = useState("");
+  const [estDelivery, setEstDelivery] = useState<Date | undefined>();
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -57,19 +96,43 @@ const VendorOrders = () => {
 
   useEffect(() => { if (vendorId) fetchOrders(); }, [vendorId]);
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const advanceShipping = async (orderId: string, currentStatus: string) => {
+    const next = nextShippingStatus[currentStatus];
+    if (!next) return;
     setUpdatingOrder(orderId);
-    const { error } = await supabase
-      .from("orders")
-      .update({ order_status: newStatus })
-      .eq("id", orderId);
-    if (error) {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Order updated", description: `Status changed to ${newStatus}.` });
+    try {
+      await orderService.updateShipment(orderId, { shipping_status: next });
+      toast({ title: "Shipment updated", description: `Status changed to ${statusLabel[next]}.` });
       fetchOrders();
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e.message, variant: "destructive" });
     }
     setUpdatingOrder(null);
+  };
+
+  const saveShipmentDetails = async (orderId: string) => {
+    setUpdatingOrder(orderId);
+    try {
+      await orderService.updateShipment(orderId, {
+        shipping_provider: providerInput || undefined,
+        tracking_id: trackingInput || undefined,
+        estimated_delivery: estDelivery ? format(estDelivery, "yyyy-MM-dd") : undefined,
+      });
+      toast({ title: "Shipment details saved" });
+      setEditingOrder(null);
+      fetchOrders();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    }
+    setUpdatingOrder(null);
+  };
+
+  const startEditing = (order: VendorOrderItem["order"]) => {
+    if (!order) return;
+    setEditingOrder(order.id);
+    setProviderInput(order.shipping_provider ?? "");
+    setTrackingInput(order.tracking_id ?? "");
+    setEstDelivery(order.estimated_delivery ? new Date(order.estimated_delivery) : undefined);
   };
 
   // Group items by order
@@ -86,9 +149,26 @@ const VendorOrders = () => {
 
   const allOrders = Array.from(orderMap.entries());
   const filterOrders = (status?: string) =>
-    status ? allOrders.filter(([, v]) => v.order?.order_status === status) : allOrders;
+    status ? allOrders.filter(([, v]) => v.order?.shipping_status === status) : allOrders;
 
-  const nextStatus: Record<string, string> = { processing: "shipped", shipped: "delivered" };
+  const ShippingStepIndicator = ({ currentStatus }: { currentStatus: string }) => {
+    const currentIdx = SHIPPING_STATUSES.indexOf(currentStatus as ShippingStatus);
+    return (
+      <div className="flex items-center gap-1 mt-2">
+        {SHIPPING_STATUSES.map((s, i) => (
+          <div key={s} className="flex items-center gap-1">
+            <div className={cn(
+              "h-2 w-2 rounded-full",
+              i <= currentIdx ? "bg-primary" : "bg-muted"
+            )} />
+            {i < SHIPPING_STATUSES.length - 1 && (
+              <div className={cn("h-0.5 w-4", i < currentIdx ? "bg-primary" : "bg-muted")} />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const renderOrders = (filtered: typeof allOrders) => {
     if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -99,35 +179,31 @@ const VendorOrders = () => {
         {filtered.map(([orderId, { order, items: orderItems }]) => (
           <Card key={orderId}>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <CardTitle className="text-sm font-medium">Order #{orderId.slice(0, 8)}</CardTitle>
                   <p className="text-xs text-muted-foreground">{new Date(order!.created_at).toLocaleDateString()}</p>
+                  <ShippingStepIndicator currentStatus={order!.shipping_status} />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={statusColor[order!.order_status] ?? ""}>
-                    {order!.order_status}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className={statusColor[order!.shipping_status] ?? ""}>
+                    {statusLabel[order!.shipping_status] ?? order!.shipping_status}
                   </Badge>
-                  {nextStatus[order!.order_status] && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={updatingOrder === orderId}
-                      onClick={() => updateOrderStatus(orderId, nextStatus[order!.order_status])}
-                    >
-                      {updatingOrder === orderId ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : order!.order_status === "processing" ? (
-                        <><Truck className="h-3 w-3 mr-1" /> Ship</>
-                      ) : (
-                        <><CheckCircle2 className="h-3 w-3 mr-1" /> Deliver</>
-                      )}
-                    </Button>
+                  {order!.shipping_provider && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Truck className="h-3 w-3 mr-1" /> {order!.shipping_provider}
+                    </Badge>
+                  )}
+                  {order!.tracking_id && (
+                    <Badge variant="secondary" className="text-xs font-mono">
+                      <Navigation className="h-3 w-3 mr-1" /> {order!.tracking_id}
+                    </Badge>
                   )}
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="pt-0 space-y-3">
+              {/* Order items */}
               <div className="space-y-2">
                 {orderItems.map(item => (
                   <div key={item.id} className="flex items-center gap-3">
@@ -142,6 +218,78 @@ const VendorOrders = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Shipment editing */}
+              {editingOrder === orderId ? (
+                <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Shipping Provider</Label>
+                      <Select value={providerInput} onValueChange={setProviderInput}>
+                        <SelectTrigger className="mt-1"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                        <SelectContent>
+                          {PROVIDERS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Tracking ID</Label>
+                      <Input className="mt-1" value={trackingInput} onChange={e => setTrackingInput(e.target.value)} placeholder="Enter tracking number" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Estimated Delivery</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("w-full mt-1 justify-start text-left font-normal", !estDelivery && "text-muted-foreground")}>
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {estDelivery ? format(estDelivery, "PPP") : "Pick a date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={estDelivery} onSelect={setEstDelivery} initialFocus className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => saveShipmentDetails(orderId)} disabled={updatingOrder === orderId}>
+                      {updatingOrder === orderId ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingOrder(null)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => startEditing(order)}>
+                    <MapPin className="h-3 w-3 mr-1" /> Edit Shipment
+                  </Button>
+                  {nextShippingStatus[order!.shipping_status] && (
+                    <Button
+                      size="sm"
+                      disabled={updatingOrder === orderId}
+                      onClick={() => advanceShipping(orderId, order!.shipping_status)}
+                    >
+                      {updatingOrder === orderId ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          {order!.shipping_status === "pending" && <><Truck className="h-3 w-3 mr-1" /> Mark Shipped</>}
+                          {order!.shipping_status === "shipped" && <><Truck className="h-3 w-3 mr-1" /> In Transit</>}
+                          {order!.shipping_status === "in_transit" && <><Truck className="h-3 w-3 mr-1" /> Out for Delivery</>}
+                          {order!.shipping_status === "out_for_delivery" && <><CheckCircle2 className="h-3 w-3 mr-1" /> Delivered</>}
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {order!.estimated_delivery && (
+                <p className="text-xs text-muted-foreground">
+                  <CalendarIcon className="inline h-3 w-3 mr-1" />
+                  Est. delivery: {new Date(order!.estimated_delivery).toLocaleDateString()}
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -153,44 +301,31 @@ const VendorOrders = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-        <p className="text-muted-foreground">Manage orders containing your products.</p>
+        <p className="text-muted-foreground">Manage orders and shipments for your products.</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Package className="h-6 w-6 mx-auto text-warning mb-1" />
-            <p className="text-2xl font-bold">{filterOrders("processing").length}</p>
-            <p className="text-xs text-muted-foreground">Processing</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <Truck className="h-6 w-6 mx-auto text-primary mb-1" />
-            <p className="text-2xl font-bold">{filterOrders("shipped").length}</p>
-            <p className="text-xs text-muted-foreground">Shipped</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <CheckCircle2 className="h-6 w-6 mx-auto text-success mb-1" />
-            <p className="text-2xl font-bold">{filterOrders("delivered").length}</p>
-            <p className="text-xs text-muted-foreground">Delivered</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        {SHIPPING_STATUSES.map(s => (
+          <Card key={s}>
+            <CardContent className="pt-6 text-center">
+              <p className="text-2xl font-bold">{filterOrders(s).length}</p>
+              <p className="text-xs text-muted-foreground capitalize">{statusLabel[s]}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs defaultValue="all">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="all">All ({allOrders.length})</TabsTrigger>
-          <TabsTrigger value="processing">Processing</TabsTrigger>
-          <TabsTrigger value="shipped">Shipped</TabsTrigger>
-          <TabsTrigger value="delivered">Delivered</TabsTrigger>
+          {SHIPPING_STATUSES.map(s => (
+            <TabsTrigger key={s} value={s}>{statusLabel[s]}</TabsTrigger>
+          ))}
         </TabsList>
         <TabsContent value="all" className="mt-4">{renderOrders(filterOrders())}</TabsContent>
-        <TabsContent value="processing" className="mt-4">{renderOrders(filterOrders("processing"))}</TabsContent>
-        <TabsContent value="shipped" className="mt-4">{renderOrders(filterOrders("shipped"))}</TabsContent>
-        <TabsContent value="delivered" className="mt-4">{renderOrders(filterOrders("delivered"))}</TabsContent>
+        {SHIPPING_STATUSES.map(s => (
+          <TabsContent key={s} value={s} className="mt-4">{renderOrders(filterOrders(s))}</TabsContent>
+        ))}
       </Tabs>
     </div>
   );
