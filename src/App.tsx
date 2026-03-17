@@ -96,6 +96,7 @@ const App = () => (
               </div>
             </BrowserRouter>
           </CartProvider>
+          </CurrencyProvider>
         </AuthProvider>
       </ThemeProvider>
     </TooltipProvider>

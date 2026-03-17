@@ -3,10 +3,12 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import EmptyState from "@/components/ui/EmptyState";
 
 const CartPage = () => {
   const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { formatPrice } = useCurrency();
 
   if (items.length === 0) {
     return (
@@ -57,7 +59,7 @@ const CartPage = () => {
                     </button>
                   </div>
                   <span className="font-semibold text-primary tabular-nums">
-                    ${((product.discountPrice ?? product.price) * quantity).toFixed(2)}
+                    {formatPrice((product.discountPrice ?? product.price) * quantity)}
                   </span>
                 </div>
               </div>
@@ -72,7 +74,7 @@ const CartPage = () => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">${totalPrice.toFixed(2)}</span>
+              <span className="tabular-nums">{formatPrice(totalPrice)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Shipping</span>
@@ -81,7 +83,7 @@ const CartPage = () => {
             <Separator />
             <div className="flex justify-between font-semibold text-base">
               <span>Total</span>
-              <span className="tabular-nums">${totalPrice.toFixed(2)}</span>
+              <span className="tabular-nums">{formatPrice(totalPrice)}</span>
             </div>
           </div>
           <Button size="lg" className="w-full mt-6 h-12 gap-2" asChild>
