@@ -130,8 +130,8 @@ const ProductDetailPage = () => {
   });
 
   const { data: similarProducts = [] } = useQuery({
-    queryKey: ['products', 'similar', product?.id],
-    queryFn: () => recommendationService.getSimilarProducts(product!.id, 4),
+    queryKey: ['products', 'ai-similar', product?.id],
+    queryFn: () => aiRecommendationService.getScoredSimilarProducts(product!.id, 4),
     enabled: !!product?.id,
   });
 
