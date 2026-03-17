@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star, ChevronRight, ShieldCheck } from "lucide-react";
+import { Star, ChevronRight, ShieldCheck, Eye } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import ProductCard from "@/components/product/ProductCard";
@@ -7,7 +7,7 @@ import ProductGrid from "@/components/product/ProductGrid";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
-import { recommendationService } from "@/services/recommendationService";
+import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
@@ -46,8 +46,14 @@ const HomePage = () => {
   });
 
   const { data: recommendedProducts = [], isLoading: loadingRecommended } = useQuery({
-    queryKey: ['products', 'recommended', user?.id],
-    queryFn: () => recommendationService.getPersonalizedRecommendations(user!.id, 8),
+    queryKey: ['products', 'ai-recommended', user?.id],
+    queryFn: () => aiRecommendationService.getSmartRecommendations(user!.id, 8),
+    enabled: !!user?.id,
+  });
+
+  const { data: becauseYouViewed } = useQuery({
+    queryKey: ['products', 'because-viewed', user?.id],
+    queryFn: () => aiRecommendationService.getBecauseYouViewed(user!.id, 4),
     enabled: !!user?.id,
   });
 
@@ -115,17 +121,39 @@ const HomePage = () => {
         </section>
       )}
 
-      {/* Recommended for You */}
+      {/* Recommended for You (AI-scored) */}
       {user && (
         <section className="container mx-auto px-4 mt-14">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-semibold tracking-tight">Recommended for You</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">Based on your browsing and purchases</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Personalized picks based on your activity</p>
             </div>
           </div>
           <ProductGrid loading={loadingRecommended}>
             {recommendedProducts.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </ProductGrid>
+        </section>
+      )}
+
+      {/* Because You Viewed */}
+      {becauseYouViewed && becauseYouViewed.products.length > 0 && (
+        <section className="container mx-auto px-4 mt-14">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-primary" />
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  Because You Viewed "{becauseYouViewed.contextProductTitle}"
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Similar items you might like</p>
+              </div>
+            </div>
+          </div>
+          <ProductGrid>
+            {becauseYouViewed.products.map(product => (
               <ProductCard key={product.id} product={product} />
             ))}
           </ProductGrid>

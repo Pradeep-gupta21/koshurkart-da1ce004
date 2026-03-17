@@ -10,3 +10,4 @@ export { notificationService } from './notificationService';
 export { recommendationService } from './recommendationService';
 export { searchService } from './searchService';
 export { realtimeService, REALTIME_EVENTS } from './realtimeService';
+export { aiRecommendationService } from './aiRecommendationService';

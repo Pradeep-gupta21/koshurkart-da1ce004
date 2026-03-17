@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
 import { recommendationService } from "@/services/recommendationService";
+import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
@@ -129,8 +130,8 @@ const ProductDetailPage = () => {
   });
 
   const { data: similarProducts = [] } = useQuery({
-    queryKey: ['products', 'similar', product?.id],
-    queryFn: () => recommendationService.getSimilarProducts(product!.id, 4),
+    queryKey: ['products', 'ai-similar', product?.id],
+    queryFn: () => aiRecommendationService.getScoredSimilarProducts(product!.id, 4),
     enabled: !!product?.id,
   });
 
