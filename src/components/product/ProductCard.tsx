@@ -4,6 +4,7 @@ import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -13,6 +14,7 @@ interface ProductCardProps {
 
 const ProductCard = ({ product }: ProductCardProps) => {
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const availableStock = product.stock - (product.reservedStock ?? 0);
   const isOutOfStock = availableStock <= 0;
   const isLowStock = !isOutOfStock && availableStock <= (product.lowStockThreshold ?? 5);
@@ -88,11 +90,11 @@ const ProductCard = ({ product }: ProductCardProps) => {
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-baseline gap-1.5">
             <span className="text-lg font-semibold text-primary tabular-nums">
-              ${(product.discountPrice ?? product.price).toFixed(2)}
+              {formatPrice(product.discountPrice ?? product.price)}
             </span>
             {product.discountPrice && (
               <span className="text-xs text-muted-foreground line-through tabular-nums">
-                ${product.price.toFixed(2)}
+                {formatPrice(product.price)}
               </span>
             )}
           </div>

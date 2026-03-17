@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import { orderService } from "@/services/orderService";
 import { analyticsService } from "@/services/analyticsService";
@@ -14,6 +15,7 @@ import { CheckCircle, Loader2 } from "lucide-react";
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
+  const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
   const [isComplete, setIsComplete] = useState(false);
@@ -35,13 +37,12 @@ const CheckoutPage = () => {
     const reservedItems: { productId: string; quantity: number }[] = [];
 
     try {
-      // Step 1: Reserve stock for all items
       for (const { product, quantity } of items) {
         await inventoryService.reserveStock(product.id, quantity);
         reservedItems.push({ productId: product.id, quantity });
       }
 
-      // Step 2: Create the order
+      // Orders are always stored in USD
       const order = await orderService.create(user.id, totalPrice);
       await orderService.addItems(
         order.id,
@@ -55,12 +56,10 @@ const CheckoutPage = () => {
         }))
       );
 
-      // Step 3: Confirm stock (payment success)
       for (const { productId, quantity } of reservedItems) {
         await inventoryService.confirmStock(productId, quantity);
       }
 
-      // Track purchase events
       for (const { product, quantity } of items) {
         analyticsService.trackEvent('purchase', product.id, undefined, { quantity, price: product.discountPrice ?? product.price });
       }
@@ -69,17 +68,10 @@ const CheckoutPage = () => {
       clearCart();
       setIsComplete(true);
     } catch (err: any) {
-      // Release any reserved stock on failure
       for (const { productId, quantity } of reservedItems) {
-        try {
-          await inventoryService.releaseStock(productId, quantity);
-        } catch (_) {
-          // best-effort release
-        }
+        try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
       }
-      const msg = err.message?.includes('Insufficient stock')
-        ? err.message
-        : err.message ?? "Something went wrong.";
+      const msg = err.message?.includes('Insufficient stock') ? err.message : err.message ?? "Something went wrong.";
       toast({ title: "Order failed", description: msg, variant: "destructive" });
     } finally {
       setSubmitting(false);
@@ -170,7 +162,7 @@ const CheckoutPage = () => {
               {items.map(({ product, quantity }) => (
                 <div key={product.id} className="flex justify-between">
                   <span className="text-muted-foreground truncate mr-2">{product.title} ×{quantity}</span>
-                  <span className="tabular-nums shrink-0">${((product.discountPrice ?? product.price) * quantity).toFixed(2)}</span>
+                  <span className="tabular-nums shrink-0">{formatPrice((product.discountPrice ?? product.price) * quantity)}</span>
                 </div>
               ))}
               <Separator />
@@ -180,7 +172,7 @@ const CheckoutPage = () => {
               </div>
               <div className="flex justify-between font-semibold text-base">
                 <span>Total</span>
-                <span className="tabular-nums">${totalPrice.toFixed(2)}</span>
+                <span className="tabular-nums">{formatPrice(totalPrice)}</span>
               </div>
             </div>
             <Button
@@ -189,7 +181,7 @@ const CheckoutPage = () => {
               disabled={submitting}
               onClick={handlePlaceOrder}
             >
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — $${totalPrice.toFixed(2)}`}
+              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(totalPrice)}`}
             </Button>
           </div>
         </div>

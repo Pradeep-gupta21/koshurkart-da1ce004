@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 interface PriceDisplayProps {
   price: number;
@@ -17,6 +18,7 @@ const sizeMap = {
 };
 
 const PriceDisplay = ({ price, discountPrice, dynamicPrice, basePrice, size = "md", showSavings = false, className }: PriceDisplayProps) => {
+  const { formatPrice } = useCurrency();
   const styles = sizeMap[size];
   // Priority: discountPrice > dynamicPrice > price
   const effectivePrice = discountPrice ?? dynamicPrice ?? price;
@@ -27,12 +29,12 @@ const PriceDisplay = ({ price, discountPrice, dynamicPrice, basePrice, size = "m
   return (
     <div className={cn("flex items-baseline gap-1.5 flex-wrap", className)}>
       <span className={cn("font-semibold text-primary tabular-nums", styles.main)}>
-        ${effectivePrice.toFixed(2)}
+        {formatPrice(effectivePrice)}
       </span>
       {referencePrice && (
         <>
           <span className={cn("text-muted-foreground line-through tabular-nums", styles.original)}>
-            ${referencePrice.toFixed(2)}
+            {formatPrice(referencePrice)}
           </span>
           {showSavings && savingsPercent > 0 && (
             <span className={cn("font-semibold text-secondary", styles.savings)}>

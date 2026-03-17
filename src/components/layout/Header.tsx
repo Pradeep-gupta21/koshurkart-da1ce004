@@ -1,17 +1,23 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
+import { ShoppingCart, User, Menu, Sun, Moon, Globe } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { currencyService, CURRENCIES, CurrencyCode } from "@/services/currencyService";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
 const Header = () => {
   const { totalItems } = useCart();
   const { theme, toggleTheme } = useTheme();
+  const { currency, setCurrency } = useCurrency();
+  const currentInfo = CURRENCIES[currency];
+  const allCurrencies = currencyService.getSupportedCurrencies();
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
@@ -20,6 +26,24 @@ const Header = () => {
         <div className="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
           <span className="hidden sm:inline">Free shipping on orders over $50</span>
           <div className="flex items-center gap-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex items-center gap-1 hover:underline cursor-pointer">
+                <Globe className="h-3 w-3" />
+                {currentInfo.flag} {currency}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[180px]">
+                {allCurrencies.map(c => (
+                  <DropdownMenuItem
+                    key={c.code}
+                    onClick={() => setCurrency(c.code)}
+                    className={currency === c.code ? "bg-accent/20 font-medium" : ""}
+                  >
+                    <span className="mr-2">{c.flag}</span>
+                    {c.code} — {c.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Link to="/vendor" className="hover:underline">Sell on Nexus</Link>
             <Link to="/admin" className="hover:underline">Admin</Link>
           </div>
