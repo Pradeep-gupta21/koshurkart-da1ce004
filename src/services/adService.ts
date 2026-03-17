@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { checkRateLimit, RATE_LIMIT_RULES } from '@/lib/rateLimiter';
 
 export const adService = {
   async getVendorCampaigns(vendorId: string) {
