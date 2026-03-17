@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, SlidersHorizontal, X, SearchX } from "lucide-react";
+import { Search, SlidersHorizontal, X, SearchX, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
-import { productService, type SortOption } from "@/services/productService";
+import { productService } from "@/services/productService";
+import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
 import type { Product } from "@/types";
 
@@ -41,51 +43,75 @@ const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => 
 });
 
 const SearchPage = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const initialCategory = searchParams.get("category") || "All";
 
   const [query, setQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [sortBy, setSortBy] = useState<SortOption>("relevance");
+  const [sortBy, setSortBy] = useState<SearchSortOption>("relevance");
   const [showFilters, setShowFilters] = useState(false);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
+  const [minRating, setMinRating] = useState<number>(0);
+
+  // Sync URL params
+  useEffect(() => {
+    const q = searchParams.get("q") || "";
+    const cat = searchParams.get("category") || "All";
+    setQuery(q);
+    setSelectedCategory(cat);
+  }, [searchParams]);
+
+  // Save to history on search
+  useEffect(() => {
+    if (initialQuery) {
+      searchService.saveSearchQuery(initialQuery);
+    }
+  }, [initialQuery]);
 
   const { data: dbCategories = [] } = useQuery({
-    queryKey: ['categories'],
+    queryKey: ["categories"],
     queryFn: () => productService.getCategories(),
   });
 
   const categories = ["All", ...(dbCategories.length > 0 ? dbCategories : defaultCategories)];
 
+  const filters: SearchFilters = {
+    category: selectedCategory !== "All" ? selectedCategory : undefined,
+    priceMin: priceRange[0] > 0 ? priceRange[0] : undefined,
+    priceMax: priceRange[1] < 10000 ? priceRange[1] : undefined,
+    minRating: minRating > 0 ? minRating : undefined,
+  };
+
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ['products', 'search', query, selectedCategory, sortBy],
-    queryFn: () => {
-      if (sortBy === 'relevance') {
-        return productService.getRanked({
-          search: query || undefined,
-          category: selectedCategory !== "All" ? selectedCategory : undefined,
-        });
-      }
-      return productService.getAll({
-        search: query || undefined,
-        category: selectedCategory !== "All" ? selectedCategory : undefined,
-        sort: sortBy,
-      });
-    },
+    queryKey: ["products", "search", query, selectedCategory, sortBy, priceRange[0], priceRange[1], minRating],
+    queryFn: () => searchService.searchProducts(query, filters, sortBy),
   });
 
   const { data: sponsoredCampaigns = [] } = useQuery({
-    queryKey: ['ads', 'search'],
-    queryFn: () => adService.getAuctionWinners('search', 6),
+    queryKey: ["ads", "search"],
+    queryFn: () => adService.getAuctionWinners("search", 6),
   });
 
   const sponsoredAds = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
-  // Intersperse sponsored ads into results
+  const activeFilterCount = [
+    selectedCategory !== "All",
+    priceRange[0] > 0 || priceRange[1] < 10000,
+    minRating > 0,
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSelectedCategory("All");
+    setPriceRange([0, 10000]);
+    setMinRating(0);
+    setSortBy("relevance");
+  };
+
+  // Intersperse sponsored ads
   const interspersed: React.ReactNode[] = [];
   let adIndex = 0;
   products.forEach((product, i) => {
-    // Insert a sponsored ad every 4 items
     if (i > 0 && i % 4 === 0 && adIndex < sponsoredAds.length) {
       const ad = sponsoredAds[adIndex];
       interspersed.push(
@@ -95,7 +121,6 @@ const SearchPage = () => {
     }
     interspersed.push(<ProductCard key={product.id} product={product} />);
   });
-  // Append remaining ads at the end
   while (adIndex < sponsoredAds.length) {
     const ad = sponsoredAds[adIndex];
     interspersed.push(
@@ -122,57 +147,118 @@ const SearchPage = () => {
             </button>
           )}
         </div>
-        <Button variant="outline" className="h-11 gap-2" onClick={() => setShowFilters(!showFilters)}>
+        <Button variant="outline" className="h-11 gap-2 relative" onClick={() => setShowFilters(!showFilters)}>
           <SlidersHorizontal className="h-4 w-4" />
           <span className="hidden sm:inline">Filters</span>
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
         </Button>
       </div>
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex flex-wrap gap-3 mb-6 p-4 bg-muted/50 rounded-xl animate-fade-in">
-          <div className="flex flex-wrap gap-2">
-            {categories.map(cat => (
-              <Button
-                key={cat}
-                size="sm"
-                variant={selectedCategory === cat ? "default" : "outline"}
-                onClick={() => setSelectedCategory(cat)}
-                className="h-8 text-xs"
-              >
-                {cat}
-              </Button>
-            ))}
+        <div className="mb-6 p-4 bg-muted/50 rounded-xl animate-fade-in space-y-4">
+          {/* Categories */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Category</p>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={selectedCategory === cat ? "default" : "outline"}
+                  onClick={() => setSelectedCategory(cat)}
+                  className="h-8 text-xs"
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
           </div>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-            <SelectTrigger className="w-40 h-8">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="relevance">Relevance</SelectItem>
-              <SelectItem value="price-low">Price: Low to High</SelectItem>
-              <SelectItem value="price-high">Price: High to Low</SelectItem>
-              <SelectItem value="rating">Top Rated</SelectItem>
-              <SelectItem value="popularity">Most Popular</SelectItem>
-              <SelectItem value="newest">Newest</SelectItem>
-            </SelectContent>
-          </Select>
+
+          {/* Price Range */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Price Range: ${priceRange[0]} — {priceRange[1] >= 10000 ? "Any" : `$${priceRange[1]}`}
+            </p>
+            <Slider
+              min={0}
+              max={10000}
+              step={50}
+              value={priceRange}
+              onValueChange={(v) => setPriceRange(v as [number, number])}
+              className="max-w-md"
+            />
+          </div>
+
+          {/* Min Rating */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Minimum Rating</p>
+            <div className="flex items-center gap-1">
+              {[0, 1, 2, 3, 4].map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setMinRating(minRating === r + 1 ? 0 : r + 1)}
+                  className="p-1 rounded-md hover:bg-muted transition-colors"
+                >
+                  <Star
+                    className={`h-5 w-5 ${
+                      r < minRating ? "fill-primary text-primary" : "text-muted-foreground"
+                    }`}
+                  />
+                </button>
+              ))}
+              {minRating > 0 && (
+                <span className="text-xs text-muted-foreground ml-2">{minRating}+ stars</span>
+              )}
+            </div>
+          </div>
+
+          {/* Sort + Clear */}
+          <div className="flex items-center gap-3">
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SearchSortOption)}>
+              <SelectTrigger className="w-44 h-8">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="relevance">Relevance</SelectItem>
+                <SelectItem value="price-low">Price: Low to High</SelectItem>
+                <SelectItem value="price-high">Price: High to Low</SelectItem>
+                <SelectItem value="rating">Top Rated</SelectItem>
+                <SelectItem value="popularity">Most Popular</SelectItem>
+                <SelectItem value="newest">Newest</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs">
+                Clear all filters
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
       {/* Results */}
       <p className="text-sm text-muted-foreground mb-4">
-        {isLoading ? "Searching..." : (
+        {isLoading ? (
+          "Searching..."
+        ) : (
           <>
             {products.length} product{products.length !== 1 ? "s" : ""} found
-            {query && <> for "<span className="font-medium text-foreground">{query}</span>"</>}
+            {query && (
+              <>
+                {" "}
+                for "<span className="font-medium text-foreground">{query}</span>"
+              </>
+            )}
           </>
         )}
       </p>
 
-      <ProductGrid loading={isLoading}>
-        {interspersed}
-      </ProductGrid>
+      <ProductGrid loading={isLoading}>{interspersed}</ProductGrid>
 
       {!isLoading && products.length === 0 && (
         <EmptyState
@@ -180,7 +266,10 @@ const SearchPage = () => {
           title="No products found"
           description="Try adjusting your search or filters to find what you're looking for."
           actionLabel="Clear Filters"
-          onAction={() => { setQuery(""); setSelectedCategory("All"); }}
+          onAction={() => {
+            setQuery("");
+            clearFilters();
+          }}
         />
       )}
     </div>
