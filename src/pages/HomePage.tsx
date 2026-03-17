@@ -38,9 +38,17 @@ const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => 
 });
 
 const HomePage = () => {
+  const { user } = useAuth();
+
   const { data: sponsoredCampaigns = [] } = useQuery({
     queryKey: ['ads', 'homepage'],
     queryFn: () => adService.getAuctionWinners('homepage', 4),
+  });
+
+  const { data: recommendedProducts = [], isLoading: loadingRecommended } = useQuery({
+    queryKey: ['products', 'recommended', user?.id],
+    queryFn: () => recommendationService.getPersonalizedRecommendations(user!.id, 8),
+    enabled: !!user?.id,
   });
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
