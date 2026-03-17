@@ -27,7 +27,8 @@ const CheckoutForm = ({ onSubmit, submitLabel = "Place Order" }: CheckoutFormPro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(sanitizeFormValues(form));
+    const sanitized = sanitizeFormValues(form as unknown as Record<string, unknown>) as unknown as CheckoutFormValues;
+    onSubmit(sanitized);
   };
 
   return (
