@@ -1,4 +1,85 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { TimeRange } from '@/components/analytics/TimeRangeSelector';
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function getRangeStart(range: TimeRange): Date {
+  const now = new Date();
+  switch (range) {
+    case 'daily':   return new Date(now.getTime() - 7 * 86400000);   // last 7 days
+    case 'weekly':  return new Date(now.getTime() - 8 * 7 * 86400000); // last 8 weeks
+    case 'monthly': return new Date(now.getTime() - 12 * 30 * 86400000); // ~12 months
+    case 'yearly':  return new Date(now.getFullYear() - 4, 0, 1);   // last 5 years
+  }
+}
+
+function bucketKey(date: Date, range: TimeRange): string {
+  const d = new Date(date);
+  switch (range) {
+    case 'daily':   return d.toISOString().slice(0, 10);
+    case 'weekly': {
+      const day = d.getDay();
+      const monday = new Date(d.getTime() - ((day === 0 ? 6 : day - 1) * 86400000));
+      return monday.toISOString().slice(0, 10);
+    }
+    case 'monthly': return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    case 'yearly':  return `${d.getFullYear()}`;
+  }
+}
+
+function generateBuckets(range: TimeRange): string[] {
+  const start = getRangeStart(range);
+  const now = new Date();
+  const buckets: string[] = [];
+  const cur = new Date(start);
+
+  while (cur <= now) {
+    const key = bucketKey(cur, range);
+    if (!buckets.includes(key)) buckets.push(key);
+    if (range === 'daily') cur.setDate(cur.getDate() + 1);
+    else if (range === 'weekly') cur.setDate(cur.getDate() + 7);
+    else if (range === 'monthly') cur.setMonth(cur.getMonth() + 1);
+    else cur.setFullYear(cur.getFullYear() + 1);
+  }
+  return buckets;
+}
+
+function fillBuckets<T extends Record<string, any>>(
+  buckets: string[],
+  data: Map<string, T>,
+  defaults: T
+): (T & { date: string })[] {
+  return buckets.map(b => ({ date: b, ...defaults, ...(data.get(b) || {}) }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Vendor chart data                                                  */
+/* ------------------------------------------------------------------ */
+
+export interface VendorChartData {
+  timeSeries: { date: string; sales: number; views: number; adClicks: number; adImpressions: number }[];
+  topProducts: { title: string; revenue: number; units: number }[];
+  categoryBreakdown: { category: string; revenue: number }[];
+  campaignPerformance: { productTitle: string; impressions: number; clicks: number; conversions: number }[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Admin chart data                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface AdminChartData {
+  revenueSeries: { date: string; revenue: number; orders: number }[];
+  adRevenueSeries: { date: string; adRevenue: number }[];
+  vendorGrowth: { date: string; newVendors: number }[];
+  categoryPerformance: { category: string; revenue: number; count: number }[];
+  suspiciousTrend: { date: string; count: number }[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Service                                                            */
+/* ------------------------------------------------------------------ */
 
 export const analyticsService = {
   /** Track an analytics event via the security-definer function */
@@ -18,7 +99,6 @@ export const analyticsService = {
 
   /** Vendor dashboard: aggregate analytics for vendor's products */
   async getVendorAnalytics(vendorId: string) {
-    // Get vendor's product IDs
     const { data: products } = await supabase
       .from('products')
       .select('id')
@@ -29,7 +109,6 @@ export const analyticsService = {
       return { productViews: 0, adImpressions: 0, adClicks: 0, conversionRate: '0', salesGrowth: '0', purchases: 0 };
     }
 
-    // Get all events for these products
     const { data: events } = await supabase
       .from('analytics_events')
       .select('event_type, created_at')
@@ -43,7 +122,6 @@ export const analyticsService = {
 
     const conversionRate = adClicks > 0 ? ((purchases / adClicks) * 100).toFixed(1) : '0';
 
-    // Sales growth: compare purchases last 30 days vs prior 30 days
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
     const sixtyDaysAgo = new Date(now.getTime() - 60 * 86400000);
@@ -52,6 +130,96 @@ export const analyticsService = {
     const salesGrowth = prior > 0 ? (((recent - prior) / prior) * 100).toFixed(1) : recent > 0 ? '100' : '0';
 
     return { productViews, adImpressions, adClicks, conversionRate, salesGrowth, purchases };
+  },
+
+  /** Vendor chart data with time range */
+  async getVendorChartData(vendorId: string, range: TimeRange): Promise<VendorChartData> {
+    const rangeStart = getRangeStart(range).toISOString();
+    const buckets = generateBuckets(range);
+
+    // Fetch vendor products
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, title, category')
+      .eq('vendor_id', vendorId);
+    const prods = products ?? [];
+    const productIds = prods.map(p => p.id);
+    const productMap = Object.fromEntries(prods.map(p => [p.id, p]));
+
+    if (productIds.length === 0) {
+      return {
+        timeSeries: fillBuckets(buckets, new Map(), { sales: 0, views: 0, adClicks: 0, adImpressions: 0 }),
+        topProducts: [],
+        categoryBreakdown: [],
+        campaignPerformance: [],
+      };
+    }
+
+    // Fetch order items + analytics events + campaigns in parallel
+    const [orderItemsRes, eventsRes, campaignsRes] = await Promise.all([
+      supabase.from('order_items').select('product_id, price, quantity, order_id, orders!inner(created_at)')
+        .eq('vendor_id', vendorId).gte('orders.created_at', rangeStart),
+      supabase.from('analytics_events').select('event_type, product_id, created_at')
+        .in('product_id', productIds).gte('created_at', rangeStart),
+      supabase.from('ad_campaigns').select('product_id, impressions, clicks, conversions')
+        .eq('vendor_id', vendorId),
+    ]);
+
+    const orderItems = orderItemsRes.data ?? [];
+    const events = eventsRes.data ?? [];
+    const campaigns = campaignsRes.data ?? [];
+
+    // Time series
+    const tsMap = new Map<string, { sales: number; views: number; adClicks: number; adImpressions: number }>();
+    for (const item of orderItems) {
+      const orderDate = (item as any).orders?.created_at;
+      if (!orderDate) continue;
+      const key = bucketKey(new Date(orderDate), range);
+      const cur = tsMap.get(key) || { sales: 0, views: 0, adClicks: 0, adImpressions: 0 };
+      cur.sales += Number(item.price) * item.quantity;
+      tsMap.set(key, cur);
+    }
+    for (const ev of events) {
+      const key = bucketKey(new Date(ev.created_at), range);
+      const cur = tsMap.get(key) || { sales: 0, views: 0, adClicks: 0, adImpressions: 0 };
+      if (ev.event_type === 'product_view') cur.views++;
+      else if (ev.event_type === 'ad_click') cur.adClicks++;
+      else if (ev.event_type === 'ad_view') cur.adImpressions++;
+      tsMap.set(key, cur);
+    }
+
+    // Top products
+    const prodRevMap: Record<string, { title: string; revenue: number; units: number }> = {};
+    for (const item of orderItems) {
+      const pid = item.product_id || 'unknown';
+      if (!prodRevMap[pid]) prodRevMap[pid] = { title: productMap[pid]?.title || 'Unknown', revenue: 0, units: 0 };
+      prodRevMap[pid].revenue += Number(item.price) * item.quantity;
+      prodRevMap[pid].units += item.quantity;
+    }
+    const topProducts = Object.values(prodRevMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+
+    // Category breakdown
+    const catMap: Record<string, number> = {};
+    for (const item of orderItems) {
+      const cat = productMap[item.product_id || '']?.category || 'Other';
+      catMap[cat] = (catMap[cat] || 0) + Number(item.price) * item.quantity;
+    }
+    const categoryBreakdown = Object.entries(catMap).map(([category, revenue]) => ({ category, revenue })).sort((a, b) => b.revenue - a.revenue);
+
+    // Campaign performance
+    const campaignPerformance = campaigns.map(c => ({
+      productTitle: productMap[c.product_id]?.title || 'Unknown',
+      impressions: c.impressions || 0,
+      clicks: c.clicks || 0,
+      conversions: c.conversions || 0,
+    }));
+
+    return {
+      timeSeries: fillBuckets(buckets, tsMap, { sales: 0, views: 0, adClicks: 0, adImpressions: 0 }),
+      topProducts,
+      categoryBreakdown,
+      campaignPerformance,
+    };
   },
 
   /** Admin dashboard: platform-wide analytics */
@@ -70,7 +238,6 @@ export const analyticsService = {
       .filter((c: any) => c.status === 'approved')
       .reduce((s, c: any) => s + Number(c.budget), 0);
 
-    // Top vendors by order_items revenue
     const { data: topVendorData } = await supabase
       .from('order_items')
       .select('vendor_id, price, quantity, vendors(store_name)');
@@ -91,6 +258,78 @@ export const analyticsService = {
       adRevenue,
       topVendors,
       suspiciousClickCount: suspiciousRes.count ?? 0,
+    };
+  },
+
+  /** Admin chart data with time range */
+  async getAdminChartData(range: TimeRange): Promise<AdminChartData> {
+    const rangeStart = getRangeStart(range).toISOString();
+    const buckets = generateBuckets(range);
+
+    const [ordersRes, campaignsRes, vendorsRes, suspiciousRes, orderItemsRes] = await Promise.all([
+      supabase.from('orders').select('total_amount, created_at').gte('created_at', rangeStart),
+      supabase.from('ad_campaigns').select('budget, status, created_at').eq('status', 'approved').gte('created_at', rangeStart),
+      supabase.from('vendors').select('id, created_at').gte('created_at', rangeStart),
+      supabase.from('suspicious_clicks').select('flagged_at').gte('flagged_at', rangeStart),
+      supabase.from('order_items').select('price, quantity, product_id, products!inner(category, created_at)').gte('products.created_at', '2000-01-01'),
+    ]);
+
+    // Revenue series
+    const revMap = new Map<string, { revenue: number; orders: number }>();
+    for (const o of ordersRes.data ?? []) {
+      const key = bucketKey(new Date(o.created_at), range);
+      const cur = revMap.get(key) || { revenue: 0, orders: 0 };
+      cur.revenue += Number(o.total_amount);
+      cur.orders++;
+      revMap.set(key, cur);
+    }
+
+    // Ad revenue series
+    const adMap = new Map<string, { adRevenue: number }>();
+    for (const c of campaignsRes.data ?? []) {
+      const key = bucketKey(new Date(c.created_at), range);
+      const cur = adMap.get(key) || { adRevenue: 0 };
+      cur.adRevenue += Number(c.budget);
+      adMap.set(key, cur);
+    }
+
+    // Vendor growth
+    const vgMap = new Map<string, { newVendors: number }>();
+    for (const v of vendorsRes.data ?? []) {
+      const key = bucketKey(new Date(v.created_at), range);
+      const cur = vgMap.get(key) || { newVendors: 0 };
+      cur.newVendors++;
+      vgMap.set(key, cur);
+    }
+
+    // Category performance (all time from order_items + products)
+    const catMap: Record<string, { revenue: number; count: number }> = {};
+    for (const item of orderItemsRes.data ?? []) {
+      const cat = (item as any).products?.category || 'Other';
+      if (!catMap[cat]) catMap[cat] = { revenue: 0, count: 0 };
+      catMap[cat].revenue += Number(item.price) * item.quantity;
+      catMap[cat].count++;
+    }
+    const categoryPerformance = Object.entries(catMap)
+      .map(([category, v]) => ({ category, ...v }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
+    // Suspicious trend
+    const susMap = new Map<string, { count: number }>();
+    for (const s of suspiciousRes.data ?? []) {
+      const key = bucketKey(new Date((s as any).flagged_at), range);
+      const cur = susMap.get(key) || { count: 0 };
+      cur.count++;
+      susMap.set(key, cur);
+    }
+
+    return {
+      revenueSeries: fillBuckets(buckets, revMap, { revenue: 0, orders: 0 }),
+      adRevenueSeries: fillBuckets(buckets, adMap, { adRevenue: 0 }),
+      vendorGrowth: fillBuckets(buckets, vgMap, { newVendors: 0 }),
+      categoryPerformance,
+      suspiciousTrend: fillBuckets(buckets, susMap, { count: 0 }),
     };
   },
 
