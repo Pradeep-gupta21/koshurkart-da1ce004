@@ -11,6 +11,7 @@ const navItems = [
   { to: "/admin/placements", icon: LayoutGrid, label: "Ad Pricing" },
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
   { to: "/admin/reviews", icon: MessageSquare, label: "Reviews", hasBadge: true },
+  { to: "/admin/pricing", icon: DollarSign, label: "Dynamic Pricing" },
 ];
 
 const AdminDashboard = () => {
