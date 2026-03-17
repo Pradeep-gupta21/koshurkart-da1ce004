@@ -326,6 +326,7 @@ export type Database = {
           reserved_stock: number
           review_count: number | null
           sales_count: number
+          search_vector: unknown
           slug: string
           status: string
           stock: number
@@ -349,6 +350,7 @@ export type Database = {
           reserved_stock?: number
           review_count?: number | null
           sales_count?: number
+          search_vector?: unknown
           slug: string
           status?: string
           stock?: number
@@ -372,6 +374,7 @@ export type Database = {
           reserved_stock?: number
           review_count?: number | null
           sales_count?: number
+          search_vector?: unknown
           slug?: string
           status?: string
           stock?: number
@@ -684,6 +687,13 @@ export type Database = {
           view_count: number
         }[]
       }
+      get_search_suggestions: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          suggestion: string
+          suggestion_type: string
+        }[]
+      }
       get_trending_products: {
         Args: { p_limit?: number }
         Returns: {
@@ -742,6 +752,42 @@ export type Database = {
       reserve_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
+      }
+      search_products: {
+        Args: {
+          p_category?: string
+          p_limit?: number
+          p_max_price?: number
+          p_min_price?: number
+          p_min_rating?: number
+          p_query?: string
+          p_sort?: string
+        }
+        Returns: {
+          category: string
+          created_at: string
+          description: string
+          discount_price: number
+          id: string
+          images: string[]
+          is_sponsored: boolean
+          low_stock_threshold: number
+          price: number
+          rating: number
+          relevance_score: number
+          reserved_stock: number
+          review_count: number
+          sales_count: number
+          slug: string
+          status: string
+          stock: number
+          store_name: string
+          tags: string[]
+          title: string
+          trending_score: number
+          vendor_id: string
+          view_count: number
+        }[]
       }
       track_ad_event: {
         Args: { _campaign_id: string; _event_type: string }
