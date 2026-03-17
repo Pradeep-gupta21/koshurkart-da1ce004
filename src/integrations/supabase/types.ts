@@ -329,6 +329,7 @@ export type Database = {
           slug: string
           status: string
           stock: number
+          tags: string[] | null
           title: string
           trending_score: number | null
           vendor_id: string
@@ -351,6 +352,7 @@ export type Database = {
           slug: string
           status?: string
           stock?: number
+          tags?: string[] | null
           title: string
           trending_score?: number | null
           vendor_id: string
@@ -373,6 +375,7 @@ export type Database = {
           slug?: string
           status?: string
           stock?: number
+          tags?: string[] | null
           title?: string
           trending_score?: number | null
           vendor_id?: string
