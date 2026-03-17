@@ -129,10 +129,15 @@ const ProductDetailPage = () => {
   });
 
   const { data: similarProducts = [] } = useQuery({
-    queryKey: ['products', 'similar', product?.category, product?.id],
-    queryFn: () => productService.getAll({ category: product!.category, limit: 4 }),
-    enabled: !!product?.category,
-    select: (data) => data.filter(p => p.id !== product?.id).slice(0, 4),
+    queryKey: ['products', 'similar', product?.id],
+    queryFn: () => recommendationService.getSimilarProducts(product!.id, 4),
+    enabled: !!product?.id,
+  });
+
+  const { data: boughtTogether = [] } = useQuery({
+    queryKey: ['products', 'bought-together', product?.id],
+    queryFn: () => recommendationService.getFrequentlyBoughtTogether(product!.id, 4),
+    enabled: !!product?.id,
   });
 
   if (isLoading) return <DetailSkeleton />;
