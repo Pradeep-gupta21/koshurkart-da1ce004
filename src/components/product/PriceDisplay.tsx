@@ -16,10 +16,13 @@ const sizeMap = {
   lg: { main: "text-3xl", original: "text-lg", savings: "text-sm" },
 };
 
-const PriceDisplay = ({ price, discountPrice, size = "md", showSavings = false, className }: PriceDisplayProps) => {
+const PriceDisplay = ({ price, discountPrice, dynamicPrice, basePrice, size = "md", showSavings = false, className }: PriceDisplayProps) => {
   const styles = sizeMap[size];
-  const displayPrice = discountPrice ?? price;
-  const savingsPercent = discountPrice ? Math.round((1 - discountPrice / price) * 100) : 0;
+  // Priority: discountPrice > dynamicPrice > price
+  const effectivePrice = discountPrice ?? dynamicPrice ?? price;
+  const referencePrice = discountPrice ? price : (dynamicPrice && basePrice ? basePrice : null);
+  const savingsPercent = referencePrice ? Math.round((1 - effectivePrice / referencePrice) * 100) : 0;
+  const isDynamic = !discountPrice && dynamicPrice != null && dynamicPrice !== price;
 
   return (
     <div className={cn("flex items-baseline gap-1.5 flex-wrap", className)}>
