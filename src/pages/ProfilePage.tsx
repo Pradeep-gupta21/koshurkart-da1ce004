@@ -181,6 +181,36 @@ const ProfilePage = () => {
         </Card>
       )}
 
+      {/* Notifications */}
+      <Card className="marketplace-shadow">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bell className="h-5 w-5" /> Recent Notifications
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {notifications.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No notifications yet</p>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map((n) => (
+                <div key={n.id} className={cn(
+                  "flex gap-3 p-3 rounded-lg",
+                  !n.isRead ? "bg-primary/5" : "bg-muted/30"
+                )}>
+                  <span className="text-lg shrink-0">{typeIcon[n.type] ?? "🔔"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn("text-sm", !n.isRead && "font-medium")}>{n.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="marketplace-shadow">
         <CardHeader><CardTitle className="text-lg">Order History</CardTitle></CardHeader>
         <CardContent>

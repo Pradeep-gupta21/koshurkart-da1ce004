@@ -71,6 +71,7 @@ const App = () => (
                       <Route path="campaigns" element={<VendorCampaigns />} />
                       <Route path="analytics" element={<VendorAnalytics />} />
                       <Route path="payments" element={<VendorPayments />} />
+                      <Route path="notifications" element={<VendorNotifications />} />
                     </Route>
 
                     {/* Admin routes */}
