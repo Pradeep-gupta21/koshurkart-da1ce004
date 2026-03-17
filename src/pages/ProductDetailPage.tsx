@@ -38,6 +38,11 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     status: "active",
     isSponsored: true,
     createdAt: c.created_at ?? "",
+    salesCount: 0,
+    viewCount: 0,
+    trendingScore: 0,
+  };
+};
   };
 };
 

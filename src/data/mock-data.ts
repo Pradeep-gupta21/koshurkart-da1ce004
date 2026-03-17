@@ -44,6 +44,9 @@ export const mockProducts: Product[] = Array.from({ length: 24 }, (_, i) => ({
   reviewCount: Math.floor(Math.random() * 500) + 10,
   isSponsored: i < 4,
   createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+  salesCount: Math.floor(Math.random() * 200),
+  viewCount: Math.floor(Math.random() * 1000),
+  trendingScore: Math.floor(Math.random() * 50),
 }));
 
 export const mockVendors: Vendor[] = [
