@@ -25,6 +25,7 @@ import VendorCampaigns from "@/pages/vendor/VendorCampaigns";
 import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
 import VendorPayments from "@/pages/vendor/VendorPayments";
 import VendorOrders from "@/pages/vendor/VendorOrders";
+import VendorNotifications from "@/pages/vendor/VendorNotifications";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import AdminVendors from "@/pages/admin/AdminVendors";
