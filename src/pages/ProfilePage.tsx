@@ -6,7 +6,9 @@ import { orderService } from "@/services/orderService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { ShippingStatus } from "@/types/order";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -16,6 +18,103 @@ const statusColor: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
   completed: "bg-success/15 text-success border-success/30",
   failed: "bg-destructive/15 text-destructive border-destructive/30",
+  in_transit: "bg-accent/15 text-accent-foreground border-accent/30",
+  out_for_delivery: "bg-warning/15 text-warning border-warning/30",
+};
+
+const SHIPPING_STATUSES: ShippingStatus[] = ["pending", "shipped", "in_transit", "out_for_delivery", "delivered"];
+
+const statusLabel: Record<string, string> = {
+  pending: "Pending",
+  shipped: "Shipped",
+  in_transit: "In Transit",
+  out_for_delivery: "Out for Delivery",
+  delivered: "Delivered",
+};
+
+const statusIcon: Record<string, typeof Package> = {
+  pending: Clock,
+  shipped: Package,
+  in_transit: Truck,
+  out_for_delivery: MapPin,
+  delivered: CheckCircle2,
+};
+
+const DeliveryProgressTracker = ({ currentStatus }: { currentStatus: string }) => {
+  const currentIdx = SHIPPING_STATUSES.indexOf(currentStatus as ShippingStatus);
+  return (
+    <div className="flex items-center justify-between w-full my-3">
+      {SHIPPING_STATUSES.map((s, i) => {
+        const Icon = statusIcon[s] ?? Package;
+        const isActive = i <= currentIdx;
+        const isCurrent = i === currentIdx;
+        return (
+          <div key={s} className="flex items-center flex-1 last:flex-none">
+            <div className="flex flex-col items-center">
+              <div className={cn(
+                "h-8 w-8 rounded-full flex items-center justify-center border-2 transition-colors",
+                isCurrent ? "border-primary bg-primary text-primary-foreground" :
+                isActive ? "border-primary bg-primary/10 text-primary" :
+                "border-muted bg-muted text-muted-foreground"
+              )}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <span className={cn(
+                "text-[10px] mt-1 text-center leading-tight",
+                isActive ? "text-foreground font-medium" : "text-muted-foreground"
+              )}>
+                {statusLabel[s]}
+              </span>
+            </div>
+            {i < SHIPPING_STATUSES.length - 1 && (
+              <div className={cn("h-0.5 flex-1 mx-1 mt-[-12px]", i < currentIdx ? "bg-primary" : "bg-muted")} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const TrackingTimeline = ({ orderId }: { orderId: string }) => {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    orderService.getShipmentEvents(orderId).then(data => {
+      setEvents(data);
+      setLoading(false);
+    });
+  }, [orderId]);
+
+  if (loading) return <div className="flex justify-center py-3"><div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" /></div>;
+  if (events.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-medium text-muted-foreground mb-2">Tracking History</p>
+      <div className="space-y-0">
+        {events.map((ev, i) => (
+          <div key={ev.id} className="flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className={cn(
+                "h-2.5 w-2.5 rounded-full mt-1.5",
+                i === events.length - 1 ? "bg-primary" : "bg-muted-foreground/40"
+              )} />
+              {i < events.length - 1 && <div className="w-px flex-1 bg-border" />}
+            </div>
+            <div className="pb-3">
+              <p className="text-xs font-medium">{ev.description || statusLabel[ev.status] || ev.status}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {new Date(ev.created_at).toLocaleString()}
+                {ev.location && <> · {ev.location}</>}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const ProfilePage = () => {
@@ -96,8 +195,8 @@ const ProfilePage = () => {
                       <div className="text-right">
                         <p className="font-semibold tabular-nums">${Number(o.total_amount).toFixed(2)}</p>
                         <div className="flex gap-1.5 mt-0.5 justify-end">
-                          <Badge variant="outline" className={`text-[10px] ${statusColor[o.order_status] ?? ""}`}>
-                            {o.order_status}
+                          <Badge variant="outline" className={`text-[10px] ${statusColor[o.shipping_status] ?? statusColor[o.order_status] ?? ""}`}>
+                            {statusLabel[o.shipping_status] ?? o.order_status}
                           </Badge>
                           <Badge variant="outline" className={`text-[10px] ${statusColor[o.payment_status] ?? ""}`}>
                             {o.payment_status}
@@ -107,9 +206,32 @@ const ProfilePage = () => {
                       {expanded === o.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
                   </button>
-                  {expanded === o.id && o.order_items && (
-                    <div className="border-t bg-muted/30 p-4 space-y-2">
-                      {o.order_items.map((item: any) => (
+                  {expanded === o.id && (
+                    <div className="border-t bg-muted/30 p-4 space-y-3">
+                      {/* Delivery progress tracker */}
+                      <DeliveryProgressTracker currentStatus={o.shipping_status ?? "pending"} />
+
+                      {/* Shipping info */}
+                      <div className="flex flex-wrap gap-3 text-xs">
+                        {o.shipping_provider && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Truck className="h-3 w-3" /> {o.shipping_provider}
+                          </span>
+                        )}
+                        {o.tracking_id && (
+                          <span className="flex items-center gap-1 text-muted-foreground font-mono">
+                            <Package className="h-3 w-3" /> {o.tracking_id}
+                          </span>
+                        )}
+                        {o.estimated_delivery && (
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <CalendarIcon className="h-3 w-3" /> Est. {new Date(o.estimated_delivery).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Order items */}
+                      {o.order_items && o.order_items.map((item: any) => (
                         <div key={item.id} className="flex items-center gap-3">
                           {item.image && (
                             <img src={item.image} alt={item.title} className="h-10 w-10 rounded object-cover" />
@@ -121,6 +243,9 @@ const ProfilePage = () => {
                           <p className="text-sm font-semibold tabular-nums">${(Number(item.price) * item.quantity).toFixed(2)}</p>
                         </div>
                       ))}
+
+                      {/* Tracking history timeline */}
+                      <TrackingTimeline orderId={o.id} />
                     </div>
                   )}
                 </div>
