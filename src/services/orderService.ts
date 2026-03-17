@@ -37,4 +37,27 @@ export const orderService = {
     if (error) throw error;
     return data ?? [];
   },
+
+  async getShipmentEvents(orderId: string) {
+    const { data, error } = await supabase
+      .from('shipment_events')
+      .select('*')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async updateShipment(orderId: string, updates: {
+    shipping_provider?: string;
+    tracking_id?: string;
+    shipping_status?: string;
+    estimated_delivery?: string | null;
+  }) {
+    const { error } = await supabase
+      .from('orders')
+      .update(updates)
+      .eq('id', orderId);
+    if (error) throw error;
+  },
 };
