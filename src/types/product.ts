@@ -30,6 +30,9 @@ export interface Review {
   rating: number;
   comment: string;
   isVerifiedPurchase: boolean;
+  isSuspicious: boolean;
+  flaggedReason: string | null;
+  moderationStatus: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
 

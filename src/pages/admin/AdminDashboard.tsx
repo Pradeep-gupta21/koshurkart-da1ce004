@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
 import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { to: "/admin", icon: LayoutDashboard, label: "Overview", end: true },
@@ -7,10 +10,21 @@ const navItems = [
   { to: "/admin/campaigns", icon: Megaphone, label: "Campaigns" },
   { to: "/admin/placements", icon: LayoutGrid, label: "Ad Pricing" },
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
-  { to: "/admin/reviews", icon: MessageSquare, label: "Reviews" },
+  { to: "/admin/reviews", icon: MessageSquare, label: "Reviews", hasBadge: true },
 ];
 
 const AdminDashboard = () => {
+  const [suspiciousCount, setSuspiciousCount] = useState(0);
+
+  useEffect(() => {
+    supabase
+      .from("reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("is_suspicious", true)
+      .eq("moderation_status", "pending")
+      .then(({ count }) => setSuspiciousCount(count ?? 0));
+  }, []);
+
   return (
     <div className="flex min-h-[calc(100vh-8rem)]">
       <aside className="w-56 border-r border-border bg-sidebar-background p-4 space-y-1 hidden md:block">
@@ -18,7 +32,7 @@ const AdminDashboard = () => {
           <ShieldCheck className="h-5 w-5 text-primary" />
           <span className="font-semibold text-foreground">Admin Panel</span>
         </div>
-        {navItems.map(({ to, icon: Icon, label, end }) => (
+        {navItems.map(({ to, icon: Icon, label, end, hasBadge }) => (
           <NavLink
             key={to}
             to={to}
@@ -33,6 +47,11 @@ const AdminDashboard = () => {
           >
             <Icon className="h-4 w-4" />
             {label}
+            {hasBadge && suspiciousCount > 0 && (
+              <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] px-1.5 text-xs">
+                {suspiciousCount}
+              </Badge>
+            )}
           </NavLink>
         ))}
       </aside>
