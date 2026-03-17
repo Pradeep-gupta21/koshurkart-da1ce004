@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Search, ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
