@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 interface PriceDisplayProps {
   price: number;
   discountPrice?: number | null;
+  dynamicPrice?: number | null;
+  basePrice?: number | null;
   size?: "sm" | "md" | "lg";
   showSavings?: boolean;
   className?: string;
