@@ -22,6 +22,9 @@ export function mapDbProduct(row: any): Product {
     isSponsored: row.is_sponsored ?? false,
     createdAt: row.created_at,
     status: row.status ?? 'active',
+    salesCount: row.sales_count ?? 0,
+    viewCount: row.view_count ?? 0,
+    trendingScore: Number(row.trending_score ?? 0),
   };
 }
 
