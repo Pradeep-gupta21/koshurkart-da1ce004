@@ -17,6 +17,7 @@ export const adService = {
     placement: string;
     budget: number;
     daily_limit: number;
+    bid_amount: number;
     start_date: string;
     end_date: string | null;
   }) {
@@ -40,14 +41,18 @@ export const adService = {
     return count ?? 0;
   },
 
-  async getApprovedByPlacement(placement: string) {
-    const { data, error } = await supabase
-      .from('ad_campaigns')
-      .select('*, products(id, title, slug, price, discount_price, images, rating, review_count, category, vendor_id, vendors(store_name))')
-      .eq('placement', placement)
-      .eq('status', 'approved');
+  async getAuctionWinners(placement: string, limit: number = 3) {
+    const { data, error } = await supabase.rpc('get_auction_winners', {
+      p_placement: placement,
+      p_limit: limit,
+    });
     if (error) throw error;
     return data ?? [];
+  },
+
+  /** @deprecated Use getAuctionWinners instead */
+  async getApprovedByPlacement(placement: string) {
+    return this.getAuctionWinners(placement, 10);
   },
 
   async trackImpression(campaignId: string) {
