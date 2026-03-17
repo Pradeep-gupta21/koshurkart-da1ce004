@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useToast } from "@/hooks/use-toast";
 
 const scoreColor = (score: number) => {
   if (score >= 80) return "text-success";
@@ -14,6 +16,7 @@ const scoreColor = (score: number) => {
 
 const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
+  const { toast } = useToast();
   const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
@@ -67,6 +70,42 @@ const VendorOverview = () => {
     fetchStats();
     fetchTrust();
   }, [vendorId]);
+
+  const handleNewOrder = useCallback(() => {
+    // Re-fetch stats and recent orders when a new order item arrives
+    toast({ title: "🛒 New order received!", description: "Your dashboard has been updated." });
+    // Trigger re-fetch by re-running the effect
+    if (!vendorId) return;
+    const refresh = async () => {
+      const [prodRes, campaignRes, vendorRes] = await Promise.all([
+        supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
+        supabase.from("ad_campaigns").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
+        supabase.from("vendors").select("total_sales").eq("id", vendorId).single(),
+      ]);
+      setStats({
+        products: prodRes.count ?? 0,
+        totalSales: vendorRes.data?.total_sales ?? 0,
+        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5,
+        campaigns: campaignRes.count ?? 0,
+      });
+      const { data: orderItems } = await supabase
+        .from("order_items")
+        .select("*, order_id")
+        .eq("vendor_id", vendorId)
+        .order("id", { ascending: false })
+        .limit(5);
+      setRecentOrders(orderItems ?? []);
+    };
+    refresh();
+  }, [vendorId, toast]);
+
+  useRealtimeSubscription({
+    table: "order_items",
+    event: "INSERT",
+    filter: `vendor_id=eq.${vendorId}`,
+    onPayload: handleNewOrder,
+    enabled: !!vendorId,
+  });
 
   const cards = [
     { title: "Total Products", value: stats.products, icon: Package, color: "text-primary" },

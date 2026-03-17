@@ -11,6 +11,8 @@ import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Tru
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import type { AppNotification } from "@/types/notification";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useToast } from "@/hooks/use-toast";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -129,6 +131,7 @@ const typeIcon: Record<string, string> = {
 
 const ProfilePage = () => {
   const { user, loading, isVendor, signOut } = useAuth();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -148,6 +151,22 @@ const ProfilePage = () => {
     };
     fetchData();
   }, [user]);
+
+  // Real-time order status updates
+  const handleOrderUpdate = useCallback(async () => {
+    if (!user) return;
+    const orderData = await orderService.getUserOrders(user.id);
+    setOrders(orderData);
+    toast({ title: "📦 Order updated", description: "Your order status has changed." });
+  }, [user, toast]);
+
+  useRealtimeSubscription({
+    table: "orders",
+    event: "UPDATE",
+    filter: user ? `user_id=eq.${user.id}` : undefined,
+    onPayload: handleOrderUpdate,
+    enabled: !!user,
+  });
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   if (!user) return <Navigate to="/auth" replace />;

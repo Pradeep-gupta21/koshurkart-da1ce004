@@ -9,3 +9,4 @@ export { inventoryService } from './inventoryService';
 export { notificationService } from './notificationService';
 export { recommendationService } from './recommendationService';
 export { searchService } from './searchService';
+export { realtimeService, REALTIME_EVENTS } from './realtimeService';

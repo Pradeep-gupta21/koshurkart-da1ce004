@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { orderService } from "@/services/orderService";
@@ -16,6 +16,7 @@ import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface VendorOrderItem {
   id: string;
@@ -95,6 +96,28 @@ const VendorOrders = () => {
   };
 
   useEffect(() => { if (vendorId) fetchOrders(); }, [vendorId]);
+
+  // Live: new order items for this vendor
+  const handleRealtimeOrder = useCallback(() => {
+    fetchOrders();
+    toast({ title: "📦 Orders updated", description: "New order activity detected." });
+  }, []);
+
+  useRealtimeSubscription({
+    table: "order_items",
+    event: "INSERT",
+    filter: `vendor_id=eq.${vendorId}`,
+    onPayload: handleRealtimeOrder,
+    enabled: !!vendorId,
+  });
+
+  // Live: order status changes
+  useRealtimeSubscription({
+    table: "orders",
+    event: "UPDATE",
+    onPayload: handleRealtimeOrder,
+    enabled: !!vendorId,
+  });
 
   const advanceShipping = async (orderId: string, currentStatus: string) => {
     const next = nextShippingStatus[currentStatus];

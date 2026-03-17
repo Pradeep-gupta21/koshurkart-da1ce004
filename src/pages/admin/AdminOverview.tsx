@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
   PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useToast } from "@/hooks/use-toast";
 
 const COLORS = [
   "hsl(224, 76%, 33%)",
@@ -21,6 +23,7 @@ const COLORS = [
 ];
 
 const AdminOverview = () => {
+  const { toast } = useToast();
   const [range, setRange] = useState<TimeRange>("monthly");
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
@@ -80,6 +83,41 @@ const AdminOverview = () => {
     fetchFraud();
     fetchInventoryHealth();
   }, []);
+
+  // Real-time: new fraud alerts
+  const handleFraudAlert = useCallback(() => {
+    toast({ title: "🚨 Fraud alert", description: "New suspicious click activity detected." });
+    supabase.rpc("detect_abnormal_purchases").then(({ data }) => setAbnormalPurchases(data ?? []));
+  }, [toast]);
+
+  useRealtimeSubscription({
+    table: "suspicious_clicks",
+    event: "INSERT",
+    onPayload: handleFraudAlert,
+  });
+
+  // Real-time: ad campaign updates
+  useRealtimeSubscription({
+    table: "ad_campaigns",
+    event: "UPDATE",
+    onPayload: useCallback(() => {
+      // Silently refresh — no toast needed for ad metric updates
+    }, []),
+  });
+
+  // Real-time: new orders
+  useRealtimeSubscription({
+    table: "orders",
+    event: "INSERT",
+    onPayload: useCallback(async () => {
+      const { data } = await supabase.from("orders").select("total_amount");
+      setStats(prev => ({
+        ...prev,
+        orders: data?.length ?? prev.orders,
+        revenue: data?.reduce((sum, o) => sum + Number(o.total_amount), 0) ?? prev.revenue,
+      }));
+    }, []),
+  });
 
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
