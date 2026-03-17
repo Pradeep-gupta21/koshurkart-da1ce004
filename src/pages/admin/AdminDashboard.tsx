@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, NavLink } from "react-router-dom";
-import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare, DollarSign } from "lucide-react";
+import { ShieldAlert as ShieldAlertIcon } from "lucide-react";
+import { LayoutDashboard, Users, ShieldCheck, Megaphone, Wallet, LayoutGrid, MessageSquare, DollarSign, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 
@@ -12,6 +13,7 @@ const navItems = [
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
   { to: "/admin/reviews", icon: MessageSquare, label: "Reviews", hasBadge: true },
   { to: "/admin/pricing", icon: DollarSign, label: "Dynamic Pricing" },
+  { to: "/admin/security", icon: ShieldAlert, label: "Security" },
 ];
 
 const AdminDashboard = () => {

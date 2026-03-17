@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { sanitizeFormValues } from "@/lib/sanitize";
 
 export interface CheckoutFormValues {
   firstName: string;
@@ -26,7 +27,8 @@ const CheckoutForm = ({ onSubmit, submitLabel = "Place Order" }: CheckoutFormPro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(form);
+    const sanitized = sanitizeFormValues(form as unknown as Record<string, unknown>) as unknown as CheckoutFormValues;
+    onSubmit(sanitized);
   };
 
   return (

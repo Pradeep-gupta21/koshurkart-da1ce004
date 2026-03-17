@@ -35,6 +35,7 @@ import AdminPayouts from "@/pages/admin/AdminPayouts";
 import AdminPlacements from "@/pages/admin/AdminPlacements";
 import AdminReviews from "@/pages/admin/AdminReviews";
 import AdminPricing from "@/pages/admin/AdminPricing";
+import AdminSecurity from "@/pages/admin/AdminSecurity";
 import NotFound from "@/pages/NotFound";
 import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 
@@ -86,6 +87,7 @@ const App = () => (
                       <Route path="payouts" element={<AdminPayouts />} />
                       <Route path="reviews" element={<AdminReviews />} />
                       <Route path="pricing" element={<AdminPricing />} />
+                      <Route path="security" element={<AdminSecurity />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

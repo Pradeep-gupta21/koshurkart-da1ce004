@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { sanitizeText } from "@/lib/sanitize";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
@@ -31,7 +32,11 @@ const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductForm
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(form);
+    onSubmit({
+      ...form,
+      title: sanitizeText(form.title),
+      description: sanitizeText(form.description),
+    });
   };
 
   return (
