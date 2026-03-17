@@ -43,8 +43,6 @@ const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
     trendingScore: 0,
   };
 };
-  };
-};
 
 const SponsoredSuggestionsInline = () => {
   const { data: campaigns = [] } = useQuery({
