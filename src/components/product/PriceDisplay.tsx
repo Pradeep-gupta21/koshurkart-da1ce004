@@ -27,19 +27,24 @@ const PriceDisplay = ({ price, discountPrice, dynamicPrice, basePrice, size = "m
   return (
     <div className={cn("flex items-baseline gap-1.5 flex-wrap", className)}>
       <span className={cn("font-semibold text-primary tabular-nums", styles.main)}>
-        ${displayPrice.toFixed(2)}
+        ${effectivePrice.toFixed(2)}
       </span>
-      {discountPrice && (
+      {referencePrice && (
         <>
           <span className={cn("text-muted-foreground line-through tabular-nums", styles.original)}>
-            ${price.toFixed(2)}
+            ${referencePrice.toFixed(2)}
           </span>
           {showSavings && savingsPercent > 0 && (
             <span className={cn("font-semibold text-secondary", styles.savings)}>
-              Save {savingsPercent}%
+              Save {Math.abs(savingsPercent)}%
             </span>
           )}
         </>
+      )}
+      {isDynamic && (
+        <span className={cn("text-accent font-medium", styles.savings)}>
+          Dynamic
+        </span>
       )}
     </div>
   );
