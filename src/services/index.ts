@@ -5,3 +5,4 @@ export { vendorService } from './vendorService';
 export { paymentService } from './paymentService';
 export { analyticsService } from './analyticsService';
 export { inventoryService } from './inventoryService';
+export { notificationService } from './notificationService';

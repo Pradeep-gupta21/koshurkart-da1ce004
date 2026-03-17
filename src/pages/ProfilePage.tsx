@@ -1,14 +1,16 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { orderService } from "@/services/orderService";
+import { notificationService } from "@/services/notificationService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
+import type { AppNotification } from "@/types/notification";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -117,21 +119,32 @@ const TrackingTimeline = ({ orderId }: { orderId: string }) => {
   );
 };
 
+const typeIcon: Record<string, string> = {
+  order_placed: "🛒",
+  order_shipped: "📦",
+  order_delivered: "✅",
+  vendor_verified: "🛡️",
+  review_submitted: "⭐",
+};
+
 const ProfilePage = () => {
   const { user, loading, isVendor, signOut } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [profRes, orderData] = await Promise.all([
+      const [profRes, orderData, notifs] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
         orderService.getUserOrders(user.id),
+        notificationService.getUserNotifications(user.id, 10),
       ]);
       setProfile(profRes.data);
       setOrders(orderData);
+      setNotifications(notifs);
     };
     fetchData();
   }, [user]);
@@ -167,6 +180,36 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Notifications */}
+      <Card className="marketplace-shadow">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bell className="h-5 w-5" /> Recent Notifications
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {notifications.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No notifications yet</p>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map((n) => (
+                <div key={n.id} className={cn(
+                  "flex gap-3 p-3 rounded-lg",
+                  !n.isRead ? "bg-primary/5" : "bg-muted/30"
+                )}>
+                  <span className="text-lg shrink-0">{typeIcon[n.type] ?? "🔔"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn("text-sm", !n.isRead && "font-medium")}>{n.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="marketplace-shadow">
         <CardHeader><CardTitle className="text-lg">Order History</CardTitle></CardHeader>

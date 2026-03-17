@@ -143,6 +143,42 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          id: string
+          is_read: boolean | null
+          message: string
+          metadata: Json | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          metadata?: Json | null
+          title?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          metadata?: Json | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           id: string
@@ -571,6 +607,17 @@ export type Database = {
       calculate_product_scores: { Args: never; Returns: undefined }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }
+        Returns: undefined
+      }
+      create_notification: {
+        Args: {
+          _entity_id?: string
+          _message: string
+          _metadata?: Json
+          _title: string
+          _type: string
+          _user_id: string
+        }
         Returns: undefined
       }
       detect_abnormal_purchases: {

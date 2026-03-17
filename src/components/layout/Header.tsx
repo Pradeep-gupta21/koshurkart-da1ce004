@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Search, ShoppingCart, User, Menu, Sun, Moon } from "lucide-react";
+import NotificationBell from "@/components/notifications/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCart } from "@/contexts/CartContext";
@@ -89,6 +90,7 @@ const Header = () => {
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden sm:inline-flex">
               {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
             </Button>
+            <NotificationBell />
             <Button variant="ghost" size="icon" asChild>
               <Link to="/profile">
                 <User className="h-5 w-5" />
