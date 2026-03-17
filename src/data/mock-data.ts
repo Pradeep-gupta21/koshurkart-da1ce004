@@ -59,8 +59,8 @@ export const mockVendors: Vendor[] = [
 ];
 
 export const mockReviews: Review[] = [
-  { id: "rev-1", userId: "user-1", userName: "Alex M.", productId: "prod-1", rating: 5, comment: "Absolutely incredible sound quality. Best purchase I've made this year!", isVerifiedPurchase: true, createdAt: "2026-03-10T10:00:00Z" },
-  { id: "rev-2", userId: "user-2", userName: "Sarah K.", productId: "prod-1", rating: 4, comment: "Great headphones, comfortable for long use. Battery life could be better.", isVerifiedPurchase: true, createdAt: "2026-03-08T14:30:00Z" },
-  { id: "rev-3", userId: "user-3", userName: "James R.", productId: "prod-1", rating: 5, comment: "Premium build quality. The noise cancellation is top-notch.", isVerifiedPurchase: false, createdAt: "2026-03-05T09:15:00Z" },
-  { id: "rev-4", userId: "user-4", userName: "Emily C.", productId: "prod-2", rating: 4, comment: "Beautiful watch, looks exactly like the photos. Very happy with it.", isVerifiedPurchase: true, createdAt: "2026-03-12T16:45:00Z" },
+  { id: "rev-1", userId: "user-1", userName: "Alex M.", productId: "prod-1", rating: 5, comment: "Absolutely incredible sound quality. Best purchase I've made this year!", isVerifiedPurchase: true, isSuspicious: false, flaggedReason: null, moderationStatus: "approved", createdAt: "2026-03-10T10:00:00Z" },
+  { id: "rev-2", userId: "user-2", userName: "Sarah K.", productId: "prod-1", rating: 4, comment: "Great headphones, comfortable for long use. Battery life could be better.", isVerifiedPurchase: true, isSuspicious: false, flaggedReason: null, moderationStatus: "approved", createdAt: "2026-03-08T14:30:00Z" },
+  { id: "rev-3", userId: "user-3", userName: "James R.", productId: "prod-1", rating: 5, comment: "Premium build quality. The noise cancellation is top-notch.", isVerifiedPurchase: false, isSuspicious: false, flaggedReason: null, moderationStatus: "approved", createdAt: "2026-03-05T09:15:00Z" },
+  { id: "rev-4", userId: "user-4", userName: "Emily C.", productId: "prod-2", rating: 4, comment: "Beautiful watch, looks exactly like the photos. Very happy with it.", isVerifiedPurchase: true, isSuspicious: false, flaggedReason: null, moderationStatus: "approved", createdAt: "2026-03-12T16:45:00Z" },
 ];
