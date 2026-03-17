@@ -23,6 +23,7 @@ const COLORS = [
 ];
 
 const AdminOverview = () => {
+  const { toast } = useToast();
   const [range, setRange] = useState<TimeRange>("monthly");
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
