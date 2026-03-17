@@ -7,6 +7,8 @@ import ProductGrid from "@/components/product/ProductGrid";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
+import { recommendationService } from "@/services/recommendationService";
+import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 
@@ -36,9 +38,17 @@ const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => 
 });
 
 const HomePage = () => {
+  const { user } = useAuth();
+
   const { data: sponsoredCampaigns = [] } = useQuery({
     queryKey: ['ads', 'homepage'],
     queryFn: () => adService.getAuctionWinners('homepage', 4),
+  });
+
+  const { data: recommendedProducts = [], isLoading: loadingRecommended } = useQuery({
+    queryKey: ['products', 'recommended', user?.id],
+    queryFn: () => recommendationService.getPersonalizedRecommendations(user!.id, 8),
+    enabled: !!user?.id,
   });
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
@@ -100,6 +110,23 @@ const HomePage = () => {
           <ProductGrid>
             {sponsoredProducts.map((p) => (
               <SponsoredProductCard key={p.campaignId} product={p} campaignId={p.campaignId} />
+            ))}
+          </ProductGrid>
+        </section>
+      )}
+
+      {/* Recommended for You */}
+      {user && (
+        <section className="container mx-auto px-4 mt-14">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Recommended for You</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Based on your browsing and purchases</p>
+            </div>
+          </div>
+          <ProductGrid loading={loadingRecommended}>
+            {recommendedProducts.map(product => (
+              <ProductCard key={product.id} product={product} />
             ))}
           </ProductGrid>
         </section>

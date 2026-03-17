@@ -10,6 +10,7 @@ import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
+import { recommendationService } from "@/services/recommendationService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
@@ -128,10 +129,15 @@ const ProductDetailPage = () => {
   });
 
   const { data: similarProducts = [] } = useQuery({
-    queryKey: ['products', 'similar', product?.category, product?.id],
-    queryFn: () => productService.getAll({ category: product!.category, limit: 4 }),
-    enabled: !!product?.category,
-    select: (data) => data.filter(p => p.id !== product?.id).slice(0, 4),
+    queryKey: ['products', 'similar', product?.id],
+    queryFn: () => recommendationService.getSimilarProducts(product!.id, 4),
+    enabled: !!product?.id,
+  });
+
+  const { data: boughtTogether = [] } = useQuery({
+    queryKey: ['products', 'bought-together', product?.id],
+    queryFn: () => recommendationService.getFrequentlyBoughtTogether(product!.id, 4),
+    enabled: !!product?.id,
   });
 
   if (isLoading) return <DetailSkeleton />;
@@ -307,6 +313,18 @@ const ProductDetailPage = () => {
 
       {/* Sponsored Suggestions */}
       <SponsoredSuggestionsInline />
+
+      {/* Frequently Bought Together */}
+      {boughtTogether.length > 0 && (
+        <section className="mt-14">
+          <h2 className="text-xl font-semibold mb-6">Frequently Bought Together</h2>
+          <ProductGrid>
+            {boughtTogether.map(p => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </ProductGrid>
+        </section>
+      )}
 
       {/* Similar */}
       {similarProducts.length > 0 && (
