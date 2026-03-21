@@ -15,6 +15,7 @@ const navItems = [
   { to: "/admin/pricing", icon: DollarSign, label: "Dynamic Pricing" },
   { to: "/admin/payments", icon: CreditCard, label: "Payments", hasPaymentBadge: true },
   { to: "/admin/security", icon: ShieldAlert, label: "Security" },
+  { to: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
 const AdminDashboard = () => {
