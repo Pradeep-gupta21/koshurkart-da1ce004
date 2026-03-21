@@ -1,66 +1,35 @@
 
 
-## UPI QR Code Payment — Implementation Plan
+## Admin Payment Verification Page — Implementation Plan
 
 ### Overview
-Add a UPI payment flow with QR code generation, payment instructions, optional screenshot upload, and a "pending_verification" status for manual confirmation.
+Create an admin page to view, verify, and manage UPI payments pending verification. When admin approves/rejects, payment and order statuses sync, and vendor earnings update automatically (via existing `on_payment_success` trigger).
 
-### 1. Database Migration
+### 1. Create `src/pages/admin/AdminPayments.tsx`
 
-Add new columns to `payments` table:
-```sql
-ALTER TABLE payments ADD COLUMN upi_id text DEFAULT NULL;
-ALTER TABLE payments ADD COLUMN qr_code_url text DEFAULT NULL;
-ALTER TABLE payments ADD COLUMN payment_proof text DEFAULT NULL;
-```
+Page showing all payments with focus on `pending_verification` status:
 
-Add `pending_verification` as a valid payment status (no enum constraint exists — it's a text column, so no schema change needed for the status value itself).
+- **Filter tabs**: All / Pending Verification / Success / Failed
+- **Payment table**: ID, order ID, amount, method, status, date, actions
+- **For UPI payments**: show uploaded screenshot (payment_proof) in a dialog/modal
+- **Action buttons**:
+  - "Approve" → calls `paymentService.updatePaymentStatus(id, 'success')` + `orderService.updateOrderStatus(orderId, { payment_status: 'paid', order_status: 'confirmed' })`
+  - "Reject" → calls `paymentService.updatePaymentStatus(id, 'failed')` + `orderService.updateOrderStatus(orderId, { payment_status: 'failed' })`
+- Vendor earnings update automatically via the existing `on_payment_success` DB trigger when status becomes `success`
+- Toast notifications on action completion
 
-### 2. Update `src/types/order.ts`
+### 2. Update `src/pages/admin/AdminDashboard.tsx`
 
-Add to `Payment` interface:
-- `upiId: string | null`
-- `qrCodeUrl: string | null`
-- `paymentProof: string | null`
-- Add `'pending_verification'` to `paymentStatus` union type
+Add "Payments" nav item with a badge showing count of `pending_verification` payments.
 
-### 3. Update `src/services/paymentService.ts`
+### 3. Update `src/App.tsx`
 
-- Update `createPayment` to accept optional `upiId` parameter and store it
-- Update `processPayment`: when method is `'upi'`, skip automatic verification. Instead:
-  - Create payment with status `pending`
-  - Generate QR code URL (using a free QR API like `https://api.qrserver.com/v1/create-qr-code/` with UPI deep link format: `upi://pay?pa=MERCHANT_UPI&am=AMOUNT&tn=ORDER_ID`)
-  - Update payment with `qr_code_url`
-  - Return `{ success: false, awaitingUpi: true, payment, qrCodeUrl }` — a new response shape
-- Add `confirmUpiPayment(paymentId, orderId, proofUrl?)` method:
-  - Updates payment status to `pending_verification`
-  - Optionally stores `payment_proof` URL
-- Add `uploadPaymentProof(file)` — uploads to `product-images` bucket (reuse existing bucket) under a `payment-proofs/` prefix
+Add `/admin/payments` route under the admin layout.
 
-### 4. Add merchant UPI ID to `src/config/platformSettings.ts`
+### Files
+- **Create**: `src/pages/admin/AdminPayments.tsx`
+- **Modify**: `src/pages/admin/AdminDashboard.tsx` — add nav item
+- **Modify**: `src/App.tsx` — add route
 
-```ts
-merchantUpiId: 'merchant@upi', // Configure with real UPI ID
-```
-
-### 5. Update `src/pages/CheckoutPage.tsx`
-
-When UPI is selected and order is placed:
-- Instead of showing generic "Processing..." spinner, show a **UPI Payment screen**:
-  - QR code image (from QR API)
-  - Payment amount prominently displayed
-  - UPI ID displayed for manual entry
-  - Step-by-step instructions (scan QR / enter UPI ID in any UPI app)
-  - Optional: file upload for payment screenshot
-  - **"I Have Paid"** button → calls `confirmUpiPayment()`, sets status to `pending_verification`
-  - Shows confirmation: "Payment submitted for verification"
-
-New flow state: add `'upi_pending'` to `FlowState` type.
-
-### Files to Create/Modify
-- **Migration**: Add `upi_id`, `qr_code_url`, `payment_proof` columns to payments
-- **Modify**: `src/types/order.ts` — add new fields + status
-- **Modify**: `src/config/platformSettings.ts` — add `merchantUpiId`
-- **Modify**: `src/services/paymentService.ts` — UPI-specific flow, confirm method, proof upload
-- **Modify**: `src/pages/CheckoutPage.tsx` — UPI QR code screen with "I Have Paid" button
+No database changes needed — admin already has UPDATE access on payments via RLS, and the `on_payment_success` trigger handles vendor earnings.
 
