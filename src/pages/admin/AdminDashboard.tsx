@@ -43,7 +43,7 @@ const AdminDashboard = () => {
           <ShieldCheck className="h-5 w-5 text-primary" />
           <span className="font-semibold text-foreground">Admin Panel</span>
         </div>
-        {navItems.map(({ to, icon: Icon, label, end, hasBadge }) => (
+        {navItems.map(({ to, icon: Icon, label, end, hasBadge, hasPaymentBadge }) => (
           <NavLink
             key={to}
             to={to}
@@ -61,6 +61,11 @@ const AdminDashboard = () => {
             {hasBadge && suspiciousCount > 0 && (
               <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] px-1.5 text-xs">
                 {suspiciousCount}
+              </Badge>
+            )}
+            {hasPaymentBadge && pendingPaymentCount > 0 && (
+              <Badge variant="secondary" className="ml-auto h-5 min-w-[20px] px-1.5 text-xs">
+                {pendingPaymentCount}
               </Badge>
             )}
           </NavLink>
