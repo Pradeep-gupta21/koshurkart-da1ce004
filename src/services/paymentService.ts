@@ -1,7 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
-
-const COMMISSION_RATE = 0.1;
+import { calculateCommission, platformSettings } from '@/config/platformSettings';
 
 export const paymentService = {
   // ---- Payment record methods ----
