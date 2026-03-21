@@ -883,6 +883,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_order_owner: {
+        Args: { _order_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_vendor_order: {
+        Args: { _order_id: string; _user_id: string }
+        Returns: boolean
+      }
       promote_to_admin: { Args: { _email: string }; Returns: undefined }
       recalculate_ad_quality_score: {
         Args: { p_campaign_id: string }
