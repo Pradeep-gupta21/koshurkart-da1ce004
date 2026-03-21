@@ -13,7 +13,7 @@ import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
 import { inventoryService } from "@/services/inventoryService";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote } from "lucide-react";
+import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote, XCircle } from "lucide-react";
 
 const PAYMENT_METHODS = [
   { value: "card", label: "Credit/Debit Card", icon: CreditCard },
@@ -23,15 +23,23 @@ const PAYMENT_METHODS = [
   { value: "cod", label: "Cash on Delivery", icon: Banknote },
 ] as const;
 
+type FlowState = "form" | "processing" | "success" | "failed";
+
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [isComplete, setIsComplete] = useState(false);
+  const [flowState, setFlowState] = useState<FlowState>("form");
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("card");
+  const [failureError, setFailureError] = useState<string | null>(null);
+
+  // Track reserved items for cleanup on failure
+  const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
 
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
@@ -45,16 +53,22 @@ const CheckoutPage = () => {
     }
 
     setSubmitting(true);
-    const reservedItems: { productId: string; quantity: number }[] = [];
+    setFailureError(null);
+    const reserved: { productId: string; quantity: number }[] = [];
 
     try {
+      // Step 1: Reserve inventory
       for (const { product, quantity } of items) {
         await inventoryService.reserveStock(product.id, quantity);
-        reservedItems.push({ productId: product.id, quantity });
+        reserved.push({ productId: product.id, quantity });
       }
+      setReservedItems(reserved);
 
-      // Orders are always stored in USD
+      // Step 2: Create order with pending payment status
       const order = await orderService.create(user.id, totalPrice);
+      setOrderId(order.id);
+      setPendingOrderId(order.id);
+
       await orderService.addItems(
         order.id,
         items.map(({ product, quantity }) => ({
@@ -67,40 +81,119 @@ const CheckoutPage = () => {
         }))
       );
 
-      // Create payment record
-      await paymentService.createPayment(user.id, order.id, totalPrice, paymentMethod);
+      // Step 3: Process payment (shows processing state)
+      setFlowState("processing");
 
-      for (const { productId, quantity } of reservedItems) {
-        await inventoryService.confirmStock(productId, quantity);
+      const result = await paymentService.processPayment(user.id, order.id, totalPrice, paymentMethod);
+
+      if (result.success) {
+        // Step 4a: Payment success — confirm stock + track analytics
+        for (const { productId, quantity } of reserved) {
+          await inventoryService.confirmStock(productId, quantity);
+        }
+        for (const { product, quantity } of items) {
+          analyticsService.trackEvent('purchase', product.id, undefined, {
+            quantity,
+            price: product.discountPrice ?? product.price,
+          });
+        }
+
+        setTransactionId(result.transactionId);
+        clearCart();
+        setFlowState("success");
+      } else {
+        // Step 4b: Payment failed — release inventory
+        for (const { productId, quantity } of reserved) {
+          try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
+        }
+        setFailureError(result.error ?? "Payment failed. Please try again.");
+        setFlowState("failed");
       }
-
-      for (const { product, quantity } of items) {
-        analyticsService.trackEvent('purchase', product.id, undefined, { quantity, price: product.discountPrice ?? product.price });
-      }
-
-      setOrderId(order.id);
-      clearCart();
-      setIsComplete(true);
     } catch (err: any) {
-      for (const { productId, quantity } of reservedItems) {
+      // Infrastructure error — release reserved stock
+      for (const { productId, quantity } of reserved) {
         try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
       }
       const msg = err.message?.includes('Insufficient stock') ? err.message : err.message ?? "Something went wrong.";
       toast({ title: "Order failed", description: msg, variant: "destructive" });
+      setFlowState("form");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (isComplete) {
+  const handleRetryPayment = async () => {
+    if (!user || !pendingOrderId) return;
+    setSubmitting(true);
+    setFailureError(null);
+
+    try {
+      // Re-reserve stock
+      const reserved: { productId: string; quantity: number }[] = [];
+      for (const { product, quantity } of items) {
+        await inventoryService.reserveStock(product.id, quantity);
+        reserved.push({ productId: product.id, quantity });
+      }
+      setReservedItems(reserved);
+
+      setFlowState("processing");
+
+      const result = await paymentService.processPayment(user.id, pendingOrderId, totalPrice, paymentMethod);
+
+      if (result.success) {
+        for (const { productId, quantity } of reserved) {
+          await inventoryService.confirmStock(productId, quantity);
+        }
+        for (const { product, quantity } of items) {
+          analyticsService.trackEvent('purchase', product.id, undefined, {
+            quantity,
+            price: product.discountPrice ?? product.price,
+          });
+        }
+        setTransactionId(result.transactionId);
+        clearCart();
+        setFlowState("success");
+      } else {
+        for (const { productId, quantity } of reserved) {
+          try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
+        }
+        setFailureError(result.error ?? "Payment failed. Please try again.");
+        setFlowState("failed");
+      }
+    } catch (err: any) {
+      toast({ title: "Retry failed", description: err.message ?? "Something went wrong.", variant: "destructive" });
+      setFlowState("failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Processing state
+  if (flowState === "processing") {
+    return (
+      <div className="container mx-auto px-4 py-20 text-center max-w-md">
+        <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-6" />
+        <h1 className="text-2xl font-semibold">Processing Payment...</h1>
+        <p className="text-muted-foreground mt-2">Please don't close this page. We're verifying your payment.</p>
+      </div>
+    );
+  }
+
+  // Success state
+  if (flowState === "success") {
     return (
       <div className="container mx-auto px-4 py-20 text-center max-w-md">
         <div className="bg-success/10 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle className="h-10 w-10 text-success" />
         </div>
-        <h1 className="text-2xl font-semibold">Order Placed!</h1>
-        <p className="text-muted-foreground mt-2">Thank you for your purchase. Your order ID is:</p>
+        <h1 className="text-2xl font-semibold">Order Confirmed!</h1>
+        <p className="text-muted-foreground mt-2">Your payment was successful. Order ID:</p>
         {orderId && <p className="font-mono text-sm bg-muted px-3 py-1.5 rounded mt-2 inline-block">{orderId.slice(0, 8)}</p>}
+        {transactionId && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Transaction: <span className="font-mono">{transactionId}</span>
+          </p>
+        )}
         <p className="text-sm text-muted-foreground mt-2">
           Payment: <span className="font-medium capitalize">{paymentMethod}</span>
           {paymentMethod === 'cod' ? ' — Pay on delivery' : ' — Paid'}
@@ -108,6 +201,25 @@ const CheckoutPage = () => {
         <div className="mt-6 flex gap-3 justify-center">
           <Button asChild><Link to="/profile">View Orders</Link></Button>
           <Button variant="outline" asChild><Link to="/">Continue Shopping</Link></Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Failed state
+  if (flowState === "failed") {
+    return (
+      <div className="container mx-auto px-4 py-20 text-center max-w-md">
+        <div className="bg-destructive/10 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6">
+          <XCircle className="h-10 w-10 text-destructive" />
+        </div>
+        <h1 className="text-2xl font-semibold">Payment Failed</h1>
+        <p className="text-muted-foreground mt-2">{failureError ?? "Your payment could not be processed."}</p>
+        <div className="mt-6 flex gap-3 justify-center">
+          <Button onClick={handleRetryPayment} disabled={submitting}>
+            {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Retrying...</> : 'Retry Payment'}
+          </Button>
+          <Button variant="outline" asChild><Link to="/cart">Back to Cart</Link></Button>
         </div>
       </div>
     );

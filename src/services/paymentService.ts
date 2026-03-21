@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { orderService } from './orderService';
 
 const COMMISSION_RATE = 0.1;
 
@@ -12,7 +13,6 @@ export const paymentService = {
     method: string = 'card',
     provider?: string
   ) {
-    const isCod = method === 'cod';
     const { data, error } = await supabase
       .from('payments')
       .insert({
@@ -21,7 +21,7 @@ export const paymentService = {
         amount,
         payment_method: method,
         payment_provider: provider ?? null,
-        payment_status: isCod ? 'pending' : 'success',
+        payment_status: 'pending',
         commission_percentage: COMMISSION_RATE * 100,
         platform_commission: amount * COMMISSION_RATE,
         vendor_earnings: amount * (1 - COMMISSION_RATE),
@@ -30,6 +30,73 @@ export const paymentService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Simulates payment gateway verification.
+   * Replace this with real gateway integration (Stripe, Razorpay, etc.) in production.
+   */
+  async verifyPayment(
+    _paymentId: string,
+    method: string
+  ): Promise<{ success: boolean; transactionId: string | null }> {
+    // COD doesn't need verification — stays pending until delivery
+    if (method === 'cod') {
+      return { success: true, transactionId: null };
+    }
+
+    // Simulate gateway processing delay (500-1500ms)
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+
+    // Simulate ~95% success rate
+    const success = Math.random() > 0.05;
+    const transactionId = success
+      ? `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+      : null;
+
+    return { success, transactionId };
+  },
+
+  /**
+   * Full payment orchestrator:
+   * 1. Creates payment with pending status
+   * 2. Verifies via gateway
+   * 3. Syncs payment + order statuses
+   */
+  async processPayment(
+    userId: string,
+    orderId: string,
+    amount: number,
+    method: string
+  ): Promise<{ success: boolean; payment: any; transactionId: string | null; error?: string }> {
+    // Step 1: Create pending payment
+    const payment = await this.createPayment(userId, orderId, amount, method);
+
+    // Step 2: Verify with gateway
+    const verification = await this.verifyPayment(payment.id, method);
+
+    if (verification.success) {
+      // Step 3a: Success — update payment + order
+      const finalStatus = method === 'cod' ? 'pending' : 'success';
+      const updatedPayment = await this.updatePaymentStatus(
+        payment.id,
+        finalStatus,
+        verification.transactionId ?? undefined
+      );
+      await orderService.updateOrderStatus(orderId, {
+        payment_status: method === 'cod' ? 'pending' : 'paid',
+        order_status: 'confirmed',
+      });
+      return { success: true, payment: updatedPayment, transactionId: verification.transactionId };
+    } else {
+      // Step 3b: Failure — update payment + order
+      await this.updatePaymentStatus(payment.id, 'failed');
+      await orderService.updateOrderStatus(orderId, {
+        payment_status: 'failed',
+        order_status: 'processing',
+      });
+      return { success: false, payment, transactionId: null, error: 'Payment verification failed. Please try again.' };
+    }
   },
 
   async getPaymentByOrder(orderId: string) {
