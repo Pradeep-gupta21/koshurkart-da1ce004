@@ -681,10 +681,12 @@ export type Database = {
           review_rating: number | null
           store_name: string
           store_slug: string
+          total_earnings: number | null
           total_sales: number | null
           trust_score: number | null
           user_id: string
           verification_status: string
+          withdrawable_balance: number | null
         }
         Insert: {
           cancellation_rate?: number | null
@@ -699,10 +701,12 @@ export type Database = {
           review_rating?: number | null
           store_name: string
           store_slug: string
+          total_earnings?: number | null
           total_sales?: number | null
           trust_score?: number | null
           user_id: string
           verification_status?: string
+          withdrawable_balance?: number | null
         }
         Update: {
           cancellation_rate?: number | null
@@ -717,10 +721,12 @@ export type Database = {
           review_rating?: number | null
           store_name?: string
           store_slug?: string
+          total_earnings?: number | null
           total_sales?: number | null
           trust_score?: number | null
           user_id?: string
           verification_status?: string
+          withdrawable_balance?: number | null
         }
         Relationships: []
       }

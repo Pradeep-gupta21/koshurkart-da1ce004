@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb, BarChart3 } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle, ShieldCheck, Lightbulb, BarChart3, Wallet, Info } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
 import { pricingService, PricingSuggestion } from "@/services/pricingService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -18,7 +18,7 @@ const scoreColor = (score: number) => {
 const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
-  const [stats, setStats] = useState({ products: 0, totalSales: 0, earnings: 0, campaigns: 0 });
+  const [stats, setStats] = useState({ products: 0, totalSales: 0, totalEarnings: 0, withdrawableBalance: 0, campaigns: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [pricingSuggestions, setPricingSuggestions] = useState<PricingSuggestion[]>([]);
@@ -33,12 +33,13 @@ const VendorOverview = () => {
       const [prodRes, campaignRes, vendorRes] = await Promise.all([
         supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
         supabase.from("ad_campaigns").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
-        supabase.from("vendors").select("total_sales").eq("id", vendorId).single(),
+        supabase.from("vendors").select("total_sales, total_earnings, withdrawable_balance").eq("id", vendorId).single(),
       ]);
       setStats({
         products: prodRes.count ?? 0,
         totalSales: vendorRes.data?.total_sales ?? 0,
-        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5,
+        totalEarnings: Number(vendorRes.data?.total_earnings ?? 0),
+        withdrawableBalance: Number(vendorRes.data?.withdrawable_balance ?? 0),
         campaigns: campaignRes.count ?? 0,
       });
 
@@ -83,12 +84,13 @@ const VendorOverview = () => {
       const [prodRes, campaignRes, vendorRes] = await Promise.all([
         supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
         supabase.from("ad_campaigns").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
-        supabase.from("vendors").select("total_sales").eq("id", vendorId).single(),
+        supabase.from("vendors").select("total_sales, total_earnings, withdrawable_balance").eq("id", vendorId).single(),
       ]);
       setStats({
         products: prodRes.count ?? 0,
         totalSales: vendorRes.data?.total_sales ?? 0,
-        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5,
+        totalEarnings: Number(vendorRes.data?.total_earnings ?? 0),
+        withdrawableBalance: Number(vendorRes.data?.withdrawable_balance ?? 0),
         campaigns: campaignRes.count ?? 0,
       });
       const { data: orderItems } = await supabase
@@ -111,10 +113,10 @@ const VendorOverview = () => {
   });
 
   const cards = [
-    { title: "Total Products", value: stats.products, icon: Package, color: "text-primary" },
     { title: "Total Sales", value: stats.totalSales, icon: ShoppingCart, color: "text-secondary" },
-    { title: "Earnings", value: `$${stats.earnings.toFixed(2)}`, icon: DollarSign, color: "text-accent" },
-    { title: "Active Campaigns", value: stats.campaigns, icon: TrendingUp, color: "text-primary" },
+    { title: "Total Earnings", value: `$${stats.totalEarnings.toFixed(2)}`, icon: DollarSign, color: "text-accent" },
+    { title: "Withdrawable Balance", value: `$${stats.withdrawableBalance.toFixed(2)}`, icon: Wallet, color: "text-primary" },
+    { title: "Orders Completed", value: stats.totalSales, icon: TrendingUp, color: "text-secondary" },
   ];
 
   const suggestions = trustMetrics ? [
@@ -129,6 +131,12 @@ const VendorOverview = () => {
       <div>
         <h1 className="text-2xl font-bold">Dashboard Overview</h1>
         <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
+      </div>
+
+      {/* Commission info banner */}
+      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+        <Info className="h-4 w-4 text-primary shrink-0" />
+        <span>Platform commission is currently <strong>0%</strong>. Vendors receive <strong>100%</strong> earnings.</span>
       </div>
 
       {/* Trust Score Card */}
