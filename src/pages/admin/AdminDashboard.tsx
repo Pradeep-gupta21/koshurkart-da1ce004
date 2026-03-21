@@ -19,6 +19,7 @@ const navItems = [
 
 const AdminDashboard = () => {
   const [suspiciousCount, setSuspiciousCount] = useState(0);
+  const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
 
   useEffect(() => {
     supabase
@@ -27,6 +28,12 @@ const AdminDashboard = () => {
       .eq("is_suspicious", true)
       .eq("moderation_status", "pending")
       .then(({ count }) => setSuspiciousCount(count ?? 0));
+
+    supabase
+      .from("payments")
+      .select("id", { count: "exact", head: true })
+      .eq("payment_status", "pending_verification")
+      .then(({ count }) => setPendingPaymentCount(count ?? 0));
   }, []);
 
   return (
