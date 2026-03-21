@@ -150,6 +150,16 @@ const ProfilePage = () => {
       setProfile(profRes.data);
       setOrders(orderData);
       setNotifications(notifs);
+
+      // Fetch payments for each order
+      const paymentMap: Record<string, any> = {};
+      await Promise.all(
+        orderData.map(async (o: any) => {
+          const p = await paymentService.getPaymentByOrder(o.id);
+          if (p) paymentMap[o.id] = p;
+        })
+      );
+      setPayments(paymentMap);
     };
     fetchData();
   }, [user]);
