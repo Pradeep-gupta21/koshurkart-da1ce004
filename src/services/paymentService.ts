@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
-import { calculateCommission, platformSettings } from '@/config/platformSettings';
+import { calculateCommission, fetchPlatformSettings, platformSettings } from '@/config/platformSettings';
 
 export const paymentService = {
   // ---- Payment record methods ----
@@ -13,6 +13,10 @@ export const paymentService = {
     provider?: string,
     upiId?: string
   ) {
+    // Fetch live commission settings from DB
+    const settings = await fetchPlatformSettings();
+    const { commission, vendorEarnings } = calculateCommission(amount, settings);
+
     const insertData: Record<string, unknown> = {
       user_id: userId,
       order_id: orderId,
@@ -20,9 +24,9 @@ export const paymentService = {
       payment_method: method,
       payment_provider: provider ?? null,
       payment_status: 'pending',
-      commission_percentage: platformSettings.commissionPercentage,
-      platform_commission: calculateCommission(amount).commission,
-      vendor_earnings: calculateCommission(amount).vendorEarnings,
+      commission_percentage: settings.percentage,
+      platform_commission: commission,
+      vendor_earnings: vendorEarnings,
     };
     if (upiId) insertData.upi_id = upiId;
 
