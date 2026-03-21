@@ -276,6 +276,59 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount: number
+          commission_percentage: number | null
+          created_at: string
+          id: string
+          order_id: string
+          payment_method: string
+          payment_provider: string | null
+          payment_status: string
+          platform_commission: number | null
+          transaction_id: string | null
+          user_id: string
+          vendor_earnings: number | null
+        }
+        Insert: {
+          amount?: number
+          commission_percentage?: number | null
+          created_at?: string
+          id?: string
+          order_id: string
+          payment_method?: string
+          payment_provider?: string | null
+          payment_status?: string
+          platform_commission?: number | null
+          transaction_id?: string | null
+          user_id: string
+          vendor_earnings?: number | null
+        }
+        Update: {
+          amount?: number
+          commission_percentage?: number | null
+          created_at?: string
+          id?: string
+          order_id?: string
+          payment_method?: string
+          payment_provider?: string | null
+          payment_status?: string
+          platform_commission?: number | null
+          transaction_id?: string | null
+          user_id?: string
+          vendor_earnings?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payouts: {
         Row: {
           amount: number

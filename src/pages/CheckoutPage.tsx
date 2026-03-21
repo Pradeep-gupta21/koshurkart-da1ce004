@@ -4,14 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import { orderService } from "@/services/orderService";
+import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
 import { inventoryService } from "@/services/inventoryService";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Loader2 } from "lucide-react";
+import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote } from "lucide-react";
+
+const PAYMENT_METHODS = [
+  { value: "card", label: "Credit/Debit Card", icon: CreditCard },
+  { value: "upi", label: "UPI", icon: Smartphone },
+  { value: "netbanking", label: "Net Banking", icon: Building2 },
+  { value: "wallet", label: "Wallet", icon: Wallet },
+  { value: "cod", label: "Cash on Delivery", icon: Banknote },
+] as const;
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
@@ -21,6 +31,7 @@ const CheckoutPage = () => {
   const [isComplete, setIsComplete] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("card");
 
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
@@ -56,6 +67,9 @@ const CheckoutPage = () => {
         }))
       );
 
+      // Create payment record
+      await paymentService.createPayment(user.id, order.id, totalPrice, paymentMethod);
+
       for (const { productId, quantity } of reservedItems) {
         await inventoryService.confirmStock(productId, quantity);
       }
@@ -87,6 +101,10 @@ const CheckoutPage = () => {
         <h1 className="text-2xl font-semibold">Order Placed!</h1>
         <p className="text-muted-foreground mt-2">Thank you for your purchase. Your order ID is:</p>
         {orderId && <p className="font-mono text-sm bg-muted px-3 py-1.5 rounded mt-2 inline-block">{orderId.slice(0, 8)}</p>}
+        <p className="text-sm text-muted-foreground mt-2">
+          Payment: <span className="font-medium capitalize">{paymentMethod}</span>
+          {paymentMethod === 'cod' ? ' — Pay on delivery' : ' — Paid'}
+        </p>
         <div className="mt-6 flex gap-3 justify-center">
           <Button asChild><Link to="/profile">View Orders</Link></Button>
           <Button variant="outline" asChild><Link to="/">Continue Shopping</Link></Button>
@@ -138,20 +156,43 @@ const CheckoutPage = () => {
 
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-2">
-                <Label>Card Number</Label>
-                <Input placeholder="4242 4242 4242 4242" />
+            <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
+              {PAYMENT_METHODS.map(({ value, label, icon: Icon }) => (
+                <label
+                  key={value}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    paymentMethod === value ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <RadioGroupItem value={value} />
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{label}</span>
+                </label>
+              ))}
+            </RadioGroup>
+
+            {paymentMethod === 'card' && (
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="col-span-2 space-y-2">
+                  <Label>Card Number</Label>
+                  <Input placeholder="4242 4242 4242 4242" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expiry</Label>
+                  <Input placeholder="MM/YY" />
+                </div>
+                <div className="space-y-2">
+                  <Label>CVC</Label>
+                  <Input placeholder="123" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Expiry</Label>
-                <Input placeholder="MM/YY" />
+            )}
+            {paymentMethod === 'upi' && (
+              <div className="mt-4 space-y-2">
+                <Label>UPI ID</Label>
+                <Input placeholder="yourname@upi" />
               </div>
-              <div className="space-y-2">
-                <Label>CVC</Label>
-                <Input placeholder="123" />
-              </div>
-            </div>
+            )}
           </div>
         </div>
 

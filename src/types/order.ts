@@ -37,3 +37,18 @@ export interface Order {
   courierApiConfig: Record<string, unknown>;
   createdAt: string;
 }
+
+export interface Payment {
+  id: string;
+  userId: string;
+  orderId: string;
+  amount: number;
+  paymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
+  paymentProvider: string | null;
+  transactionId: string | null;
+  paymentStatus: 'pending' | 'success' | 'failed' | 'refunded';
+  platformCommission: number;
+  commissionPercentage: number;
+  vendorEarnings: number;
+  createdAt: string;
+}

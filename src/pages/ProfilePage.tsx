@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { orderService } from "@/services/orderService";
 import { notificationService } from "@/services/notificationService";
+import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import type { AppNotification } from "@/types/notification";
@@ -136,6 +137,7 @@ const ProfilePage = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [payments, setPayments] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -148,6 +150,16 @@ const ProfilePage = () => {
       setProfile(profRes.data);
       setOrders(orderData);
       setNotifications(notifs);
+
+      // Fetch payments for each order
+      const paymentMap: Record<string, any> = {};
+      await Promise.all(
+        orderData.map(async (o: any) => {
+          const p = await paymentService.getPaymentByOrder(o.id);
+          if (p) paymentMap[o.id] = p;
+        })
+      );
+      setPayments(paymentMap);
     };
     fetchData();
   }, [user]);
@@ -272,6 +284,24 @@ const ProfilePage = () => {
                     <div className="border-t bg-muted/30 p-4 space-y-3">
                       {/* Delivery progress tracker */}
                       <DeliveryProgressTracker currentStatus={o.shipping_status ?? "pending"} />
+
+                      {/* Payment info */}
+                      {payments[o.id] && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                          <CreditCard className="h-3.5 w-3.5" />
+                          <span className="capitalize font-medium">{payments[o.id].payment_method}</span>
+                          <span>·</span>
+                          <Badge variant="outline" className={`text-[10px] ${statusColor[payments[o.id].payment_status] ?? ''}`}>
+                            {payments[o.id].payment_status}
+                          </Badge>
+                          {payments[o.id].transaction_id && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{payments[o.id].transaction_id}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       {/* Shipping info */}
                       <div className="flex flex-wrap gap-3 text-xs">

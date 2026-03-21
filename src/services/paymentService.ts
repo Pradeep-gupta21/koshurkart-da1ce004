@@ -3,6 +3,70 @@ import { supabase } from '@/integrations/supabase/client';
 const COMMISSION_RATE = 0.1;
 
 export const paymentService = {
+  // ---- Payment record methods ----
+
+  async createPayment(
+    userId: string,
+    orderId: string,
+    amount: number,
+    method: string = 'card',
+    provider?: string
+  ) {
+    const isCod = method === 'cod';
+    const { data, error } = await supabase
+      .from('payments')
+      .insert({
+        user_id: userId,
+        order_id: orderId,
+        amount,
+        payment_method: method,
+        payment_provider: provider ?? null,
+        payment_status: isCod ? 'pending' : 'success',
+        commission_percentage: COMMISSION_RATE * 100,
+        platform_commission: amount * COMMISSION_RATE,
+        vendor_earnings: amount * (1 - COMMISSION_RATE),
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getPaymentByOrder(orderId: string) {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('order_id', orderId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserPayments(userId: string) {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  },
+
+  async updatePaymentStatus(paymentId: string, status: string, transactionId?: string) {
+    const updates: Record<string, unknown> = { payment_status: status };
+    if (transactionId) updates.transaction_id = transactionId;
+    const { data, error } = await supabase
+      .from('payments')
+      .update(updates)
+      .eq('id', paymentId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // ---- Payout methods ----
+
   async getVendorPayouts(vendorId: string) {
     const { data, error } = await supabase
       .from('payouts')
