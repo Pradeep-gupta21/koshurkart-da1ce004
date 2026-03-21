@@ -13,6 +13,7 @@ const navItems = [
   { to: "/admin/payouts", icon: Wallet, label: "Payouts" },
   { to: "/admin/reviews", icon: MessageSquare, label: "Reviews", hasBadge: true },
   { to: "/admin/pricing", icon: DollarSign, label: "Dynamic Pricing" },
+  { to: "/admin/payments", icon: CreditCard, label: "Payments", hasPaymentBadge: true },
   { to: "/admin/security", icon: ShieldAlert, label: "Security" },
 ];
 
