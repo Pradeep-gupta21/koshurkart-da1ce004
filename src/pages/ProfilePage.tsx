@@ -137,6 +137,7 @@ const ProfilePage = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [payments, setPayments] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!user) return;
