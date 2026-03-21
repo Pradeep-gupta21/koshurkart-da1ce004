@@ -133,6 +133,12 @@ const VendorOverview = () => {
         <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
       </div>
 
+      {/* Commission info banner */}
+      <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+        <Info className="h-4 w-4 text-primary shrink-0" />
+        <span>Platform commission is currently <strong>0%</strong>. Vendors receive <strong>100%</strong> earnings.</span>
+      </div>
+
       {/* Trust Score Card */}
       {trustMetrics && (
         <Card className="marketplace-shadow">
