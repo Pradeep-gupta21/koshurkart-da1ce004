@@ -33,12 +33,13 @@ const VendorOverview = () => {
       const [prodRes, campaignRes, vendorRes] = await Promise.all([
         supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
         supabase.from("ad_campaigns").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
-        supabase.from("vendors").select("total_sales").eq("id", vendorId).single(),
+        supabase.from("vendors").select("total_sales, total_earnings, withdrawable_balance").eq("id", vendorId).single(),
       ]);
       setStats({
         products: prodRes.count ?? 0,
         totalSales: vendorRes.data?.total_sales ?? 0,
-        earnings: (vendorRes.data?.total_sales ?? 0) * 25.5,
+        totalEarnings: Number(vendorRes.data?.total_earnings ?? 0),
+        withdrawableBalance: Number(vendorRes.data?.withdrawable_balance ?? 0),
         campaigns: campaignRes.count ?? 0,
       });
 
