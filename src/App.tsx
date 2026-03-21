@@ -36,6 +36,7 @@ import AdminPlacements from "@/pages/admin/AdminPlacements";
 import AdminReviews from "@/pages/admin/AdminReviews";
 import AdminPricing from "@/pages/admin/AdminPricing";
 import AdminSecurity from "@/pages/admin/AdminSecurity";
+import AdminPayments from "@/pages/admin/AdminPayments";
 import NotFound from "@/pages/NotFound";
 import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 
