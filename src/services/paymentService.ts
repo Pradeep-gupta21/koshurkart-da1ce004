@@ -21,9 +21,9 @@ export const paymentService = {
         payment_method: method,
         payment_provider: provider ?? null,
         payment_status: 'pending',
-        commission_percentage: COMMISSION_RATE * 100,
-        platform_commission: amount * COMMISSION_RATE,
-        vendor_earnings: amount * (1 - COMMISSION_RATE),
+        commission_percentage: platformSettings.commissionPercentage,
+        platform_commission: calculateCommission(amount).commission,
+        vendor_earnings: calculateCommission(amount).vendorEarnings,
       })
       .select()
       .single();
