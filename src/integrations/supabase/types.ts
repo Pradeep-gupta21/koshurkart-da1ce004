@@ -373,6 +373,27 @@ export type Database = {
           },
         ]
       }
+      platform_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string | null
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       pricing_rules: {
         Row: {
           created_at: string | null
