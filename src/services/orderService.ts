@@ -60,4 +60,15 @@ export const orderService = {
       .eq('id', orderId);
     if (error) throw error;
   },
+
+  async updateOrderStatus(orderId: string, updates: {
+    order_status?: string;
+    payment_status?: string;
+  }) {
+    const { error } = await supabase
+      .from('orders')
+      .update(updates)
+      .eq('id', orderId);
+    if (error) throw error;
+  },
 };
