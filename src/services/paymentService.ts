@@ -10,21 +10,25 @@ export const paymentService = {
     orderId: string,
     amount: number,
     method: string = 'card',
-    provider?: string
+    provider?: string,
+    upiId?: string
   ) {
+    const insertData: Record<string, unknown> = {
+      user_id: userId,
+      order_id: orderId,
+      amount,
+      payment_method: method,
+      payment_provider: provider ?? null,
+      payment_status: 'pending',
+      commission_percentage: platformSettings.commissionPercentage,
+      platform_commission: calculateCommission(amount).commission,
+      vendor_earnings: calculateCommission(amount).vendorEarnings,
+    };
+    if (upiId) insertData.upi_id = upiId;
+
     const { data, error } = await supabase
       .from('payments')
-      .insert({
-        user_id: userId,
-        order_id: orderId,
-        amount,
-        payment_method: method,
-        payment_provider: provider ?? null,
-        payment_status: 'pending',
-        commission_percentage: platformSettings.commissionPercentage,
-        platform_commission: calculateCommission(amount).commission,
-        vendor_earnings: calculateCommission(amount).vendorEarnings,
-      })
+      .insert(insertData as any)
       .select()
       .single();
     if (error) throw error;
@@ -59,23 +63,50 @@ export const paymentService = {
   /**
    * Full payment orchestrator:
    * 1. Creates payment with pending status
-   * 2. Verifies via gateway
+   * 2. Verifies via gateway (or returns UPI QR for manual flow)
    * 3. Syncs payment + order statuses
    */
   async processPayment(
     userId: string,
     orderId: string,
     amount: number,
-    method: string
-  ): Promise<{ success: boolean; payment: any; transactionId: string | null; error?: string }> {
+    method: string,
+    upiId?: string
+  ): Promise<{
+    success: boolean;
+    payment: any;
+    transactionId: string | null;
+    error?: string;
+    awaitingUpi?: boolean;
+    qrCodeUrl?: string;
+  }> {
     // Step 1: Create pending payment
-    const payment = await this.createPayment(userId, orderId, amount, method);
+    const payment = await this.createPayment(userId, orderId, amount, method, undefined, upiId);
 
-    // Step 2: Verify with gateway
+    // UPI flow: generate QR and return for manual confirmation
+    if (method === 'upi') {
+      const upiLink = `upi://pay?pa=${encodeURIComponent(platformSettings.merchantUpiId)}&am=${amount}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
+
+      // Store QR code URL on the payment
+      await supabase
+        .from('payments')
+        .update({ qr_code_url: qrCodeUrl } as any)
+        .eq('id', payment.id);
+
+      return {
+        success: false,
+        awaitingUpi: true,
+        payment: { ...payment, qr_code_url: qrCodeUrl },
+        transactionId: null,
+        qrCodeUrl,
+      };
+    }
+
+    // Step 2: Verify with gateway (non-UPI)
     const verification = await this.verifyPayment(payment.id, method);
 
     if (verification.success) {
-      // Step 3a: Success — update payment + order
       const finalStatus = method === 'cod' ? 'pending' : 'success';
       const updatedPayment = await this.updatePaymentStatus(
         payment.id,
@@ -88,7 +119,6 @@ export const paymentService = {
       });
       return { success: true, payment: updatedPayment, transactionId: verification.transactionId };
     } else {
-      // Step 3b: Failure — update payment + order
       await this.updatePaymentStatus(payment.id, 'failed');
       await orderService.updateOrderStatus(orderId, {
         payment_status: 'failed',
@@ -96,6 +126,46 @@ export const paymentService = {
       });
       return { success: false, payment, transactionId: null, error: 'Payment verification failed. Please try again.' };
     }
+  },
+
+  /**
+   * Confirm UPI payment — user clicks "I Have Paid"
+   */
+  async confirmUpiPayment(paymentId: string, orderId: string, proofUrl?: string) {
+    const updates: Record<string, unknown> = { payment_status: 'pending_verification' };
+    if (proofUrl) updates.payment_proof = proofUrl;
+
+    const { data, error } = await supabase
+      .from('payments')
+      .update(updates as any)
+      .eq('id', paymentId)
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Update order to reflect pending verification
+    await orderService.updateOrderStatus(orderId, {
+      payment_status: 'pending',
+      order_status: 'processing',
+    });
+
+    return data;
+  },
+
+  /**
+   * Upload payment proof screenshot
+   */
+  async uploadPaymentProof(file: File): Promise<string> {
+    const ext = file.name.split('.').pop() ?? 'png';
+    const path = `payment-proofs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('product-images')
+      .upload(path, file, { cacheControl: '3600', upsert: false });
+    if (error) throw error;
+
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return data.publicUrl;
   },
 
   async getPaymentByOrder(orderId: string) {
