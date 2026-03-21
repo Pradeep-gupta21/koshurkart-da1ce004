@@ -113,10 +113,10 @@ const VendorOverview = () => {
   });
 
   const cards = [
-    { title: "Total Products", value: stats.products, icon: Package, color: "text-primary" },
     { title: "Total Sales", value: stats.totalSales, icon: ShoppingCart, color: "text-secondary" },
-    { title: "Earnings", value: `$${stats.earnings.toFixed(2)}`, icon: DollarSign, color: "text-accent" },
-    { title: "Active Campaigns", value: stats.campaigns, icon: TrendingUp, color: "text-primary" },
+    { title: "Total Earnings", value: `$${stats.totalEarnings.toFixed(2)}`, icon: DollarSign, color: "text-accent" },
+    { title: "Withdrawable Balance", value: `$${stats.withdrawableBalance.toFixed(2)}`, icon: Wallet, color: "text-primary" },
+    { title: "Orders Completed", value: stats.totalSales, icon: TrendingUp, color: "text-secondary" },
   ];
 
   const suggestions = trustMetrics ? [
