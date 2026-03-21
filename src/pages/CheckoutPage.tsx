@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,9 @@ import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
 import { inventoryService } from "@/services/inventoryService";
+import { platformSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote, XCircle, Upload, QrCode } from "lucide-react";
 
 const PAYMENT_METHODS = [
   { value: "card", label: "Credit/Debit Card", icon: CreditCard },
@@ -23,7 +24,7 @@ const PAYMENT_METHODS = [
   { value: "cod", label: "Cash on Delivery", icon: Banknote },
 ] as const;
 
-type FlowState = "form" | "processing" | "success" | "failed";
+type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending";
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
@@ -36,6 +37,13 @@ const CheckoutPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [failureError, setFailureError] = useState<string | null>(null);
+
+  // UPI state
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [upiPaymentId, setUpiPaymentId] = useState<string | null>(null);
+  const [upiConfirming, setUpiConfirming] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Track reserved items for cleanup on failure
   const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
@@ -81,13 +89,22 @@ const CheckoutPage = () => {
         }))
       );
 
-      // Step 3: Process payment (shows processing state)
+      // Step 3: Process payment
       setFlowState("processing");
 
       const result = await paymentService.processPayment(user.id, order.id, totalPrice, paymentMethod);
 
+      if (result.awaitingUpi) {
+        // UPI flow — show QR code
+        setQrCodeUrl(result.qrCodeUrl ?? null);
+        setUpiPaymentId(result.payment?.id ?? null);
+        setFlowState("upi_pending");
+        setSubmitting(false);
+        return;
+      }
+
       if (result.success) {
-        // Step 4a: Payment success — confirm stock + track analytics
+        // Payment success — confirm stock + track analytics
         for (const { productId, quantity } of reserved) {
           await inventoryService.confirmStock(productId, quantity);
         }
@@ -102,7 +119,7 @@ const CheckoutPage = () => {
         clearCart();
         setFlowState("success");
       } else {
-        // Step 4b: Payment failed — release inventory
+        // Payment failed — release inventory
         for (const { productId, quantity } of reserved) {
           try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
         }
@@ -110,7 +127,6 @@ const CheckoutPage = () => {
         setFlowState("failed");
       }
     } catch (err: any) {
-      // Infrastructure error — release reserved stock
       for (const { productId, quantity } of reserved) {
         try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
       }
@@ -122,13 +138,45 @@ const CheckoutPage = () => {
     }
   };
 
+  const handleUpiConfirm = async () => {
+    if (!upiPaymentId || !orderId) return;
+    setUpiConfirming(true);
+
+    try {
+      let proofUrl: string | undefined;
+      if (proofFile) {
+        proofUrl = await paymentService.uploadPaymentProof(proofFile);
+      }
+
+      await paymentService.confirmUpiPayment(upiPaymentId, orderId, proofUrl);
+
+      // Confirm stock + track analytics
+      for (const { productId, quantity } of reservedItems) {
+        await inventoryService.confirmStock(productId, quantity);
+      }
+      for (const { product, quantity } of items) {
+        analyticsService.trackEvent('purchase', product.id, undefined, {
+          quantity,
+          price: product.discountPrice ?? product.price,
+        });
+      }
+
+      clearCart();
+      setFlowState("success");
+      toast({ title: "Payment submitted", description: "Your payment is being verified." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message ?? "Could not confirm payment.", variant: "destructive" });
+    } finally {
+      setUpiConfirming(false);
+    }
+  };
+
   const handleRetryPayment = async () => {
     if (!user || !pendingOrderId) return;
     setSubmitting(true);
     setFailureError(null);
 
     try {
-      // Re-reserve stock
       const reserved: { productId: string; quantity: number }[] = [];
       for (const { product, quantity } of items) {
         await inventoryService.reserveStock(product.id, quantity);
@@ -139,6 +187,14 @@ const CheckoutPage = () => {
       setFlowState("processing");
 
       const result = await paymentService.processPayment(user.id, pendingOrderId, totalPrice, paymentMethod);
+
+      if (result.awaitingUpi) {
+        setQrCodeUrl(result.qrCodeUrl ?? null);
+        setUpiPaymentId(result.payment?.id ?? null);
+        setFlowState("upi_pending");
+        setSubmitting(false);
+        return;
+      }
 
       if (result.success) {
         for (const { productId, quantity } of reserved) {
@@ -179,6 +235,82 @@ const CheckoutPage = () => {
     );
   }
 
+  // UPI Pending state — QR Code screen
+  if (flowState === "upi_pending") {
+    return (
+      <div className="container mx-auto px-4 py-12 max-w-md">
+        <div className="bg-card rounded-xl marketplace-shadow p-8 text-center">
+          <div className="bg-primary/10 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <QrCode className="h-8 w-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-semibold mb-2">Pay via UPI</h1>
+          <p className="text-3xl font-bold text-primary mb-6">{formatPrice(totalPrice)}</p>
+
+          {/* QR Code */}
+          {qrCodeUrl && (
+            <div className="bg-white rounded-xl p-4 inline-block mb-4">
+              <img src={qrCodeUrl} alt="UPI QR Code" className="w-[200px] h-[200px]" />
+            </div>
+          )}
+
+          {/* Merchant UPI ID */}
+          <div className="bg-muted rounded-lg px-4 py-3 mb-6">
+            <p className="text-xs text-muted-foreground mb-1">Or pay manually to UPI ID</p>
+            <p className="font-mono font-semibold text-sm select-all">{platformSettings.merchantUpiId}</p>
+          </div>
+
+          {/* Instructions */}
+          <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">How to pay:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Open any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
+              <li>Scan the QR code above or enter the UPI ID</li>
+              <li>Enter the exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></li>
+              <li>Complete the payment and click "I Have Paid" below</li>
+            </ol>
+          </div>
+
+          {/* Optional proof upload */}
+          <div className="mb-6">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {proofFile ? proofFile.name : 'Upload Payment Screenshot (optional)'}
+            </Button>
+          </div>
+
+          {/* Confirm button */}
+          <Button
+            size="lg"
+            className="w-full h-12 mb-3"
+            onClick={handleUpiConfirm}
+            disabled={upiConfirming}
+          >
+            {upiConfirming ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirming...</>
+            ) : (
+              <><CheckCircle className="h-4 w-4 mr-2" /> I Have Paid</>
+            )}
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/cart">Cancel & Return to Cart</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // Success state
   if (flowState === "success") {
     return (
@@ -186,8 +318,15 @@ const CheckoutPage = () => {
         <div className="bg-success/10 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle className="h-10 w-10 text-success" />
         </div>
-        <h1 className="text-2xl font-semibold">Order Confirmed!</h1>
-        <p className="text-muted-foreground mt-2">Your payment was successful. Order ID:</p>
+        <h1 className="text-2xl font-semibold">
+          {paymentMethod === 'upi' ? 'Payment Submitted for Verification!' : 'Order Confirmed!'}
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          {paymentMethod === 'upi'
+            ? 'Your UPI payment is being verified. We\'ll update your order once confirmed.'
+            : 'Your payment was successful.'}
+          {' '}Order ID:
+        </p>
         {orderId && <p className="font-mono text-sm bg-muted px-3 py-1.5 rounded mt-2 inline-block">{orderId.slice(0, 8)}</p>}
         {transactionId && (
           <p className="text-xs text-muted-foreground mt-1">
@@ -196,7 +335,7 @@ const CheckoutPage = () => {
         )}
         <p className="text-sm text-muted-foreground mt-2">
           Payment: <span className="font-medium capitalize">{paymentMethod}</span>
-          {paymentMethod === 'cod' ? ' — Pay on delivery' : ' — Paid'}
+          {paymentMethod === 'cod' ? ' — Pay on delivery' : paymentMethod === 'upi' ? ' — Pending verification' : ' — Paid'}
         </p>
         <div className="mt-6 flex gap-3 justify-center">
           <Button asChild><Link to="/profile">View Orders</Link></Button>
@@ -300,9 +439,10 @@ const CheckoutPage = () => {
               </div>
             )}
             {paymentMethod === 'upi' && (
-              <div className="mt-4 space-y-2">
-                <Label>UPI ID</Label>
-                <Input placeholder="yourname@upi" />
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  After placing your order, you'll see a QR code to scan with any UPI app.
+                </p>
               </div>
             )}
           </div>
