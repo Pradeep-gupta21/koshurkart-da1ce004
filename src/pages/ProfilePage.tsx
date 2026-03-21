@@ -285,6 +285,24 @@ const ProfilePage = () => {
                       {/* Delivery progress tracker */}
                       <DeliveryProgressTracker currentStatus={o.shipping_status ?? "pending"} />
 
+                      {/* Payment info */}
+                      {payments[o.id] && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                          <CreditCard className="h-3.5 w-3.5" />
+                          <span className="capitalize font-medium">{payments[o.id].payment_method}</span>
+                          <span>·</span>
+                          <Badge variant="outline" className={`text-[10px] ${statusColor[payments[o.id].payment_status] ?? ''}`}>
+                            {payments[o.id].payment_status}
+                          </Badge>
+                          {payments[o.id].transaction_id && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{payments[o.id].transaction_id}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {/* Shipping info */}
                       <div className="flex flex-wrap gap-3 text-xs">
                         {o.shipping_provider && (
