@@ -8,7 +8,7 @@ import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import type { AppNotification } from "@/types/notification";
