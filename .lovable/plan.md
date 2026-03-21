@@ -1,42 +1,67 @@
 
 
-## Vendor Earnings Dashboard UI Enhancement
+## Admin Settings Page for Commission Configuration
 
-### What Changes
+### Overview
+Create an admin settings page that stores commission configuration in a new `platform_settings` database table (instead of the current in-memory config). The payment service will read settings from the DB at payment time, so toggling commission takes effect immediately without redeployment.
 
-Redesign `VendorOverview.tsx` to be a comprehensive earnings-focused dashboard with charts, recent payments, and a polished modern layout.
+### 1. Database Migration
 
-### 1. Update `VendorOverview.tsx` — Full Redesign
+Create a `platform_settings` table to persist configuration:
+```sql
+CREATE TABLE platform_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  key text UNIQUE NOT NULL,
+  value jsonb NOT NULL DEFAULT '{}',
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE platform_settings ENABLE ROW LEVEL SECURITY;
+-- Anyone can read settings
+CREATE POLICY "Anyone can read settings" ON platform_settings FOR SELECT TO public USING (true);
+-- Only admins can update
+CREATE POLICY "Admin manages settings" ON platform_settings FOR ALL TO authenticated
+  USING (has_role(auth.uid(), 'admin'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
+```
 
-**Stat Cards (top row, 4 columns):**
-- Total Sales (count), Total Earnings ($), Withdrawable Balance ($), Active Products
-- Each card with icon, value, and subtle gradient background accents
+Seed default commission settings:
+```sql
+INSERT INTO platform_settings (key, value) VALUES
+  ('commission', '{"enabled": false, "percentage": 0}'::jsonb);
+```
 
-**Charts Section (2-column grid):**
-- **Earnings Over Time** — AreaChart (Recharts) showing earnings by period, fetched from `payments` table grouped by `created_at` (last 30 days, aggregated daily)
-- **Orders Over Time** — BarChart showing order count per day from `order_items` grouped by date
+### 2. Create `src/pages/admin/AdminSettings.tsx`
 
-Data source: query `payments` (where vendor's order_items exist) and `order_items` for the vendor, group by date in JS.
+Admin settings page with:
+- **Commission toggle** (Switch component) — enables/disables platform commission
+- **Commission percentage** (number Input, 0-50 range) — sets the percentage
+- **Save button** — updates the `platform_settings` row
+- **Info text**: "When enabled, the platform will deduct the configured percentage from each payment as commission. Vendors will receive the remaining amount."
+- Shows current merchant UPI ID (read-only for now)
 
-**Recent Payments Card:**
-- Fetch from `payments` table via order_items join (vendor's payments)
-- Show amount, payment method, status badge (color-coded), date
-- Limit to 5 most recent
+### 3. Update `src/config/platformSettings.ts`
 
-**Recent Orders Card (already exists, polish it):**
-- Add order date, status badge, better layout with product image thumbnail
+Add an async function `fetchPlatformSettings()` that reads from `platform_settings` table and returns the commission config. The static `platformSettings` object remains as fallback defaults.
 
-**Keep existing sections:** Trust Score, Low Stock Alerts, Pricing Insights, Commission banner — but reorder for better flow: stats → charts → recent payments → recent orders → trust → alerts → pricing
+Update `calculateCommission()` to accept an optional settings parameter (for when settings are fetched from DB).
 
-### 2. Add Data Fetching
+### 4. Update `src/services/paymentService.ts`
 
-New queries in the component:
-- `payments` joined through `order_items` for the vendor — already accessible via vendor RLS policy on payments
-- Group payments by day for the earnings chart
-- Group order_items by day for the orders chart
+In `createPayment()`: fetch commission settings from DB via `fetchPlatformSettings()` before calculating commission, so it uses the live admin-configured values.
 
-### Files to Modify
-- **`src/pages/vendor/VendorOverview.tsx`** — major UI overhaul with Recharts charts, recent payments section, improved card design
+### 5. Update `AdminDashboard.tsx` — Add nav item
 
-No new files or database changes needed. Recharts is already installed and used in VendorAnalytics.
+Add "Settings" with a Settings/Cog icon to the sidebar nav.
+
+### 6. Update `App.tsx` — Add route
+
+Add `/admin/settings` route.
+
+### Files
+- **Migration**: Create `platform_settings` table with seed data
+- **Create**: `src/pages/admin/AdminSettings.tsx`
+- **Modify**: `src/config/platformSettings.ts` — add DB fetch function
+- **Modify**: `src/services/paymentService.ts` — use live settings from DB
+- **Modify**: `src/pages/admin/AdminDashboard.tsx` — add Settings nav item
+- **Modify**: `src/App.tsx` — add route
 
