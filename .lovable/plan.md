@@ -1,67 +1,68 @@
 
 
-## Admin Settings Page for Commission Configuration
+## Fix: Infinite Recursion in Orders RLS Policy
 
-### Overview
-Create an admin settings page that stores commission configuration in a new `platform_settings` database table (instead of the current in-memory config). The payment service will read settings from the DB at payment time, so toggling commission takes effect immediately without redeployment.
+### Root Cause
 
-### 1. Database Migration
+The `orders` SELECT policy references `order_items`, and the `order_items` SELECT policy references `orders` — creating a circular dependency that Postgres detects as infinite recursion.
 
-Create a `platform_settings` table to persist configuration:
+Specifically:
+- **orders SELECT**: `... OR EXISTS (SELECT 1 FROM order_items oi JOIN vendors v ON v.id = oi.vendor_id WHERE oi.order_id = orders.id ...)`
+- **order_items SELECT**: `... OR EXISTS (SELECT 1 FROM orders o WHERE o.id = order_items.order_id AND o.user_id = auth.uid())`
+
+When inserting an order, the SELECT policy evaluates, which queries order_items, which triggers order_items' SELECT policy, which queries orders again — infinite loop.
+
+### Fix
+
+Create two security definer functions to break the circular RLS dependency:
+
+1. **`is_order_owner(order_id, user_id)`** — checks if user owns the order (used by order_items policy instead of querying orders directly)
+2. **`is_vendor_order(order_id, user_id)`** — checks if user is a vendor with items in the order (used by orders policy instead of querying order_items directly)
+
+Then drop and recreate the problematic RLS policies to use these functions.
+
+### Migration SQL
+
 ```sql
-CREATE TABLE platform_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  key text UNIQUE NOT NULL,
-  value jsonb NOT NULL DEFAULT '{}',
-  updated_at timestamptz DEFAULT now()
-);
-ALTER TABLE platform_settings ENABLE ROW LEVEL SECURITY;
--- Anyone can read settings
-CREATE POLICY "Anyone can read settings" ON platform_settings FOR SELECT TO public USING (true);
--- Only admins can update
-CREATE POLICY "Admin manages settings" ON platform_settings FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
+-- Function: check if user owns order (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.is_order_owner(_order_id uuid, _user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM orders WHERE id = _order_id AND user_id = _user_id);
+$$;
+
+-- Function: check if user is vendor on order (bypasses RLS)
+CREATE OR REPLACE FUNCTION public.is_vendor_order(_order_id uuid, _user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM order_items oi JOIN vendors v ON v.id = oi.vendor_id
+    WHERE oi.order_id = _order_id AND v.user_id = _user_id
+  );
+$$;
+
+-- Fix orders SELECT policy
+DROP POLICY "Vendors can view orders with their items" ON orders;
+CREATE POLICY "Vendors can view orders with their items" ON orders FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR is_vendor_order(id, auth.uid()));
+
+-- Fix orders UPDATE policy
+DROP POLICY "Vendors can update orders with their items" ON orders;
+CREATE POLICY "Vendors can update orders with their items" ON orders FOR UPDATE TO authenticated
+  USING (is_vendor_order(id, auth.uid()));
+
+-- Fix order_items SELECT policy
+DROP POLICY "Vendors can view their order items" ON order_items;
+CREATE POLICY "Vendors can view their order items" ON order_items FOR SELECT TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM vendors v WHERE v.id = order_items.vendor_id AND v.user_id = auth.uid())
+    OR is_order_owner(order_id, auth.uid())
+  );
+
+-- Fix order_items INSERT policy
+DROP POLICY "Users insert order items" ON order_items;
+CREATE POLICY "Users insert order items" ON order_items FOR INSERT TO authenticated
+  WITH CHECK (is_order_owner(order_id, auth.uid()));
 ```
-
-Seed default commission settings:
-```sql
-INSERT INTO platform_settings (key, value) VALUES
-  ('commission', '{"enabled": false, "percentage": 0}'::jsonb);
-```
-
-### 2. Create `src/pages/admin/AdminSettings.tsx`
-
-Admin settings page with:
-- **Commission toggle** (Switch component) — enables/disables platform commission
-- **Commission percentage** (number Input, 0-50 range) — sets the percentage
-- **Save button** — updates the `platform_settings` row
-- **Info text**: "When enabled, the platform will deduct the configured percentage from each payment as commission. Vendors will receive the remaining amount."
-- Shows current merchant UPI ID (read-only for now)
-
-### 3. Update `src/config/platformSettings.ts`
-
-Add an async function `fetchPlatformSettings()` that reads from `platform_settings` table and returns the commission config. The static `platformSettings` object remains as fallback defaults.
-
-Update `calculateCommission()` to accept an optional settings parameter (for when settings are fetched from DB).
-
-### 4. Update `src/services/paymentService.ts`
-
-In `createPayment()`: fetch commission settings from DB via `fetchPlatformSettings()` before calculating commission, so it uses the live admin-configured values.
-
-### 5. Update `AdminDashboard.tsx` — Add nav item
-
-Add "Settings" with a Settings/Cog icon to the sidebar nav.
-
-### 6. Update `App.tsx` — Add route
-
-Add `/admin/settings` route.
 
 ### Files
-- **Migration**: Create `platform_settings` table with seed data
-- **Create**: `src/pages/admin/AdminSettings.tsx`
-- **Modify**: `src/config/platformSettings.ts` — add DB fetch function
-- **Modify**: `src/services/paymentService.ts` — use live settings from DB
-- **Modify**: `src/pages/admin/AdminDashboard.tsx` — add Settings nav item
-- **Modify**: `src/App.tsx` — add route
+- **Migration only** — no code changes needed
 
