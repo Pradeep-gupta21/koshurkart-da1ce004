@@ -46,9 +46,12 @@ export interface Payment {
   paymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
   paymentProvider: string | null;
   transactionId: string | null;
-  paymentStatus: 'pending' | 'success' | 'failed' | 'refunded';
+  paymentStatus: 'pending' | 'success' | 'failed' | 'refunded' | 'pending_verification';
   platformCommission: number;
   commissionPercentage: number;
   vendorEarnings: number;
+  upiId: string | null;
+  qrCodeUrl: string | null;
+  paymentProof: string | null;
   createdAt: string;
 }

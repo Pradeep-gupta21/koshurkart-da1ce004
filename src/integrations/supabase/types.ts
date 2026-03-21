@@ -284,10 +284,13 @@ export type Database = {
           id: string
           order_id: string
           payment_method: string
+          payment_proof: string | null
           payment_provider: string | null
           payment_status: string
           platform_commission: number | null
+          qr_code_url: string | null
           transaction_id: string | null
+          upi_id: string | null
           user_id: string
           vendor_earnings: number | null
         }
@@ -298,10 +301,13 @@ export type Database = {
           id?: string
           order_id: string
           payment_method?: string
+          payment_proof?: string | null
           payment_provider?: string | null
           payment_status?: string
           platform_commission?: number | null
+          qr_code_url?: string | null
           transaction_id?: string | null
+          upi_id?: string | null
           user_id: string
           vendor_earnings?: number | null
         }
@@ -312,10 +318,13 @@ export type Database = {
           id?: string
           order_id?: string
           payment_method?: string
+          payment_proof?: string | null
           payment_provider?: string | null
           payment_status?: string
           platform_commission?: number | null
+          qr_code_url?: string | null
           transaction_id?: string | null
+          upi_id?: string | null
           user_id?: string
           vendor_earnings?: number | null
         }
