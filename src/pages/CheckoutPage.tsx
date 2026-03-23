@@ -19,12 +19,13 @@ import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Bankno
 const PAYMENT_METHODS = [
   { value: "card", label: "Credit/Debit Card", icon: CreditCard },
   { value: "upi", label: "UPI", icon: Smartphone },
+  { value: "razorpay", label: "Razorpay", icon: CreditCard },
   { value: "netbanking", label: "Net Banking", icon: Building2 },
   { value: "wallet", label: "Wallet", icon: Wallet },
   { value: "cod", label: "Cash on Delivery", icon: Banknote },
 ] as const;
 
-type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending";
+type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
