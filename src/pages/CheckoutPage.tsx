@@ -14,15 +14,13 @@ import { analyticsService } from "@/services/analyticsService";
 import { inventoryService } from "@/services/inventoryService";
 import { platformSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Banknote, XCircle, Upload, QrCode } from "lucide-react";
+import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const PAYMENT_METHODS = [
-  { value: "card", label: "Credit/Debit Card", icon: CreditCard },
-  { value: "upi", label: "UPI", icon: Smartphone },
-  { value: "razorpay", label: "Razorpay", icon: CreditCard },
-  { value: "netbanking", label: "Net Banking", icon: Building2 },
-  { value: "wallet", label: "Wallet", icon: Wallet },
-  { value: "cod", label: "Cash on Delivery", icon: Banknote },
+  { value: "upi", label: "Pay using UPI", description: "Scan QR code to pay instantly", icon: QrCode, iconBg: "bg-primary/10 text-primary" },
+  { value: "razorpay", label: "Pay via Razorpay", description: "Card, UPI, Netbanking & more", icon: CreditCard, iconBg: "bg-accent/10 text-accent" },
+  { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary" },
 ] as const;
 
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
