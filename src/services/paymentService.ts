@@ -120,6 +120,16 @@ export const paymentService = {
       };
     }
 
+    // COD flow: deterministic success, no gateway needed
+    if (method === 'cod') {
+      await this.updatePaymentStatus(payment.id, 'pending');
+      await orderService.updateOrderStatus(orderId, {
+        payment_status: 'pending',
+        order_status: 'confirmed',
+      });
+      return { success: true, payment, transactionId: null };
+    }
+
     // Razorpay flow: create Razorpay order via edge function
     if (method === 'razorpay') {
       try {
@@ -152,29 +162,8 @@ export const paymentService = {
       }
     }
 
-    // Step 2: Verify with gateway (non-UPI, non-Razorpay)
-    const verification = await this.verifyPayment(payment.id, method);
-
-    if (verification.success) {
-      const finalStatus = method === 'cod' ? 'pending' : 'success';
-      const updatedPayment = await this.updatePaymentStatus(
-        payment.id,
-        finalStatus,
-        verification.transactionId ?? undefined
-      );
-      await orderService.updateOrderStatus(orderId, {
-        payment_status: method === 'cod' ? 'pending' : 'paid',
-        order_status: 'confirmed',
-      });
-      return { success: true, payment: updatedPayment, transactionId: verification.transactionId };
-    } else {
-      await this.updatePaymentStatus(payment.id, 'failed');
-      await orderService.updateOrderStatus(orderId, {
-        payment_status: 'failed',
-        order_status: 'processing',
-      });
-      return { success: false, payment, transactionId: null, error: 'Payment verification failed. Please try again.' };
-    }
+    // Unsupported method fallback
+    return { success: false, payment, transactionId: null, error: 'Unsupported payment method.' };
   },
 
   /**
