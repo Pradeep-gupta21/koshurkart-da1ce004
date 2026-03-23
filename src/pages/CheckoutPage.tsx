@@ -362,7 +362,7 @@ const CheckoutPage = () => {
           {/* Merchant UPI ID */}
           <div className="bg-muted rounded-lg px-4 py-3 mb-6">
             <p className="text-xs text-muted-foreground mb-1">Or pay manually to UPI ID</p>
-            <p className="font-mono font-semibold text-sm select-all">{platformSettings.merchantUpiId}</p>
+            <p className="font-mono font-semibold text-sm select-all">{pmSettings?.merchantUpiId ?? "merchant@upi"}</p>
           </div>
 
           {/* Instructions */}
