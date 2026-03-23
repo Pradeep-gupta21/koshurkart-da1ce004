@@ -56,7 +56,6 @@ const CheckoutPage = () => {
       return true; // cod always available
     });
   }, [pmSettings]);
-  const [failureError, setFailureError] = useState<string | null>(null);
 
   // UPI state
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
