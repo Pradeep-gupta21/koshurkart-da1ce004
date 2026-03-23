@@ -514,7 +514,7 @@ const CheckoutPage = () => {
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {PAYMENT_METHODS.map(({ value, label, description, icon: Icon, iconBg }) => {
+              {availableMethods.map(({ value, label, description, icon: Icon, iconBg }) => {
                 const isSelected = paymentMethod === value;
                 return (
                   <button
