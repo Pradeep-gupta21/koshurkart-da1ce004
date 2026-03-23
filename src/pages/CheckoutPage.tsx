@@ -19,12 +19,13 @@ import { CheckCircle, Loader2, CreditCard, Smartphone, Building2, Wallet, Bankno
 const PAYMENT_METHODS = [
   { value: "card", label: "Credit/Debit Card", icon: CreditCard },
   { value: "upi", label: "UPI", icon: Smartphone },
+  { value: "razorpay", label: "Razorpay", icon: CreditCard },
   { value: "netbanking", label: "Net Banking", icon: Building2 },
   { value: "wallet", label: "Wallet", icon: Wallet },
   { value: "cod", label: "Cash on Delivery", icon: Banknote },
 ] as const;
 
-type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending";
+type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
   const { items, totalPrice, clearCart } = useCart();
@@ -45,6 +46,9 @@ const CheckoutPage = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Razorpay state
+  const [razorpayPaymentRecord, setRazorpayPaymentRecord] = useState<any>(null);
+
   // Track reserved items for cleanup on failure
   const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
@@ -52,6 +56,75 @@ const CheckoutPage = () => {
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
   });
+
+  const openRazorpayCheckout = async (
+    razorpayOrderId: string,
+    razorpayKeyId: string,
+    payment: any,
+    currentOrderId: string,
+    reserved: { productId: string; quantity: number }[]
+  ) => {
+    const scriptLoaded = await paymentService.loadRazorpayScript();
+    if (!scriptLoaded) {
+      toast({ title: "Error", description: "Failed to load Razorpay. Please try again.", variant: "destructive" });
+      setFlowState("failed");
+      setFailureError("Could not load payment gateway.");
+      return;
+    }
+
+    const options = {
+      key: razorpayKeyId,
+      amount: Math.round(totalPrice * 100),
+      currency: "INR",
+      name: "Marketplace",
+      description: `Order #${currentOrderId.slice(0, 8)}`,
+      order_id: razorpayOrderId,
+      handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+        try {
+          setFlowState("processing");
+          await paymentService.confirmRazorpayPayment(
+            payment.id,
+            currentOrderId,
+            response.razorpay_payment_id,
+            response.razorpay_order_id,
+            response.razorpay_signature
+          );
+
+          for (const { productId, quantity } of reserved) {
+            await inventoryService.confirmStock(productId, quantity);
+          }
+          for (const { product, quantity } of items) {
+            analyticsService.trackEvent('purchase', product.id, undefined, {
+              quantity,
+              price: product.discountPrice ?? product.price,
+            });
+          }
+
+          setTransactionId(response.razorpay_payment_id);
+          clearCart();
+          setFlowState("success");
+        } catch (err: any) {
+          setFailureError(err.message ?? "Payment confirmation failed.");
+          setFlowState("failed");
+        }
+      },
+      modal: {
+        ondismiss: async () => {
+          // User closed modal without paying — release stock
+          for (const { productId, quantity } of reserved) {
+            try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
+          }
+          await paymentService.updatePaymentStatus(payment.id, 'failed');
+          setFailureError("Payment was cancelled.");
+          setFlowState("failed");
+        },
+      },
+      theme: { color: "#6366f1" },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  };
 
   const handlePlaceOrder = async () => {
     if (!user) return;
@@ -99,6 +172,14 @@ const CheckoutPage = () => {
         setQrCodeUrl(result.qrCodeUrl ?? null);
         setUpiPaymentId(result.payment?.id ?? null);
         setFlowState("upi_pending");
+        setSubmitting(false);
+        return;
+      }
+
+      if (result.awaitingRazorpay) {
+        // Razorpay flow — open checkout modal
+        setRazorpayPaymentRecord(result.payment);
+        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, order.id, reserved);
         setSubmitting(false);
         return;
       }
@@ -192,6 +273,13 @@ const CheckoutPage = () => {
         setQrCodeUrl(result.qrCodeUrl ?? null);
         setUpiPaymentId(result.payment?.id ?? null);
         setFlowState("upi_pending");
+        setSubmitting(false);
+        return;
+      }
+
+      if (result.awaitingRazorpay) {
+        setRazorpayPaymentRecord(result.payment);
+        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, pendingOrderId, reserved);
         setSubmitting(false);
         return;
       }
@@ -442,6 +530,13 @@ const CheckoutPage = () => {
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">
                   After placing your order, you'll see a QR code to scan with any UPI app.
+                </p>
+              </div>
+            )}
+            {paymentMethod === 'razorpay' && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  You'll be redirected to Razorpay's secure checkout to complete payment via UPI, card, net banking, or wallet.
                 </p>
               </div>
             )}

@@ -43,7 +43,7 @@ export interface Payment {
   userId: string;
   orderId: string;
   amount: number;
-  paymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod';
+  paymentMethod: 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod' | 'razorpay';
   paymentProvider: string | null;
   transactionId: string | null;
   paymentStatus: 'pending' | 'success' | 'failed' | 'refunded' | 'pending_verification';
@@ -53,5 +53,8 @@ export interface Payment {
   upiId: string | null;
   qrCodeUrl: string | null;
   paymentProof: string | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  razorpaySignature: string | null;
   createdAt: string;
 }

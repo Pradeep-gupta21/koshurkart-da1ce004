@@ -2,6 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, platformSettings } from '@/config/platformSettings';
 
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
 export const paymentService = {
   // ---- Payment record methods ----
 
@@ -83,9 +89,13 @@ export const paymentService = {
     error?: string;
     awaitingUpi?: boolean;
     qrCodeUrl?: string;
+    awaitingRazorpay?: boolean;
+    razorpayOrderId?: string;
+    razorpayKeyId?: string;
   }> {
     // Step 1: Create pending payment
-    const payment = await this.createPayment(userId, orderId, amount, method, undefined, upiId);
+    const provider = method === 'razorpay' ? 'razorpay' : undefined;
+    const payment = await this.createPayment(userId, orderId, amount, method, provider, upiId);
 
     // UPI flow: generate QR and return for manual confirmation
     if (method === 'upi') {
@@ -107,7 +117,39 @@ export const paymentService = {
       };
     }
 
-    // Step 2: Verify with gateway (non-UPI)
+    // Razorpay flow: create Razorpay order via edge function
+    if (method === 'razorpay') {
+      try {
+        const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
+          body: { amount, currency: 'INR', orderId },
+        });
+
+        if (error || !data?.razorpayOrderId) {
+          await this.updatePaymentStatus(payment.id, 'failed');
+          return { success: false, payment, transactionId: null, error: 'Failed to create Razorpay order.' };
+        }
+
+        // Store razorpay_order_id on the payment record
+        await supabase
+          .from('payments')
+          .update({ razorpay_order_id: data.razorpayOrderId } as any)
+          .eq('id', payment.id);
+
+        return {
+          success: false,
+          awaitingRazorpay: true,
+          payment: { ...payment, razorpay_order_id: data.razorpayOrderId },
+          transactionId: null,
+          razorpayOrderId: data.razorpayOrderId,
+          razorpayKeyId: data.keyId,
+        };
+      } catch (err: any) {
+        await this.updatePaymentStatus(payment.id, 'failed');
+        return { success: false, payment, transactionId: null, error: err.message ?? 'Razorpay initialization failed.' };
+      }
+    }
+
+    // Step 2: Verify with gateway (non-UPI, non-Razorpay)
     const verification = await this.verifyPayment(payment.id, method);
 
     if (verification.success) {
@@ -130,6 +172,55 @@ export const paymentService = {
       });
       return { success: false, payment, transactionId: null, error: 'Payment verification failed. Please try again.' };
     }
+  },
+
+  /**
+   * Confirm Razorpay payment after successful checkout
+   */
+  async confirmRazorpayPayment(
+    paymentId: string,
+    orderId: string,
+    razorpayPaymentId: string,
+    razorpayOrderId: string,
+    razorpaySignature: string
+  ) {
+    const { data, error } = await supabase
+      .from('payments')
+      .update({
+        payment_status: 'success',
+        razorpay_payment_id: razorpayPaymentId,
+        razorpay_order_id: razorpayOrderId,
+        razorpay_signature: razorpaySignature,
+        transaction_id: razorpayPaymentId,
+      } as any)
+      .eq('id', paymentId)
+      .select()
+      .single();
+    if (error) throw error;
+
+    await orderService.updateOrderStatus(orderId, {
+      payment_status: 'paid',
+      order_status: 'confirmed',
+    });
+
+    return data;
+  },
+
+  /**
+   * Load Razorpay checkout script dynamically
+   */
+  loadRazorpayScript(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   },
 
   /**
