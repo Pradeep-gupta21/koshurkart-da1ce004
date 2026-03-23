@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +12,12 @@ import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
 import { inventoryService } from "@/services/inventoryService";
-import { platformSettings } from "@/config/platformSettings";
+import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PAYMENT_METHODS = [
+const ALL_PAYMENT_METHODS = [
   { value: "upi", label: "Pay using UPI", description: "Scan QR code to pay instantly", icon: QrCode, iconBg: "bg-primary/10 text-primary" },
   { value: "razorpay", label: "Pay via Razorpay", description: "Card, UPI, Netbanking & more", icon: CreditCard, iconBg: "bg-accent/10 text-accent" },
   { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary" },
@@ -34,8 +34,28 @@ const CheckoutPage = () => {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("upi");
+  const [paymentMethod, setPaymentMethod] = useState("cod");
   const [failureError, setFailureError] = useState<string | null>(null);
+  const [pmSettings, setPmSettings] = useState<PaymentMethodSettings | null>(null);
+
+  useEffect(() => {
+    fetchPaymentMethodSettings().then((s) => {
+      setPmSettings(s);
+      // Set default to first available method
+      if (s.upiEnabled) setPaymentMethod("upi");
+      else if (s.razorpayEnabled) setPaymentMethod("razorpay");
+      else setPaymentMethod("cod");
+    });
+  }, []);
+
+  const availableMethods = useMemo(() => {
+    if (!pmSettings) return ALL_PAYMENT_METHODS.filter((m) => m.value === "cod");
+    return ALL_PAYMENT_METHODS.filter((m) => {
+      if (m.value === "upi") return pmSettings.upiEnabled;
+      if (m.value === "razorpay") return pmSettings.razorpayEnabled;
+      return true; // cod always available
+    });
+  }, [pmSettings]);
 
   // UPI state
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
@@ -342,7 +362,7 @@ const CheckoutPage = () => {
           {/* Merchant UPI ID */}
           <div className="bg-muted rounded-lg px-4 py-3 mb-6">
             <p className="text-xs text-muted-foreground mb-1">Or pay manually to UPI ID</p>
-            <p className="font-mono font-semibold text-sm select-all">{platformSettings.merchantUpiId}</p>
+            <p className="font-mono font-semibold text-sm select-all">{pmSettings?.merchantUpiId ?? "merchant@upi"}</p>
           </div>
 
           {/* Instructions */}
@@ -494,7 +514,7 @@ const CheckoutPage = () => {
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {PAYMENT_METHODS.map(({ value, label, description, icon: Icon, iconBg }) => {
+              {availableMethods.map(({ value, label, description, icon: Icon, iconBg }) => {
                 const isSelected = paymentMethod === value;
                 return (
                   <button

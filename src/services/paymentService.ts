@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
-import { calculateCommission, fetchPlatformSettings, platformSettings } from '@/config/platformSettings';
+import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
 
 declare global {
   interface Window {
@@ -97,9 +97,12 @@ export const paymentService = {
     const provider = method === 'razorpay' ? 'razorpay' : undefined;
     const payment = await this.createPayment(userId, orderId, amount, method, provider, upiId);
 
+    // Fetch payment method settings for merchant details
+    const pmSettings = await fetchPaymentMethodSettings();
+
     // UPI flow: generate QR and return for manual confirmation
     if (method === 'upi') {
-      const upiLink = `upi://pay?pa=${encodeURIComponent(platformSettings.merchantUpiId)}&am=${amount}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
+      const upiLink = `upi://pay?pa=${encodeURIComponent(pmSettings.merchantUpiId)}&pn=${encodeURIComponent(pmSettings.merchantName)}&am=${amount}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
       // Store QR code URL on the payment
