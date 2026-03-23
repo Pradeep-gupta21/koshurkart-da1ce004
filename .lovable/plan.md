@@ -1,30 +1,36 @@
 
 
-## Create Razorpay Payment Verification Edge Function
+## Improve Checkout Payment Method UI
 
-### Problem
-Currently, payment confirmation happens client-side — the frontend directly updates the payment status after the Razorpay popup succeeds. This is insecure because a malicious client could fake a successful payment without actually paying.
+### What changes
+Replace the current plain radio-button list of 6 payment methods with 3 clean, modern card-based options: **UPI QR**, **Razorpay**, and **Cash on Delivery**. Remove the unused card/netbanking/wallet options (those are already covered inside Razorpay's modal).
 
-### Solution
-Create a `verify-razorpay-payment` edge function that performs server-side HMAC-SHA256 signature verification using `RAZORPAY_KEY_SECRET`, then updates the payment and order records only if verification passes. Update the frontend to call this function instead of doing client-side updates.
+### Design
+Each payment method rendered as a selectable card with:
+- Large icon in a colored circle
+- Method name + short description
+- Subtle border highlight + background tint when selected
+- Check indicator on the selected card
 
-### 1. Edge Function: `supabase/functions/verify-razorpay-payment/index.ts`
+```text
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  (QR icon)      │  │  (Credit icon)  │  │  (Banknote)     │
+│  Pay using UPI  │  │  Pay via        │  │  Cash on        │
+│  Scan QR code   │  │  Razorpay       │  │  Delivery       │
+│  to pay         │  │  Card, UPI,     │  │  Pay when you   │
+│                 │  │  Netbanking...  │  │  receive order  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
 
-- Receive `{ razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentId, orderId }` from authenticated user
-- Verify signature: `HMAC-SHA256(razorpayOrderId + "|" + razorpayPaymentId, RAZORPAY_KEY_SECRET)` must equal `razorpaySignature`
-- On success: update `payments` record (status → success, store Razorpay IDs) and `orders` record (payment_status → paid, order_status → confirmed)
-- On failure: return 400 error
-- Uses service role key for DB updates to bypass RLS
+### File to modify
+- `src/pages/CheckoutPage.tsx` — lines 19-26 (payment methods array) and lines 496-543 (payment method UI section)
 
-### 2. Update `src/services/paymentService.ts`
-
-Replace `confirmRazorpayPayment` to call the new edge function instead of directly updating the database client-side.
-
-### 3. No checkout UI changes needed
-
-The `CheckoutPage.tsx` already calls `confirmRazorpayPayment` — only the implementation changes.
-
-### Files
-- **Create**: `supabase/functions/verify-razorpay-payment/index.ts`
-- **Modify**: `src/services/paymentService.ts`
+### Implementation details
+1. Reduce `PAYMENT_METHODS` to 3 entries: `upi`, `razorpay`, `cod` — each with a label, description, and icon
+2. Replace the `RadioGroup` with a grid of clickable cards using existing `cn()` utility for conditional styling
+3. Selected card gets `border-primary bg-primary/5 ring-2 ring-primary/20`; unselected gets `border-border hover:border-primary/30`
+4. Each card shows icon in a colored circle, title, and a one-line description
+5. Remove the card number form fields (lines 513-528) since that method is removed
+6. Keep the existing UPI and Razorpay info hints below the cards
+7. Default payment method changed to `upi`
 
