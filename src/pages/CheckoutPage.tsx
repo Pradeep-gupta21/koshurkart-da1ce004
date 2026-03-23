@@ -277,6 +277,13 @@ const CheckoutPage = () => {
         return;
       }
 
+      if (result.awaitingRazorpay) {
+        setRazorpayPaymentRecord(result.payment);
+        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, pendingOrderId, reserved);
+        setSubmitting(false);
+        return;
+      }
+
       if (result.success) {
         for (const { productId, quantity } of reserved) {
           await inventoryService.confirmStock(productId, quantity);
