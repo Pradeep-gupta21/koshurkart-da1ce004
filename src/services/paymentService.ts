@@ -184,24 +184,18 @@ export const paymentService = {
     razorpayOrderId: string,
     razorpaySignature: string
   ) {
-    const { data, error } = await supabase
-      .from('payments')
-      .update({
-        payment_status: 'success',
-        razorpay_payment_id: razorpayPaymentId,
-        razorpay_order_id: razorpayOrderId,
-        razorpay_signature: razorpaySignature,
-        transaction_id: razorpayPaymentId,
-      } as any)
-      .eq('id', paymentId)
-      .select()
-      .single();
-    if (error) throw error;
-
-    await orderService.updateOrderStatus(orderId, {
-      payment_status: 'paid',
-      order_status: 'confirmed',
+    const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', {
+      body: {
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        paymentId,
+        orderId,
+      },
     });
+
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
 
     return data;
   },
