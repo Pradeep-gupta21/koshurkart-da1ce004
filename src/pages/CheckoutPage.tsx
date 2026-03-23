@@ -46,6 +46,9 @@ const CheckoutPage = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Razorpay state
+  const [razorpayPaymentRecord, setRazorpayPaymentRecord] = useState<any>(null);
+
   // Track reserved items for cleanup on failure
   const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
