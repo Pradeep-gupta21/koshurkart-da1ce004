@@ -107,6 +107,14 @@ const CheckoutPage = () => {
         return;
       }
 
+      if (result.awaitingRazorpay) {
+        // Razorpay flow — open checkout modal
+        setRazorpayPaymentRecord(result.payment);
+        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, order.id, reserved);
+        setSubmitting(false);
+        return;
+      }
+
       if (result.success) {
         // Payment success — confirm stock + track analytics
         for (const { productId, quantity } of reserved) {
