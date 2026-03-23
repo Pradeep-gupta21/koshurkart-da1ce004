@@ -1,68 +1,66 @@
 
 
-## Fix: Infinite Recursion in Orders RLS Policy
+## Extend Payment System with Razorpay
 
-### Root Cause
+### Overview
+Add Razorpay as an additional payment gateway alongside the existing UPI QR and simulated payment methods. The DB gets three new columns, the checkout UI gets a "Razorpay" option, and the payment service gets a Razorpay flow that loads the Razorpay checkout SDK client-side.
 
-The `orders` SELECT policy references `order_items`, and the `order_items` SELECT policy references `orders` — creating a circular dependency that Postgres detects as infinite recursion.
+### 1. Database Migration
 
-Specifically:
-- **orders SELECT**: `... OR EXISTS (SELECT 1 FROM order_items oi JOIN vendors v ON v.id = oi.vendor_id WHERE oi.order_id = orders.id ...)`
-- **order_items SELECT**: `... OR EXISTS (SELECT 1 FROM orders o WHERE o.id = order_items.order_id AND o.user_id = auth.uid())`
-
-When inserting an order, the SELECT policy evaluates, which queries order_items, which triggers order_items' SELECT policy, which queries orders again — infinite loop.
-
-### Fix
-
-Create two security definer functions to break the circular RLS dependency:
-
-1. **`is_order_owner(order_id, user_id)`** — checks if user owns the order (used by order_items policy instead of querying orders directly)
-2. **`is_vendor_order(order_id, user_id)`** — checks if user is a vendor with items in the order (used by orders policy instead of querying order_items directly)
-
-Then drop and recreate the problematic RLS policies to use these functions.
-
-### Migration SQL
-
+Add three columns to `payments` table:
 ```sql
--- Function: check if user owns order (bypasses RLS)
-CREATE OR REPLACE FUNCTION public.is_order_owner(_order_id uuid, _user_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (SELECT 1 FROM orders WHERE id = _order_id AND user_id = _user_id);
-$$;
-
--- Function: check if user is vendor on order (bypasses RLS)
-CREATE OR REPLACE FUNCTION public.is_vendor_order(_order_id uuid, _user_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM order_items oi JOIN vendors v ON v.id = oi.vendor_id
-    WHERE oi.order_id = _order_id AND v.user_id = _user_id
-  );
-$$;
-
--- Fix orders SELECT policy
-DROP POLICY "Vendors can view orders with their items" ON orders;
-CREATE POLICY "Vendors can view orders with their items" ON orders FOR SELECT TO authenticated
-  USING (auth.uid() = user_id OR is_vendor_order(id, auth.uid()));
-
--- Fix orders UPDATE policy
-DROP POLICY "Vendors can update orders with their items" ON orders;
-CREATE POLICY "Vendors can update orders with their items" ON orders FOR UPDATE TO authenticated
-  USING (is_vendor_order(id, auth.uid()));
-
--- Fix order_items SELECT policy
-DROP POLICY "Vendors can view their order items" ON order_items;
-CREATE POLICY "Vendors can view their order items" ON order_items FOR SELECT TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM vendors v WHERE v.id = order_items.vendor_id AND v.user_id = auth.uid())
-    OR is_order_owner(order_id, auth.uid())
-  );
-
--- Fix order_items INSERT policy
-DROP POLICY "Users insert order items" ON order_items;
-CREATE POLICY "Users insert order items" ON order_items FOR INSERT TO authenticated
-  WITH CHECK (is_order_owner(order_id, auth.uid()));
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS razorpay_order_id text,
+  ADD COLUMN IF NOT EXISTS razorpay_payment_id text,
+  ADD COLUMN IF NOT EXISTS razorpay_signature text;
 ```
 
+No RLS changes needed — existing policies cover these columns.
+
+### 2. Edge Function: `create-razorpay-order`
+
+Create `supabase/functions/create-razorpay-order/index.ts`:
+- Accepts `{ amount, currency, orderId }` from the frontend
+- Uses `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` secrets to call Razorpay Orders API (`https://api.razorpay.com/v1/orders`)
+- Returns the Razorpay order ID to the frontend
+- Validates JWT in code for auth
+
+**Requires secrets**: `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` — will prompt user to add these.
+
+### 3. Update `src/types/order.ts`
+
+- Add `'razorpay'` to `paymentMethod` union in `Payment` interface
+- Add `razorpayOrderId`, `razorpayPaymentId`, `razorpaySignature` optional fields
+
+### 4. Update `src/services/paymentService.ts`
+
+Add method `processRazorpayPayment()`:
+1. Call edge function to create Razorpay order
+2. Return the Razorpay order details so the frontend can open the Razorpay checkout modal
+3. Add `confirmRazorpayPayment(paymentId, razorpayPaymentId, razorpayOrderId, razorpaySignature)` — updates the payment record with Razorpay details and sets status to `success`
+
+Update `processPayment()`: when method is `'razorpay'`, create payment record with `payment_provider: 'razorpay'` and return Razorpay order info instead of simulating.
+
+### 5. Update `src/pages/CheckoutPage.tsx`
+
+- Add Razorpay to `PAYMENT_METHODS` array with a credit card icon variant
+- Add `'razorpay_pending'` to `FlowState`
+- Load Razorpay checkout.js script dynamically (`https://checkout.razorpay.com/v1/checkout.js`)
+- When method is `razorpay`, after order creation, open `Razorpay` checkout modal with the order ID
+- On success callback: call `confirmRazorpayPayment`, confirm stock, clear cart, show success
+- On failure: release stock, show failure
+
+### 6. Update `index.html`
+
+No changes needed — Razorpay script loaded dynamically.
+
 ### Files
-- **Migration only** — no code changes needed
+- **Migration**: Add 3 columns to `payments`
+- **Create**: `supabase/functions/create-razorpay-order/index.ts`
+- **Modify**: `src/types/order.ts`
+- **Modify**: `src/services/paymentService.ts`
+- **Modify**: `src/pages/CheckoutPage.tsx`
+
+### Secrets Required
+Will prompt user to add `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` before implementing the edge function.
 
