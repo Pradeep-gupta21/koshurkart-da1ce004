@@ -289,6 +289,9 @@ export type Database = {
           payment_status: string
           platform_commission: number | null
           qr_code_url: string | null
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+          razorpay_signature: string | null
           transaction_id: string | null
           upi_id: string | null
           user_id: string
@@ -306,6 +309,9 @@ export type Database = {
           payment_status?: string
           platform_commission?: number | null
           qr_code_url?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
           transaction_id?: string | null
           upi_id?: string | null
           user_id: string
@@ -323,6 +329,9 @@ export type Database = {
           payment_status?: string
           platform_commission?: number | null
           qr_code_url?: string | null
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          razorpay_signature?: string | null
           transaction_id?: string | null
           upi_id?: string | null
           user_id?: string
