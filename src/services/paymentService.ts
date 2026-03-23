@@ -2,6 +2,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, platformSettings } from '@/config/platformSettings';
 
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
 export const paymentService = {
   // ---- Payment record methods ----
 
