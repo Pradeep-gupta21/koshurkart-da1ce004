@@ -120,6 +120,16 @@ export const paymentService = {
       };
     }
 
+    // COD flow: deterministic success, no gateway needed
+    if (method === 'cod') {
+      await this.updatePaymentStatus(payment.id, 'pending');
+      await orderService.updateOrderStatus(orderId, {
+        payment_status: 'pending',
+        order_status: 'confirmed',
+      });
+      return { success: true, payment, transactionId: null };
+    }
+
     // Razorpay flow: create Razorpay order via edge function
     if (method === 'razorpay') {
       try {
