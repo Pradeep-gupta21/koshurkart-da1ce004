@@ -493,37 +493,38 @@ const CheckoutPage = () => {
 
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
-            <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-              {PAYMENT_METHODS.map(({ value, label, icon: Icon }) => (
-                <label
-                  key={value}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    paymentMethod === value ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                  }`}
-                >
-                  <RadioGroupItem value={value} />
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{label}</span>
-                </label>
-              ))}
-            </RadioGroup>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {PAYMENT_METHODS.map(({ value, label, description, icon: Icon, iconBg }) => {
+                const isSelected = paymentMethod === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPaymentMethod(value)}
+                    className={cn(
+                      "relative flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 transition-all cursor-pointer",
+                      isSelected
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm"
+                        : "border-border hover:border-primary/30 hover:bg-muted/30"
+                    )}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      </div>
+                    )}
+                    <div className={cn("h-12 w-12 rounded-full flex items-center justify-center", iconBg)}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-            {paymentMethod === 'card' && (
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="col-span-2 space-y-2">
-                  <Label>Card Number</Label>
-                  <Input placeholder="4242 4242 4242 4242" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Expiry</Label>
-                  <Input placeholder="MM/YY" />
-                </div>
-                <div className="space-y-2">
-                  <Label>CVC</Label>
-                  <Input placeholder="123" />
-                </div>
-              </div>
-            )}
             {paymentMethod === 'upi' && (
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">
