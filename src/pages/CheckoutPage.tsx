@@ -57,6 +57,75 @@ const CheckoutPage = () => {
     firstName: "", lastName: "", address: "", city: "", zip: "",
   });
 
+  const openRazorpayCheckout = async (
+    razorpayOrderId: string,
+    razorpayKeyId: string,
+    payment: any,
+    currentOrderId: string,
+    reserved: { productId: string; quantity: number }[]
+  ) => {
+    const scriptLoaded = await paymentService.loadRazorpayScript();
+    if (!scriptLoaded) {
+      toast({ title: "Error", description: "Failed to load Razorpay. Please try again.", variant: "destructive" });
+      setFlowState("failed");
+      setFailureError("Could not load payment gateway.");
+      return;
+    }
+
+    const options = {
+      key: razorpayKeyId,
+      amount: Math.round(totalPrice * 100),
+      currency: "INR",
+      name: "Marketplace",
+      description: `Order #${currentOrderId.slice(0, 8)}`,
+      order_id: razorpayOrderId,
+      handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+        try {
+          setFlowState("processing");
+          await paymentService.confirmRazorpayPayment(
+            payment.id,
+            currentOrderId,
+            response.razorpay_payment_id,
+            response.razorpay_order_id,
+            response.razorpay_signature
+          );
+
+          for (const { productId, quantity } of reserved) {
+            await inventoryService.confirmStock(productId, quantity);
+          }
+          for (const { product, quantity } of items) {
+            analyticsService.trackEvent('purchase', product.id, undefined, {
+              quantity,
+              price: product.discountPrice ?? product.price,
+            });
+          }
+
+          setTransactionId(response.razorpay_payment_id);
+          clearCart();
+          setFlowState("success");
+        } catch (err: any) {
+          setFailureError(err.message ?? "Payment confirmation failed.");
+          setFlowState("failed");
+        }
+      },
+      modal: {
+        ondismiss: async () => {
+          // User closed modal without paying — release stock
+          for (const { productId, quantity } of reserved) {
+            try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
+          }
+          await paymentService.updatePaymentStatus(payment.id, 'failed');
+          setFailureError("Payment was cancelled.");
+          setFlowState("failed");
+        },
+      },
+      theme: { color: "#6366f1" },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  };
+
   const handlePlaceOrder = async () => {
     if (!user) return;
     if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
