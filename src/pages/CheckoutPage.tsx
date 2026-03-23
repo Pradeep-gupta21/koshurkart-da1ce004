@@ -533,6 +533,13 @@ const CheckoutPage = () => {
                 </p>
               </div>
             )}
+            {paymentMethod === 'razorpay' && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  You'll be redirected to Razorpay's secure checkout to complete payment via UPI, card, net banking, or wallet.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
