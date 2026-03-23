@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
-import { calculateCommission, fetchPlatformSettings, platformSettings } from '@/config/platformSettings';
+import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
 
 declare global {
   interface Window {
