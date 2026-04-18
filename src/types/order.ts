@@ -29,7 +29,7 @@ export interface Order {
   items: OrderItem[];
   totalAmount: number;
   paymentStatus: 'pending' | 'completed' | 'failed';
-  orderStatus: 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  orderStatus: 'processing' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
   shippingProvider: string | null;
   trackingId: string | null;
   shippingStatus: ShippingStatus;
