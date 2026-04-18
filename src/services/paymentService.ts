@@ -270,7 +270,7 @@ export const paymentService = {
   },
 
   async updatePaymentStatus(paymentId: string, status: string, transactionId?: string) {
-    const updates: Record<string, unknown> = { payment_status: status };
+    const updates: { payment_status: string; transaction_id?: string } = { payment_status: status };
     if (transactionId) updates.transaction_id = transactionId;
     const { data, error } = await supabase
       .from('payments')

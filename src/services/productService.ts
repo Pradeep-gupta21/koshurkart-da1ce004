@@ -146,7 +146,7 @@ export const productService = {
   },
 
   async update(id: string, updates: Record<string, unknown>) {
-    const { data, error } = await supabase.from('products').update(updates).eq('id', id).select('*, vendors(store_name)').single();
+    const { data, error } = await supabase.from('products').update(updates as never).eq('id', id).select('*, vendors(store_name)').single();
     if (error) throw error;
     cacheService.invalidatePattern('products:');
     cacheService.invalidatePattern('product:');
