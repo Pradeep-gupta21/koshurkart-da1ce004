@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const { error: orderError } = await serviceClient
       .from("orders")
       .update({
-        payment_status: "paid",
+        payment_status: "completed",
         order_status: "confirmed",
       })
       .eq("id", orderId);
