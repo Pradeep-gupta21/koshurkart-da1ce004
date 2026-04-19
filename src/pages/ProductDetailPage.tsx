@@ -17,6 +17,7 @@ import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
 import { useState, useEffect, useRef } from "react";
 import { analyticsService } from "@/services/analyticsService";
+import ReviewSection from "@/components/reviews/ReviewSection";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
   const p = c.products;
