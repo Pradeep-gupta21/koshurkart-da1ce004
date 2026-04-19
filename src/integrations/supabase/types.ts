@@ -582,15 +582,47 @@ export type Database = {
         }
         Relationships: []
       }
+      review_helpful_votes: {
+        Row: {
+          created_at: string
+          id: string
+          review_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          review_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          review_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_helpful_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           comment: string | null
           created_at: string
           flagged_reason: string | null
+          helpful_count: number
           id: string
+          images: string[]
           is_suspicious: boolean | null
           is_verified_purchase: boolean | null
           moderation_status: string | null
+          order_id: string | null
           product_id: string
           rating: number
           user_id: string
@@ -599,10 +631,13 @@ export type Database = {
           comment?: string | null
           created_at?: string
           flagged_reason?: string | null
+          helpful_count?: number
           id?: string
+          images?: string[]
           is_suspicious?: boolean | null
           is_verified_purchase?: boolean | null
           moderation_status?: string | null
+          order_id?: string | null
           product_id: string
           rating?: number
           user_id: string
@@ -611,10 +646,13 @@ export type Database = {
           comment?: string | null
           created_at?: string
           flagged_reason?: string | null
+          helpful_count?: number
           id?: string
+          images?: string[]
           is_suspicious?: boolean | null
           is_verified_purchase?: boolean | null
           moderation_status?: string | null
+          order_id?: string | null
           product_id?: string
           rating?: number
           user_id?: string
@@ -779,6 +817,10 @@ export type Database = {
     Functions: {
       calculate_dynamic_prices: { Args: never; Returns: undefined }
       calculate_product_scores: { Args: never; Returns: undefined }
+      can_review_product: {
+        Args: { _product_id: string; _user_id: string }
+        Returns: string
+      }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
