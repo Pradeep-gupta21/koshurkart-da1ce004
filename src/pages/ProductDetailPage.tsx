@@ -278,39 +278,7 @@ const ProductDetailPage = () => {
       </div>
 
       {/* Reviews */}
-      <section className="mt-14">
-        <h2 className="text-xl font-semibold mb-6">Customer Reviews</h2>
-        {reviews.length > 0 ? (
-          <div className="space-y-4">
-            {reviews.map((review: any) => (
-              <div key={review.id} className="bg-card rounded-xl marketplace-shadow p-5 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{review.profiles?.name || 'Anonymous'}</span>
-                    {review.is_verified_purchase && (
-                      <span className="text-[10px] font-medium text-success bg-success/10 px-1.5 py-0.5 rounded">Verified</span>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground">{new Date(review.created_at).toLocaleDateString()}</span>
-                </div>
-                <div className="flex mt-1.5">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <Star key={i} className={`h-3 w-3 ${i <= review.rating ? "fill-accent text-accent" : "text-muted"}`} />
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">{review.comment}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={MessageSquare}
-            title="No reviews yet"
-            description="Be the first to review this product."
-            className="py-12"
-          />
-        )}
-      </section>
+      <ReviewSection productId={product.id} />
 
       {/* Sponsored Suggestions */}
       <SponsoredSuggestionsInline />

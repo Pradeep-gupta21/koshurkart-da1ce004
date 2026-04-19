@@ -31,8 +31,11 @@ export interface Review {
   userId: string;
   userName: string;
   productId: string;
+  orderId?: string | null;
   rating: number;
   comment: string;
+  images?: string[];
+  helpfulCount?: number;
   isVerifiedPurchase: boolean;
   isSuspicious: boolean;
   flaggedReason: string | null;
