@@ -1,27 +1,23 @@
-import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ShopSidebar from "./ShopSidebar";
+import { useSidebar } from "@/contexts/SidebarContext";
 
 interface ShopSidebarTriggerProps {
   className?: string;
 }
 
 const ShopSidebarTrigger = ({ className }: ShopSidebarTriggerProps) => {
-  const [open, setOpen] = useState(false);
+  const { open } = useSidebar();
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={className}
-        onClick={() => setOpen(true)}
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
-      <ShopSidebar open={open} onOpenChange={setOpen} />
-    </>
+    <Button
+      variant="ghost"
+      size="icon"
+      className={className}
+      onClick={open}
+      aria-label="Open main navigation"
+    >
+      <Menu className="h-5 w-5" />
+    </Button>
   );
 };
 
