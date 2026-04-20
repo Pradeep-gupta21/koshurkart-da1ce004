@@ -1,85 +1,106 @@
 
 
-Most of this is already done across the prior 4 iterations. Let me audit what's actually still missing vs spec.
+User wants Amazon-style location with backend integration. Stack note: project is **Vite + React + Supabase** (not Next.js, no Express, no Mongo, no Zustand). I'll map their request to this stack — same architecture, native tools. Already have `currencyService` doing IP geolocation (ipapi.co), so partial infra exists.
 
-**Already shipped:**
-- DB-driven menu (`menu_items` table + `/menu` edge function) ✓
-- React Query caching with role-keyed key, `staleTime: 5min` ✓
-- Lazy fetch (only when sidebar opens via `enabled: isOpen`) ✓
-- Skeleton loader, error EmptyState with retry ✓
-- Smooth animations (Radix Sheet slide-in, Collapsible expand) ✓
-- Role filtering server + client ✓
-- Admin CRUD UI at `/admin/menu` ✓
-- Clean folder structure (`components/navigation/`, `services/`, `contexts/`) ✓
+## Scope
 
-**Real remaining gaps:**
-1. **No code splitting on admin page** — `AdminMenu` is eagerly imported in `App.tsx`, bloating main bundle. Same for several other admin/vendor pages but `AdminMenu` is the relevant one here.
-2. **No retry/backoff on the menu query** — React Query default retries 3x but with no exponential backoff config, and no timeout. Function failure → 3 instant retries → fail. Need explicit `retry: 2, retryDelay: exponential`.
-3. **No tests** — zero tests for `sidebarMenuService`, `SidebarItem`, `ExpandableMenu`, or the `menu` edge function. Vitest already configured (`vitest.config.ts`, `src/test/setup.ts` exist).
-4. **Premium UX polish** — current sidebar renders all items flat in sections. Quick wins: subtle dividers, better spacing rhythm, hover micro-interactions, icon color accents on active. Not cluttered means: limit Trending to 4 (not 6), collapse Categories by default, denser type scale.
-5. **Env config** — `sidebarMenuService` reads `import.meta.env.VITE_SUPABASE_URL` directly. Already centralized via `client.ts`. Minor: extract menu cache TTL to a constant in service.
+1. **Auto-detect** location on first visit (IP → coords + pincode + city)
+2. **Manual override** via pincode or city search
+3. **Persist** per-user (DB) + per-guest (localStorage)
+4. **Affect** product availability, delivery ETA, shipping cost
+5. **Header UI** showing "Deliver to {city} {pincode}" with click-to-change modal
 
-Skipping #6 "deployment ready" beyond what's listed — folder structure already clean, env already via Vite.
+## 1. Database
 
----
+**New tables:**
 
-## Production Hardening — Sidebar
+`user_locations` — saved addresses per user
+- id, user_id (auth.users), label ('Home'/'Office'/custom), pincode, city, state, country, lat, lng, is_default, created_at
+- RLS: users CRUD their own only
 
-Close the 4 real gaps. No re-architecture; surgical changes only.
+`serviceable_pincodes` — coverage map
+- pincode (PK), city, state, country, region_zone ('metro'|'tier1'|'tier2'|'remote'), cod_available, base_delivery_days, surcharge_pct, is_active
+- RLS: public SELECT, admin manages
 
-### 1. Code splitting (perf)
+`vendor_serviceability` — per-vendor pincode rules (optional override)
+- vendor_id, pincode_pattern (e.g. '110%' for Delhi), ships, delivery_days_override
+- RLS: public SELECT, vendor manages own
 
-`src/App.tsx` — convert `AdminMenu` (and the other admin/vendor pages already imported eagerly) to `React.lazy()` + wrap routes in `<Suspense fallback={<PageSkeleton />}>`. Cuts ~40-60KB off initial bundle. The shop sidebar itself stays eager (it's on every page).
+`profiles` — add `default_pincode text` column
 
-### 2. Robust retry (error handling)
+**Seed:** ~30 representative Indian pincodes covering metros + tiers so feature works out of the box.
 
-`src/components/navigation/ShopSidebar.tsx` — add to `useQuery`:
+**RPC `check_serviceability(_pincode, _product_ids[])`** returns per-product `{ deliverable, eta_days, surcharge_pct, cod }` — single call from PDP/cart.
+
+## 2. Backend (edge function)
+
+`supabase/functions/location/index.ts`
+- `GET /location/detect` → IP → ipapi.co lookup → reverse-geocode pincode (best-effort; ipapi returns postal) → returns `{ pincode, city, state, country, lat, lng, source: 'ip' }`
+- `POST /location/lookup` → body `{ pincode }` → returns serviceability + city/state from `serviceable_pincodes` (404 if unserviceable)
+- `GET /location/cities?q=` → autocomplete from distinct city names
+
+Cache IP results 24h in-memory (LRU 1000 entries) keyed by IP. Zod validation. CORS.
+
+## 3. Frontend state — `LocationContext`
+
+`src/contexts/LocationContext.tsx` — global provider exposing:
 ```ts
-retry: 2,
-retryDelay: (i) => Math.min(1000 * 2 ** i, 8000),
-staleTime: 5 * 60_000,
-gcTime: 10 * 60_000,
-refetchOnWindowFocus: false,
+{ location, setLocation, savedLocations, isDetecting, isServiceable }
 ```
-Manual retry button in error state already present — keep.
+- On mount: read localStorage → if empty, call `/location/detect` → save to localStorage
+- If user signs in: merge guest location into `user_locations`, load saved, set default
+- `setLocation(pincode)` → calls `/location/lookup` → updates state + persists (DB if auth, localStorage always)
 
-### 3. Tests (Vitest already set up)
+Choosing **Context** over Zustand/Redux — project already uses Context (`Cart`, `Currency`, `Sidebar`); adding a new state lib would be inconsistent.
 
-**Unit tests (frontend):**
-- `src/components/navigation/SidebarItem.test.tsx` — renders title, sets `aria-current="page"` on active route, fires `onSelect` on click
-- `src/components/navigation/ExpandableMenu.test.tsx` — toggles `aria-expanded`, renders children when open, hides when closed
-- `src/services/sidebarMenuService.test.ts` — mocks `fetch` + supabase client, verifies tree-building from flat rows, role filtering, error throw on 4xx
+## 4. UI
 
-**Edge function test:**
-- `supabase/functions/menu/menu_test.ts` — Deno test for tree-building helper (extract pure function), Zod payload validation rejects bad input, cycle detection rejects parent==self
+**`LocationPill`** in `Header.tsx` (left of search): icon + "Deliver to {city} {pincode}" → opens `LocationDialog`.
 
-### 4. UX polish (premium feel)
+**`LocationDialog`** modal:
+- Tab 1: Pincode input → validate → preview city → confirm
+- Tab 2: City autocomplete (debounced)
+- Tab 3 (auth only): Saved addresses list with default selector + "Add new"
+- "Use my location" button → browser Geolocation API → reverse-geocode via edge function
 
-`src/components/navigation/ShopSidebar.tsx` + children:
-- Trending: cap at 4 items (was 6), tighter card with overlay price chip
-- Categories: default collapsed, parent shows count badge `(12)` when has children
-- Add `<Separator />` between sections instead of relying on padding
-- Increase row height to `h-11`, icon-text gap `gap-3`, active item: `bg-accent/40` + 2px left primary border, hover: `bg-accent/20` with `transition-colors duration-150`
-- Footer: stack sign-out + theme toggle in a single `border-t` block
+**`ServiceabilityBadge`** on `ProductCard` + `ProductDetailPage`:
+- Green: "Delivery by {date}" 
+- Amber: "Available, ships in 7+ days"
+- Red: "Not deliverable to {pincode}"
 
-### Files
+**Cart/Checkout integration:**
+- Block checkout if any item unserviceable to selected pincode
+- Show per-item ETA + surcharge in cart summary
+- `CheckoutForm` pre-fills shipping address from `user_locations.is_default`
+
+## 5. Pricing impact
+
+Extend `pricingService.getDisplayPrice(product, location)` to apply `surcharge_pct` from pincode zone. Already have currency conversion — add a thin zone-multiplier step.
+
+## 6. Files
 
 **Create**
-- `src/components/navigation/SidebarItem.test.tsx`
-- `src/components/navigation/ExpandableMenu.test.tsx`
-- `src/services/sidebarMenuService.test.ts`
-- `supabase/functions/menu/menu_test.ts`
-- `src/components/ui/PageSkeleton.tsx` (lazy fallback)
+- `supabase/migrations/<ts>_location_system.sql` — 3 tables, RLS, RPC, seed
+- `supabase/functions/location/index.ts` — detect/lookup/cities
+- `src/contexts/LocationContext.tsx`
+- `src/components/location/LocationPill.tsx`
+- `src/components/location/LocationDialog.tsx`
+- `src/components/location/ServiceabilityBadge.tsx`
+- `src/services/locationService.ts` — client wrapper
+- `src/lib/validators/locationSchema.ts` — Zod (pincode regex per country)
 
 **Modify**
-- `src/App.tsx` — lazy-load admin/vendor pages, add Suspense
-- `src/components/navigation/ShopSidebar.tsx` — query retry config, UX polish (separators, spacing, trending cap)
-- `src/components/navigation/SidebarItem.tsx` — refined active/hover styles
-- `src/components/navigation/ExpandableMenu.tsx` — child count badge, default collapsed
-- `supabase/functions/menu/index.ts` — extract `buildTree` to exported pure function for testability
+- `src/App.tsx` — wrap in `LocationProvider`
+- `src/components/layout/Header.tsx` — mount `LocationPill`
+- `src/components/product/ProductCard.tsx` — render `ServiceabilityBadge`
+- `src/pages/ProductDetailPage.tsx` — full serviceability block + ETA
+- `src/pages/CartPage.tsx` + `src/pages/CheckoutPage.tsx` — block unserviceable, show ETA, prefill address
+- `src/components/forms/CheckoutForm.tsx` — bind to default saved location
+- `src/services/pricingService.ts` — apply zone surcharge
+- `supabase/config.toml` — `verify_jwt = false` for `location` (detect must work for guests)
 
-### Out of scope
-- Replacing React Query with another lib
-- Adding Storybook (overkill at current scale)
-- E2E tests (Playwright fixture exists but not wired; out of scope for this pass)
+## 7. Out of scope
+- Google Maps API (ipapi.co + pincode DB is sufficient and free; user can swap later by changing one function)
+- Real-time courier API integration (existing `courier_api_config` column already there for future)
+- Multi-country pincode formats beyond IN/US (architecture supports it; only seeding IN now)
 
