@@ -23,8 +23,11 @@ const LocalDeals = () => {
   );
 
   const heading = location?.city
-    ? `Deals near ${location.city}`
-    : "Today's Best Deals";
+    ? `Today's Kashmiri Deals · ${location.city}`
+    : "Today's Kashmiri Deals";
+
+  // Use horizontal scroll when ≥4 items; otherwise fall back to grid
+  const useScroller = products.length >= 4;
 
   return (
     <section className="container mx-auto px-4 mt-12">
@@ -32,20 +35,32 @@ const LocalDeals = () => {
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-accent" />
           <div>
-            <h2 className="text-xl font-semibold tracking-tight">{heading}</h2>
+            <h2 className="text-xl font-serif font-semibold tracking-tight">{heading}</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               {pincode
                 ? `Discounted picks delivering to ${pincode}`
-                : "Top-discounted products available now"}
+                : "Saffron-priced picks from the valley"}
             </p>
           </div>
         </div>
       </div>
-      <ProductGrid loading={isLoading} skeletonCount={8}>
-        {products.map((p) => (
-          <ProductCard key={p.id} product={p} />
-        ))}
-      </ProductGrid>
+      {useScroller ? (
+        <div className="-mx-4 px-4 overflow-x-auto snap-x snap-mandatory scroll-smooth">
+          <div className="flex gap-4 pb-2">
+            {products.map((p) => (
+              <div key={p.id} className="snap-start shrink-0 w-[220px] sm:w-[240px] md:w-[260px]">
+                <ProductCard product={p} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <ProductGrid loading={isLoading} skeletonCount={8}>
+          {products.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </ProductGrid>
+      )}
     </section>
   );
 };

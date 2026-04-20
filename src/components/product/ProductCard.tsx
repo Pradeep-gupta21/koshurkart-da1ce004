@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Star, AlertTriangle, ShieldCheck, Mountain } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,11 +37,17 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
   return (
     <div className="group relative bg-card rounded-xl border border-wood marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover hover:ring-1 hover:ring-accent/40 overflow-hidden">
-      {product.isSponsored && (
-        <span className="absolute top-2 left-2 z-10 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-muted-foreground border">
-          SPONSORED
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+        {product.isSponsored && (
+          <span className="bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-muted-foreground border">
+            SPONSORED
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 rounded-full bg-accent/90 text-accent-foreground px-1.5 py-0.5 text-[10px] font-semibold tracking-wide shadow-sm">
+          <Mountain className="h-2.5 w-2.5" />
+          From Kashmir
         </span>
-      )}
+      </div>
       {isOutOfStock && (
         <span className="absolute top-2 right-2 z-10 bg-destructive text-destructive-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
           OUT OF STOCK
@@ -70,7 +76,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           {isVerified && <ShieldCheck className="h-3 w-3 text-primary" />}
         </p>
         <Link to={`/product/${product.slug}`}>
-          <h3 className="text-sm font-medium text-card-foreground line-clamp-1 hover:text-primary transition-colors">
+          <h3 className="text-sm font-semibold text-card-foreground line-clamp-2 leading-snug min-h-[2.5rem] hover:text-primary transition-colors">
             {product.title}
           </h3>
         </Link>

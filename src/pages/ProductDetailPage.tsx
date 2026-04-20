@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck } from "lucide-react";
+import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck, Mountain, Truck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +20,7 @@ import { analyticsService } from "@/services/analyticsService";
 import ReviewSection from "@/components/reviews/ReviewSection";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 import LocationDialog from "@/components/location/LocationDialog";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
@@ -192,24 +193,35 @@ const ProductDetailPage = () => {
 
         {/* Details */}
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm text-muted-foreground">{product.vendorName}</p>
-            {vendorTrust?.is_verified && (
-              <Badge className="gap-1 text-[10px] h-5">
-                <ShieldCheck className="h-3 w-3" /> Verified Vendor
-              </Badge>
-            )}
-            {vendorTrust?.trust_score != null && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                vendorTrust.trust_score >= 80 ? "text-success bg-success/10" :
-                vendorTrust.trust_score >= 60 ? "text-accent bg-accent/10" :
-                "text-destructive bg-destructive/10"
-              }`}>
-                Trust {Math.round(vendorTrust.trust_score)}
-              </span>
-            )}
+          {/* Vendor card */}
+          <div className="rounded-xl border border-wood bg-card p-3 flex items-center gap-3 marketplace-shadow">
+            <div className="h-10 w-10 rounded-full bg-accent/15 text-accent flex items-center justify-center font-serif font-semibold">
+              {product.vendorName?.[0] ?? "K"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold truncate">{product.vendorName}</p>
+                {vendorTrust?.is_verified && <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />}
+                <FromKashmirBadge />
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                {vendorTrust?.trust_score != null && (
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                    vendorTrust.trust_score >= 80 ? "text-success bg-success/10" :
+                    vendorTrust.trust_score >= 60 ? "text-accent bg-accent/10" :
+                    "text-destructive bg-destructive/10"
+                  }`}>
+                    Trust {Math.round(vendorTrust.trust_score)}
+                  </span>
+                )}
+                <Link to={`/search?vendor=${product.vendorId}`} className="text-[11px] font-medium text-primary hover:underline">
+                  View store →
+                </Link>
+              </div>
+            </div>
           </div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">{product.title}</h1>
+
+          <h1 className="text-2xl md:text-3xl font-serif font-semibold tracking-tight mt-4">{product.title}</h1>
 
           <div className="flex items-center gap-2 mt-3">
             <div className="flex">
@@ -233,6 +245,21 @@ const ProductDetailPage = () => {
                 </span>
               </>
             )}
+          </div>
+
+          {/* Trust badges */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge variant="outline" className="gap-1 text-[10px] h-6 text-accent border-accent/40 bg-accent/5">
+              <Mountain className="h-3 w-3" /> Authentic Kashmiri Product
+            </Badge>
+            {vendorTrust?.is_verified && (
+              <Badge variant="outline" className="gap-1 text-[10px] h-6 text-primary border-primary/30 bg-primary/5">
+                <ShieldCheck className="h-3 w-3" /> Verified Artisan
+              </Badge>
+            )}
+            <Badge variant="outline" className="gap-1 text-[10px] h-6 text-success border-success/30 bg-success/5">
+              <Truck className="h-3 w-3" /> Secure Delivery
+            </Badge>
           </div>
 
           <Separator className="my-6" />

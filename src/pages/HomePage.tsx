@@ -12,6 +12,9 @@ import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
+import KashmirCategories from "@/components/home/KashmirCategories";
+import StorySection from "@/components/home/StorySection";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
 
 const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
   campaignId: c.campaign_id,
@@ -91,15 +94,15 @@ const HomePage = () => {
               From the Valley
             </span>
             <h1 className="text-4xl md:text-6xl font-serif font-semibold text-[hsl(210_40%_98%)] leading-[1.05]">
-              The soul of Kashmir,<br />
-              <span className="text-accent italic">delivered.</span>
+              Discover Kashmir's<br />
+              <span className="text-accent italic">Finest Products</span>
             </h1>
             <p className="mt-4 text-[hsl(210_40%_98%)]/75 text-sm md:text-base max-w-lg leading-relaxed">
               Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans, shipped across India.
             </p>
             <div className="mt-7 flex gap-3">
               <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20" asChild>
-                <Link to="/search">Shop the Valley</Link>
+                <Link to="/search">Explore Now</Link>
               </Button>
               <Button size="lg" variant="outline" className="border-[hsl(210_40%_98%)]/30 text-[hsl(210_40%_98%)] hover:bg-[hsl(210_40%_98%)]/10 hover:text-[hsl(210_40%_98%)]" asChild>
                 <Link to="/vendor">Sell Your Craft</Link>
@@ -109,7 +112,10 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Local Deals (region-aware) */}
+      {/* Kashmir Categories */}
+      <KashmirCategories />
+
+      {/* Local Deals (region-aware, horizontal scroll) */}
       <LocalDeals />
 
       {/* Sponsored */}
@@ -193,11 +199,11 @@ const HomePage = () => {
       {vendors.length > 0 && (
         <section className="container mx-auto px-4 mt-14">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold tracking-tight">Featured Vendors</h2>
+            <h2 className="text-xl font-serif font-semibold tracking-tight">Artisans of the Valley</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {vendors.map((vendor: any) => (
-              <div key={vendor.id} className="bg-card rounded-xl marketplace-shadow p-4 text-center hover:-translate-y-0.5 hover:marketplace-shadow-hover transition-all duration-200 cursor-pointer">
+              <div key={vendor.id} className="bg-card rounded-xl border border-wood marketplace-shadow p-4 text-center hover:-translate-y-0.5 hover:marketplace-shadow-hover transition-all duration-200 cursor-pointer">
                 {vendor.logo ? (
                   <img src={vendor.logo} alt={vendor.store_name} className="h-14 w-14 rounded-full object-cover mx-auto mb-3" />
                 ) : (
@@ -209,7 +215,10 @@ const HomePage = () => {
                   {vendor.store_name}
                   {vendor.is_verified && <ShieldCheck className="h-3.5 w-3.5 text-primary" />}
                 </h3>
-                <div className="flex items-center justify-center gap-1 mt-1">
+                <div className="mt-1.5 flex justify-center">
+                  <FromKashmirBadge />
+                </div>
+                <div className="flex items-center justify-center gap-1 mt-2">
                   <Star className="h-3 w-3 fill-accent text-accent" />
                   <span className="text-xs tabular-nums">{vendor.rating ?? 0}</span>
                 </div>
@@ -219,6 +228,9 @@ const HomePage = () => {
           </div>
         </section>
       )}
+
+      {/* Story Section */}
+      <StorySection />
 
       {/* All Products */}
       <section className="container mx-auto px-4 mt-14 pb-8">
