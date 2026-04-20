@@ -124,6 +124,43 @@ Deno.serve(async (req) => {
       });
     }
 
+    // POST reverse-geocode { lat, lng } — uses Nominatim (OpenStreetMap)
+    if (req.method === "POST" && path === "reverse-geocode") {
+      const body = await req.json().catch(() => ({}));
+      const lat = Number(body?.lat);
+      const lng = Number(body?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return new Response(JSON.stringify({ error: "Invalid coordinates" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+          { headers: { "User-Agent": "Lovable-Location/1.0 (contact@lovable.dev)", "Accept-Language": "en" } },
+        );
+        if (!r.ok) throw new Error(`nominatim ${r.status}`);
+        const j = await r.json();
+        const a = j.address ?? {};
+        const result = {
+          pincode: a.postcode ?? null,
+          city: a.city ?? a.town ?? a.village ?? a.suburb ?? a.county ?? null,
+          state: a.state ?? null,
+          country: (a.country_code ?? "in").toUpperCase(),
+          lat, lng,
+          source: "geo" as const,
+        };
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        console.error("reverse-geocode failed", e);
+        return new Response(JSON.stringify({ error: "Reverse geocoding failed" }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // GET suggestions?q=  — unified pincode + city + state autocomplete
     if (req.method === "GET" && path === "suggestions") {
       const q = (url.searchParams.get("q") ?? "").trim();
