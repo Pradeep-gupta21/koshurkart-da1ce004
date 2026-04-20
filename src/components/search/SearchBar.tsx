@@ -81,11 +81,11 @@ const SearchBar = () => {
 
   return (
     <div ref={containerRef} className="relative flex-1 max-w-2xl mx-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="relative flex items-stretch rounded-md ring-1 ring-wood/30 focus-within:ring-2 focus-within:ring-accent shadow-sm hover:shadow-md transition-shadow bg-background overflow-hidden">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
-          placeholder="Search products, brands, categories..."
-          className="pl-10 pr-8 h-10 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
+          placeholder="Search for Pashmina, Dry Fruits, Handicrafts…"
+          className="pl-10 pr-8 h-10 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none flex-1"
           value={query}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => setIsOpen(true)}
@@ -93,16 +93,26 @@ const SearchBar = () => {
         />
         {query && (
           <button
+            type="button"
             onClick={() => { setQuery(""); setSuggestions([]); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2"
+            className="absolute right-[60px] top-1/2 -translate-y-1/2"
+            aria-label="Clear search"
           >
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => executeSearch(query)}
+          className="bg-accent hover:bg-accent/90 text-accent-foreground px-4 flex items-center justify-center transition-colors"
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+        </button>
       </div>
 
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-popover/95 backdrop-blur-md border rounded-lg shadow-lg z-50 overflow-hidden">
           {/* Suggestions */}
           {suggestions.length > 0 && (
             <div className="p-2">
