@@ -1,69 +1,69 @@
 
-## Goal
-Extend the existing sidebar backend so it returns location-aware sections and supports admin CRUD with soft-deletes — without rebuilding what already works.
-
 ## Reality check
 
-| Spec ask | Status | Notes |
+This request is largely **already shipped** in your codebase. Here's the honest gap analysis before proposing work:
+
+| Spec ask | Status | Evidence |
 |---|---|---|
-| `menu_items` table with role_access, badge_key, parent_id, section, order_index, is_active | ✅ | Already in DB |
-| `GET /menu` returns role-filtered nested tree, cached 5min | ✅ | `supabase/functions/menu/index.ts` |
-| Admin CRUD UI | ✅ | `AdminMenu.tsx` + `MenuTreeEditor.tsx` writes via Supabase client (RLS-gated to admins) |
-| RLS protects writes | ✅ | "Admin manages menu items" policy |
-| Input validation on writes | ⚠️ Partial | Client-only via React state; no Zod schema |
-| Location detection (GPS/IP) + storage (localStorage + `user_locations`) | ✅ | `LocationContext` + `serviceable_pincodes` |
-| **Location → menu**: prioritize Essentials, show "Now delivering to your area" | ❌ | Menu doesn't know about pincode |
-| **"Most Ordered Near You"** dynamic | ❌ | Static link to `/search?sort=trending&local=1` |
-| Soft-delete (`is_active=false`) | ✅ schema | Editor currently hard-deletes — should flip to soft |
+| **Roles: Guest / User / Vendor / Admin** | ✅ | `app_role` enum, `user_roles` table, `has_role()` SECURITY DEFINER, `useAuth` exposes `roles/isAdmin/isVendor` |
+| **Sidebar changes by role** | ✅ | `menu` edge function filters by `role_access[]`; `useNavigation` passes role; `SidebarHeader` shows role badge |
+| **Secure APIs (JWT + RBAC)** | ✅ | RLS on every table via `has_role()`; edge functions validate JWT via `auth.getClaims()`; `ProtectedRoute` + `RoleRoute` on `/admin/*`, `/vendor/*` |
+| **Frontend↔backend role sync** | ✅ | `useAuth` subscribes to `onAuthStateChange` and refetches `user_roles` |
+| **Menu fully backend-driven** | ✅ | `menu_items` table + admin CRUD via `MenuTreeEditor` |
+| **API caching** | ✅ | Edge function in-memory cache (5min, pincode-bucketed) + React Query `staleTime` |
+| **Code splitting / lazy loading** | ⚠️ Partial | All routes in `App.tsx` are eagerly imported; admin & vendor bundles ship to every guest |
+| **API failure fallback + retry** | ⚠️ Partial | React Query default retry on `useNavigation`; no explicit error UI in sidebar; no retry/backoff config |
+| **Smooth animations / premium feel** | ✅ | Already polished in last passes |
+| **Unit tests** | ✅ exists | `SidebarItem.test.tsx`, `ExpandableMenu.test.tsx`, `CartContext.test.tsx`, `cacheService.test.ts`, `sidebarMenuService.test.ts` |
+| **Edge function tests** | ✅ exists | `supabase/functions/menu/menu_test.ts`, `_tests/location_test.ts` |
+| **Env configs / secret management** | ✅ | `.env` auto-managed; secrets in Supabase vault (Razorpay, Lovable AI, etc.) |
 
-## Plan
+**Verdict:** The auth + RBAC + backend-driven menu + testing + env story is already production-ready. The two real gaps are **route-level code splitting** and **explicit sidebar error UX with retry**. Everything else would be busywork or duplication.
 
-### 1. Make `menu` edge function location-aware
-Accept optional `?pincode=XXXXXX`. Resolve serviceability via `serviceable_pincodes`:
-- If pincode is in **J&K** (state = "Jammu and Kashmir"), bump the **Essentials** section's `order_index` to top and inject a synthetic banner item: *"Now delivering essentials to {city}"* (badge_key: `now-delivering`, returned as a `meta` field, not persisted).
-- Replace the *"Most Ordered Near You"* leaf's `route` with `/search?sort=popularity&pincode={pincode}` so the search page filters by serviceable products.
-- Cache key includes pincode bucket (first 3 digits) so we don't blow up cache cardinality.
+## Plan — ship the two real gaps, document the rest
 
-Response shape stays the same (sections + nested tree) plus a new optional `meta: { delivery_banner?: { city, message, badge_key } }`.
+### 1. Route-level code splitting (`src/App.tsx`)
 
-### 2. Add `now-delivering` badge to registry
-Extend `src/lib/badgeRegistry.ts` with `now-delivering` (saffron with Truck icon, label *"Now delivering to {city}"* — supports `{city}` token replacement at render time).
+Convert all page imports to `React.lazy()` and wrap `<Routes>` in a `<Suspense>` with the existing `PageSkeleton` fallback. Group by role for clean chunk names:
 
-### 3. Render delivery banner in sidebar
-In `ShopSidebar.tsx`, when `meta.delivery_banner` is present, render a thin saffron strip above sections with the message and a small Truck icon. Dismissable per-session via `sessionStorage`.
+- **Public chunks**: `HomePage`, `SearchPage`, `ProductDetailPage`, `AuthPage`, `CartPage`, `CheckoutPage`, `VendorApplyPage`, `NotFound`
+- **User chunk**: `ProfilePage`
+- **Vendor chunk** (loaded only when a vendor hits `/vendor/*`): `VendorDashboard` + nested `VendorOverview`, `VendorProducts`, `VendorOrders`, `VendorPayments`, `VendorCampaigns`, `VendorAnalytics`, `VendorNotifications`
+- **Admin chunk** (loaded only when an admin hits `/admin/*`): `AdminDashboard` + nested `AdminOverview`, `AdminVendors`, `AdminPayments`, `AdminPayouts`, `AdminReviews`, `AdminCampaigns`, `AdminPlacements`, `AdminPricing`, `AdminMenu`, `AdminSecurity`, `AdminSettings`
 
-### 4. Wire pincode into the menu query
-`useNavigation.ts` already fetches the menu via React Query. Read pincode from `LocationContext` and pass it to the edge function; include it in the queryKey so cache buckets per-pincode.
+Result: a guest's initial JS payload drops the entire admin + vendor surface. Vite emits separate chunks automatically.
 
-### 5. Switch admin delete to soft-delete
-`MenuTreeEditor.tsx` currently calls `.delete()`. Change to `.update({ is_active: false })`. Add an "Archived" toggle in the admin view to surface inactive items and a "Restore" action that flips it back. The edge function already filters `is_active=true` so soft-deleted items disappear from the public menu automatically.
+Keep the eagerly-needed shells (`DashboardLayout`, `Header`, `Footer`, `ProtectedRoute`, `RoleRoute`) eager so route transitions stay instant.
 
-### 6. Add server-side validation to admin writes
-Two paths:
-- **Client**: add `src/lib/validators/menuItemSchema.ts` (Zod) — `title 1–80`, `route` optional URL/path, `icon` ≤ 40, `section` enum, `role_access` array of `app_role`, `order_index` int, `badge_key` ≤ 40. Validate on save in `MenuTreeEditor`.
-- **Server**: a tiny new edge function `menu-admin` is overkill since RLS already enforces auth+admin role and the Supabase client write goes through PostgREST with column-level type checks. Skip a custom write endpoint; rely on RLS + Zod + DB types.
+### 2. Sidebar error fallback + retry (`useNavigation.ts` + `ShopSidebar.tsx`)
 
-### 7. "Most Ordered Near You" — quick wire
-Update the seed entry's route to `/search?sort=popularity&pincode={user_pincode}` (token replaced server-side in the menu function based on `?pincode=` query). Search page already supports `sort=popularity`; pincode filter falls back to global if unset. No new ranking algorithm — that's a follow-up.
+- In `useNavigation.ts`, configure React Query with `retry: 2`, `retryDelay: exponential backoff (1s, 2s)`, and surface `error` + `refetch` from the hook.
+- In `ShopSidebar.tsx`, when `error` is truthy and not loading, render an inline error state: small alert icon, "Couldn't load menu", and a **Retry** button that calls `refetch()`. Keep `SidebarHeader` and the dismissible delivery banner visible even on error so the panel never feels broken.
+- Add a tiny test in `ExpandableMenu.test.tsx` style (`SidebarError.test.tsx`) that asserts the retry button calls a passed handler.
 
-## Out of scope
-- Redis (5-min in-memory cache in the edge function is sufficient at current scale)
-- A separate Express backend (Supabase edge functions cover the API contract)
-- Geo-distance ranking for "Most Ordered Near You" (ship the link wiring; real algorithm is a separate task)
-- Storing the menu in a different shape (current schema already covers all spec fields except `priority` → we use `order_index`, and `badge` → `badge_key`)
+### 3. Confirm-and-document what's already production-ready
+
+No new code for these — just verify in QA pass:
+- Auth state hydration (anon → signed-in role flip updates sidebar live via existing `onAuthStateChange`)
+- RLS coverage (every table has `has_role()`-gated admin policies; vendor/user policies use ownership joins)
+- Edge function JWT validation (`menu`, `location`, `create-razorpay-order`, `verify-razorpay-payment`)
+- Menu CRUD respects soft-delete + Zod validation (shipped last loop)
+
+## Out of scope (intentional)
+
+- Rewriting the sidebar in Zustand/Redux — `SidebarContext` + React Query is already the production pattern for this app
+- Adding a separate Express backend — Supabase edge functions cover the API contract
+- Moving to Next.js — incompatible with the Vite/React stack
+- Service worker / offline cache — premature for current scale
+- New tests beyond the one retry test — existing coverage is appropriate for the surface area
 
 ## Files
 
 **Edit**
-- `supabase/functions/menu/index.ts` — accept `?pincode`, resolve J&K, reorder Essentials, inject delivery_banner meta, token-replace pincode in routes
-- `src/lib/badgeRegistry.ts` — add `now-delivering` entry
-- `src/components/navigation/ShopSidebar.tsx` — render `meta.delivery_banner` strip with dismiss
-- `src/hooks/useNavigation.ts` — read pincode from LocationContext, include in query + queryKey
-- `src/components/admin/MenuTreeEditor.tsx` — soft-delete, archived toggle, restore action, Zod validation on save
-- `src/pages/admin/AdminMenu.tsx` — pass through archived state if needed
+- `src/App.tsx` — convert page imports to `React.lazy`, wrap routes in `<Suspense>` with `PageSkeleton`
+- `src/hooks/useNavigation.ts` — add `retry`, `retryDelay`, expose `error` + `refetch`
+- `src/components/navigation/ShopSidebar.tsx` — render error state with Retry button when menu query fails
 
 **Create**
-- `src/lib/validators/menuItemSchema.ts` — Zod schema for menu item create/update
-
-**Data**
-- One INSERT/UPDATE migration to ensure the seeded "Most Ordered Near You" leaf uses the `{pincode}` token in its route
+- `src/components/navigation/SidebarError.tsx` — tiny presentational error block (icon + message + retry button)
+- `src/components/navigation/SidebarError.test.tsx` — asserts retry handler is called
