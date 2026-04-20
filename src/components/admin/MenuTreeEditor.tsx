@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,21 +8,29 @@ interface Props {
   nodes: MenuNode[];
   onEdit: (node: MenuNode) => void;
   onDelete: (node: MenuNode) => void;
+  onRestore?: (node: MenuNode) => void;
   depth?: number;
 }
 
-const MenuTreeEditor = ({ nodes, onEdit, onDelete, depth = 0 }: Props) => {
+const MenuTreeEditor = ({ nodes, onEdit, onDelete, onRestore, depth = 0 }: Props) => {
   return (
     <ul className={depth === 0 ? "space-y-1" : "space-y-1 ml-6 border-l pl-3 mt-1"}>
       {nodes.map((node) => (
-        <Row key={node.id} node={node} onEdit={onEdit} onDelete={onDelete} depth={depth} />
+        <Row
+          key={node.id}
+          node={node}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          depth={depth}
+        />
       ))}
     </ul>
   );
 };
 
 const Row = ({
-  node, onEdit, onDelete, depth,
+  node, onEdit, onDelete, onRestore, depth,
 }: { node: MenuNode } & Omit<Props, "nodes">) => {
   const [open, setOpen] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
@@ -51,7 +59,7 @@ const Row = ({
             {node.route && (
               <code className="text-xs text-muted-foreground truncate">{node.route}</code>
             )}
-            {!node.is_active && <Badge variant="outline" className="text-xs">Inactive</Badge>}
+            {!node.is_active && <Badge variant="outline" className="text-xs">Archived</Badge>}
             {node.role_access.length > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {node.role_access.join(", ")}
@@ -66,15 +74,27 @@ const Row = ({
         <Button size="sm" variant="ghost" onClick={() => onEdit(node)} aria-label="Edit">
           <Pencil className="h-4 w-4" />
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onDelete(node)}
-          aria-label="Delete"
-          className="text-destructive hover:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {!node.is_active && onRestore ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onRestore(node)}
+            aria-label="Restore"
+            className="text-success hover:text-success"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDelete(node)}
+            aria-label="Archive"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {hasChildren && open && (
@@ -82,6 +102,7 @@ const Row = ({
           nodes={node.children}
           onEdit={onEdit}
           onDelete={onDelete}
+          onRestore={onRestore}
           depth={depth + 1}
         />
       )}
