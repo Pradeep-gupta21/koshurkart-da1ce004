@@ -139,13 +139,30 @@ const AdminMenu = () => {
         </TabsList>
 
         <TabsContent value={section} className="mt-4">
-          <Card className="p-4">
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-end gap-2">
+              <Switch
+                id="show-archived"
+                checked={showArchived}
+                onCheckedChange={setShowArchived}
+              />
+              <Label htmlFor="show-archived" className="text-sm cursor-pointer">
+                Show archived
+              </Label>
+            </div>
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading menu…</p>
-            ) : tree.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No items yet. Create your first one.</p>
+            ) : visibleTree.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {showArchived ? "No items yet. Create your first one." : "No active items. Toggle 'Show archived' to view archived items."}
+              </p>
             ) : (
-              <MenuTreeEditor nodes={tree} onEdit={openEdit} onDelete={handleDelete} />
+              <MenuTreeEditor
+                nodes={visibleTree}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onRestore={handleRestore}
+              />
             )}
           </Card>
         </TabsContent>
