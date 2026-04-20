@@ -25,9 +25,22 @@ export interface SidebarTrendingProduct {
   discount_price: number | null;
 }
 
+export interface SidebarDeliveryBanner {
+  city: string;
+  state: string | null;
+  message: string;
+  badge_key: string;
+}
+
+export interface SidebarMenuMeta {
+  delivery_banner?: SidebarDeliveryBanner;
+  pincode?: string | null;
+}
+
 export interface SidebarMenu {
   tree: MenuNode[];
   trending: SidebarTrendingProduct[];
+  meta: SidebarMenuMeta;
 }
 
 export interface MenuItemInput {
@@ -62,17 +75,24 @@ async function authedFetch(path: string, init: RequestInit = {}) {
 }
 
 export const sidebarMenuService = {
-  /** Public: load admin-managed tree + trending products. JWT-aware. */
-  async fetchMenu(section: "shop" | "dashboard" = "shop"): Promise<SidebarMenu> {
+  /** Public: load admin-managed tree + trending products. JWT-aware + location-aware. */
+  async fetchMenu(
+    section: "shop" | "dashboard" = "shop",
+    pincode?: string | null,
+  ): Promise<SidebarMenu> {
+    const qs = new URLSearchParams({ section });
+    if (pincode) qs.set("pincode", pincode);
     const [treeRes, trendingRes] = await Promise.all([
-      authedFetch(`/menu?section=${section}`),
+      authedFetch(`/menu?${qs.toString()}`),
       authedFetch(`/get-sidebar-menu`).catch(() => null),
     ]);
 
     let tree: MenuNode[] = [];
+    let meta: SidebarMenuMeta = { pincode: pincode ?? null };
     if (treeRes.ok) {
       const j = await treeRes.json().catch(() => ({}));
       tree = (j.tree as MenuNode[]) ?? [];
+      if (j.meta) meta = { ...meta, ...(j.meta as SidebarMenuMeta) };
     } else {
       throw new Error(`Menu request failed (${treeRes.status})`);
     }
@@ -83,7 +103,7 @@ export const sidebarMenuService = {
       trending = (j.trending as SidebarTrendingProduct[]) ?? [];
     }
 
-    return { tree, trending };
+    return { tree, trending, meta };
   },
 
   /** Admin: create. */
