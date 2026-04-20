@@ -607,6 +607,7 @@ export type Database = {
           avatar: string | null
           country: string | null
           created_at: string
+          default_pincode: string | null
           email: string
           id: string
           name: string
@@ -617,6 +618,7 @@ export type Database = {
           avatar?: string | null
           country?: string | null
           created_at?: string
+          default_pincode?: string | null
           email?: string
           id: string
           name?: string
@@ -627,6 +629,7 @@ export type Database = {
           avatar?: string | null
           country?: string | null
           created_at?: string
+          default_pincode?: string | null
           email?: string
           id?: string
           name?: string
@@ -720,6 +723,45 @@ export type Database = {
           },
         ]
       }
+      serviceable_pincodes: {
+        Row: {
+          base_delivery_days: number
+          city: string
+          cod_available: boolean
+          country: string
+          created_at: string
+          is_active: boolean
+          pincode: string
+          region_zone: string
+          state: string | null
+          surcharge_pct: number
+        }
+        Insert: {
+          base_delivery_days?: number
+          city: string
+          cod_available?: boolean
+          country?: string
+          created_at?: string
+          is_active?: boolean
+          pincode: string
+          region_zone?: string
+          state?: string | null
+          surcharge_pct?: number
+        }
+        Update: {
+          base_delivery_days?: number
+          city?: string
+          cod_available?: boolean
+          country?: string
+          created_at?: string
+          is_active?: boolean
+          pincode?: string
+          region_zone?: string
+          state?: string | null
+          surcharge_pct?: number
+        }
+        Relationships: []
+      }
       shipment_events: {
         Row: {
           created_at: string
@@ -782,6 +824,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_locations: {
+        Row: {
+          city: string
+          country: string
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string
+          lat: number | null
+          lng: number | null
+          pincode: string
+          state: string | null
+          user_id: string
+        }
+        Insert: {
+          city: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          pincode: string
+          state?: string | null
+          user_id: string
+        }
+        Update: {
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          pincode?: string
+          state?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -799,6 +883,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      vendor_serviceability: {
+        Row: {
+          created_at: string
+          delivery_days_override: number | null
+          id: string
+          pincode_pattern: string
+          ships: boolean
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_days_override?: number | null
+          id?: string
+          pincode_pattern: string
+          ships?: boolean
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_days_override?: number | null
+          id?: string
+          pincode_pattern?: string
+          ships?: boolean
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_serviceability_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendors: {
         Row: {
@@ -873,6 +992,16 @@ export type Database = {
       can_review_product: {
         Args: { _product_id: string; _user_id: string }
         Returns: string
+      }
+      check_serviceability: {
+        Args: { _pincode: string; _product_ids: string[] }
+        Returns: {
+          cod: boolean
+          deliverable: boolean
+          eta_days: number
+          product_id: string
+          surcharge_pct: number
+        }[]
       }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }

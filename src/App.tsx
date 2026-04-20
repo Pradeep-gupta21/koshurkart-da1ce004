@@ -22,6 +22,7 @@ import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
 import PageSkeleton from "@/components/ui/PageSkeleton";
+import { LocationProvider } from "@/contexts/LocationContext";
 
 // Lazy-loaded routes (code-splitting): trims the initial bundle. These are
 // behind auth/role guards so most users never download them.
@@ -59,6 +60,7 @@ const App = () => (
       <ThemeProvider>
         <AuthProvider>
           <CurrencyProvider>
+          <LocationProvider>
           <CartProvider>
             <Toaster />
             <Sonner />
@@ -118,6 +120,7 @@ const App = () => (
               </SidebarProvider>
             </BrowserRouter>
           </CartProvider>
+          </LocationProvider>
           </CurrencyProvider>
         </AuthProvider>
       </ThemeProvider>

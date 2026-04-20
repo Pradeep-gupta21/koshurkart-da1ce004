@@ -1,14 +1,17 @@
 import { Link } from "react-router-dom";
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
+import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useLocation } from "@/contexts/LocationContext";
 import EmptyState from "@/components/ui/EmptyState";
+import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 
 const CartPage = () => {
   const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
   const { formatPrice } = useCurrency();
+  const { location } = useLocation();
 
   if (items.length === 0) {
     return (
@@ -62,6 +65,9 @@ const CartPage = () => {
                     {formatPrice((product.discountPrice ?? product.price) * quantity)}
                   </span>
                 </div>
+                <div className="mt-2">
+                  <ServiceabilityBadge productId={product.id} />
+                </div>
               </div>
             </div>
           ))}
@@ -71,6 +77,15 @@ const CartPage = () => {
         {/* Summary */}
         <div className="bg-card rounded-xl marketplace-shadow p-6 h-fit sticky top-24">
           <h2 className="font-semibold mb-4">Order Summary</h2>
+          {location?.city && (
+            <div className="flex items-start gap-2 mb-4 text-xs bg-muted/50 rounded-md p-2.5">
+              <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
+              <div>
+                <p className="text-muted-foreground">Delivering to</p>
+                <p className="font-medium">{location.city}{location.pincode ? ` — ${location.pincode}` : ""}</p>
+              </div>
+            </div>
+          )}
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
