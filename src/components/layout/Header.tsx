@@ -21,9 +21,9 @@ const Header = () => {
   const allCurrencies = currencyService.getSupportedCurrencies();
 
   return (
-    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-wood">
       {/* Top bar */}
-      <div className="bg-primary text-primary-foreground">
+      <div className="bg-[hsl(222_47%_11%)] text-[hsl(210_40%_98%)]">
         <div className="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
           <span className="hidden sm:inline">Free shipping on orders over $50</span>
           <div className="flex items-center gap-4">
@@ -46,8 +46,8 @@ const Header = () => {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Link to="/vendor" className="hover:underline">Sell on Nexus</Link>
-            <Link to="/admin" className="hover:underline">Admin</Link>
+            <Link to="/vendor" className="hover:text-accent transition-colors">Sell on Kashmir</Link>
+            <Link to="/admin" className="hover:text-accent transition-colors">Admin</Link>
           </div>
         </div>
       </div>
@@ -60,10 +60,12 @@ const Header = () => {
 
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">N</span>
+            <div className="h-9 w-9 rounded-lg bg-[hsl(222_47%_11%)] flex items-center justify-center ring-1 ring-accent/40">
+              <span className="text-accent font-serif font-bold text-base">K</span>
             </div>
-            <span className="text-xl font-bold tracking-tight hidden sm:inline">Nexus Market</span>
+            <span className="text-xl font-serif font-semibold tracking-tight hidden sm:inline">
+              Kashmir <span className="text-accent">Bazaar</span>
+            </span>
           </Link>
 
           {/* Search */}
