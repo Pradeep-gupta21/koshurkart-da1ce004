@@ -20,8 +20,11 @@ const VendorCard = ({ vendor, className, onClick }: VendorCardProps) => {
       <img
         src={vendor.logo}
         alt={vendor.storeName}
+        width={56}
+        height={56}
         className="h-14 w-14 rounded-full object-cover mx-auto mb-3"
         loading="lazy"
+        decoding="async"
       />
       <h3 className="text-sm font-medium flex items-center justify-center gap-1">
         {vendor.storeName}
