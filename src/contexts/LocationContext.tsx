@@ -1,6 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef, ReactNode } from "react";
 import { locationService, DetectedLocation, UserLocation } from "@/services/locationService";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
+import { toast } from "sonner";
 
 const STORAGE_KEY = "nexus_location";
 
@@ -44,16 +46,20 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
   const [savedLocations, setSavedLocations] = useState<UserLocation[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isServiceable, setIsServiceable] = useState<boolean | null>(null);
+  const detectFailToastShown = useRef(false);
 
   const detectAuto = useCallback(async () => {
     setIsDetecting(true);
+    let gpsTried = false;
+    let gpsFailed = false;
     try {
       // 1) Try precise GPS first (browser prompts user)
       const gps = await new Promise<GeolocationPosition | null>((resolve) => {
         if (!("geolocation" in navigator)) return resolve(null);
+        gpsTried = true;
         navigator.geolocation.getCurrentPosition(
           (pos) => resolve(pos),
-          () => resolve(null),
+          () => { gpsFailed = true; resolve(null); },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
         );
       });
@@ -63,11 +69,26 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
         try {
           d = await locationService.reverseGeocode(gps.coords.latitude, gps.coords.longitude);
         } catch (e) {
-          console.warn("reverse geocode failed, falling back to IP", e);
+          logger.error("LocationContext.detectAuto", "reverse geocode failed; trying IP", e);
+          gpsFailed = true;
         }
       }
       // 2) Fallback to server IP detection
-      if (!d) d = await locationService.detect();
+      if (!d) {
+        try {
+          d = await locationService.detect();
+        } catch (e) {
+          logger.error("LocationContext.detectAuto", "IP detect failed after GPS path", e);
+          // Both paths failed — show one-time toast
+          if ((gpsTried && gpsFailed) && !detectFailToastShown.current) {
+            detectFailToastShown.current = true;
+            toast.error("Couldn't detect your location", {
+              description: "Please enter your pincode manually.",
+            });
+          }
+          return;
+        }
+      }
 
       const next: ActiveLocation = {
         pincode: d.pincode,
@@ -79,7 +100,7 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
       setLocation(next);
       persist(next);
     } catch (e) {
-      console.warn("location detect failed", e);
+      logger.error("LocationContext.detectAuto", "unexpected failure", e);
     } finally {
       setIsDetecting(false);
     }
@@ -135,7 +156,7 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
         persist(next);
       }
     } catch (e) {
-      console.warn("refreshSaved failed", e);
+      logger.error("LocationContext.refreshSaved", "failed to load saved locations", e);
     }
   }, [user, location]);
 

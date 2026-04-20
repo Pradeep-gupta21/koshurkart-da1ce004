@@ -1,11 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 import { cacheService } from "./cacheService";
+import { logger } from "@/lib/logger";
 
 const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/location`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const SERVICEABILITY_TTL = 600; // 10 min
 const LOCAL_DEALS_TTL = 300; // 5 min
+const PINCODE_LOOKUP_TTL = 3600; // 1 hour — pincodes are static
+const REVERSE_GEO_TTL = 3600; // 1 hour
+const DETECT_DEDUPE_MS = 30_000;
+
+// In-flight dedupe for detect() — multiple early callers share one promise
+let detectInflight: { promise: Promise<unknown>; expiresAt: number } | null = null;
 
 export interface DetectedLocation {
   pincode: string | null;
@@ -59,21 +66,53 @@ async function fetchJson(path: string, init?: RequestInit) {
 
 export const locationService = {
   async detect(): Promise<DetectedLocation> {
-    return fetchJson("detect");
+    const now = Date.now();
+    if (detectInflight && detectInflight.expiresAt > now) {
+      return detectInflight.promise as Promise<DetectedLocation>;
+    }
+    const promise = fetchJson("detect").catch((e) => {
+      logger.error("locationService.detect", "IP detect failed", e);
+      throw e;
+    });
+    detectInflight = { promise, expiresAt: now + DETECT_DEDUPE_MS };
+    return promise as Promise<DetectedLocation>;
   },
 
   async reverseGeocode(lat: number, lng: number): Promise<DetectedLocation> {
-    return fetchJson("reverse-geocode", {
-      method: "POST",
-      body: JSON.stringify({ lat, lng }),
-    });
+    // Round to 3 decimals (~110m) for cache hit-rate, respects Nominatim policy
+    const rLat = Math.round(lat * 1000) / 1000;
+    const rLng = Math.round(lng * 1000) / 1000;
+    const cacheKey = `loc:reverse:${rLat}:${rLng}`;
+    const cached = cacheService.get<DetectedLocation>(cacheKey);
+    if (cached) return cached;
+    try {
+      const res = await fetchJson("reverse-geocode", {
+        method: "POST",
+        body: JSON.stringify({ lat, lng }),
+      });
+      cacheService.set(cacheKey, res, REVERSE_GEO_TTL);
+      return res;
+    } catch (e) {
+      logger.error("locationService.reverseGeocode", "Reverse geocode failed", e);
+      throw e;
+    }
   },
 
   async lookup(pincode: string): Promise<PincodeInfo> {
-    return fetchJson("lookup", {
-      method: "POST",
-      body: JSON.stringify({ pincode }),
-    });
+    const cacheKey = `loc:lookup:${pincode}`;
+    const cached = cacheService.get<PincodeInfo>(cacheKey);
+    if (cached) return cached;
+    try {
+      const res = await fetchJson("lookup", {
+        method: "POST",
+        body: JSON.stringify({ pincode }),
+      });
+      cacheService.set(cacheKey, res, PINCODE_LOOKUP_TTL);
+      return res;
+    } catch (e) {
+      logger.error("locationService.lookup", "Pincode lookup failed", { pincode, error: e });
+      throw e;
+    }
   },
 
   async cities(q: string): Promise<Array<{ city: string; state: string; pincode: string }>> {

@@ -28,6 +28,9 @@ export function useServiceability(productIds: string[]) {
     queryFn: () => locationService.checkServiceability(pincode!, sortedIds),
     enabled: !!pincode && sortedIds.length > 0,
     staleTime: 10 * 60_000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    refetchOnWindowFocus: false,
   });
 
   const map = new Map<string, ServiceabilityRow>();
