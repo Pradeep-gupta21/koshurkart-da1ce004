@@ -50,9 +50,9 @@ const VendorApplyPage = () => {
       return;
     }
 
-    toast({ title: "Application submitted!", description: "Your vendor application is pending review." });
-    // Reload to refresh roles
-    window.location.href = "/vendor";
+    toast({ title: "Application submitted!", description: "Next: complete your KYC to speed up approval." });
+    // Full reload so AuthProvider picks up the new vendor row + role.
+    window.location.href = "/vendor/apply/kyc";
   };
 
   return (
