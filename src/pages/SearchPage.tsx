@@ -13,6 +13,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
+import { useServiceability } from "@/hooks/useServiceability";
+import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
 const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
