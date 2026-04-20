@@ -884,6 +884,27 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_onboarding_drafts: {
+        Row: {
+          current_step: number
+          data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_step?: number
+          data?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_step?: number
+          data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vendor_serviceability: {
         Row: {
           created_at: string
@@ -925,9 +946,11 @@ export type Database = {
           bank_account_holder: string | null
           bank_account_number_masked: string | null
           bank_ifsc: string | null
+          banner: string | null
           business_name: string | null
           business_type: string | null
           cancellation_rate: number | null
+          category: string | null
           created_at: string
           delivery_rate: number | null
           description: string | null
@@ -943,11 +966,20 @@ export type Database = {
           kyc_submitted_at: string | null
           logo: string | null
           pan_number: string | null
+          phone: string | null
+          phone_verified_at: string | null
+          pickup_address_line1: string | null
+          pickup_address_line2: string | null
+          pickup_city: string | null
+          pickup_country: string | null
+          pickup_pincode: string | null
+          pickup_state: string | null
           rating: number | null
           return_rate: number | null
           review_rating: number | null
           store_name: string
           store_slug: string
+          tagline: string | null
           total_earnings: number | null
           total_sales: number | null
           trust_score: number | null
@@ -960,9 +992,11 @@ export type Database = {
           bank_account_holder?: string | null
           bank_account_number_masked?: string | null
           bank_ifsc?: string | null
+          banner?: string | null
           business_name?: string | null
           business_type?: string | null
           cancellation_rate?: number | null
+          category?: string | null
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
@@ -978,11 +1012,20 @@ export type Database = {
           kyc_submitted_at?: string | null
           logo?: string | null
           pan_number?: string | null
+          phone?: string | null
+          phone_verified_at?: string | null
+          pickup_address_line1?: string | null
+          pickup_address_line2?: string | null
+          pickup_city?: string | null
+          pickup_country?: string | null
+          pickup_pincode?: string | null
+          pickup_state?: string | null
           rating?: number | null
           return_rate?: number | null
           review_rating?: number | null
           store_name: string
           store_slug: string
+          tagline?: string | null
           total_earnings?: number | null
           total_sales?: number | null
           trust_score?: number | null
@@ -995,9 +1038,11 @@ export type Database = {
           bank_account_holder?: string | null
           bank_account_number_masked?: string | null
           bank_ifsc?: string | null
+          banner?: string | null
           business_name?: string | null
           business_type?: string | null
           cancellation_rate?: number | null
+          category?: string | null
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
@@ -1013,11 +1058,20 @@ export type Database = {
           kyc_submitted_at?: string | null
           logo?: string | null
           pan_number?: string | null
+          phone?: string | null
+          phone_verified_at?: string | null
+          pickup_address_line1?: string | null
+          pickup_address_line2?: string | null
+          pickup_city?: string | null
+          pickup_country?: string | null
+          pickup_pincode?: string | null
+          pickup_state?: string | null
           rating?: number | null
           return_rate?: number | null
           review_rating?: number | null
           store_name?: string
           store_slug?: string
+          tagline?: string | null
           total_earnings?: number | null
           total_sales?: number | null
           trust_score?: number | null

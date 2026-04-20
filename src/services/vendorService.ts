@@ -171,4 +171,28 @@ export const vendorService = {
     const { data } = supabase.storage.from('product-images').getPublicUrl(path);
     return data.publicUrl;
   },
+
+  /** Upload vendor banner image. Wider crop, public bucket. */
+  async uploadBanner(vendorId: string, file: File): Promise<string> {
+    const blob = await compressImage(file, { maxDim: 1600, quality: 0.82 });
+    const path = `vendors/${vendorId}/banner-${Date.now()}.jpg`;
+    const { error } = await supabase.storage.from('product-images').upload(path, blob, {
+      upsert: true,
+      contentType: 'image/jpeg',
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return data.publicUrl;
+  },
+
+  /** Lookup city/state from a serviceable pincode. Returns null if not found. */
+  async lookupPincode(pincode: string) {
+    const { data } = await supabase
+      .from('serviceable_pincodes')
+      .select('city, state, country')
+      .eq('pincode', pincode)
+      .eq('is_active', true)
+      .maybeSingle();
+    return data ?? null;
+  },
 };
