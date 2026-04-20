@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
+import RegionRecommendations from "@/components/home/RegionRecommendations";
 import KashmirCategories from "@/components/home/KashmirCategories";
 import StorySection from "@/components/home/StorySection";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
@@ -123,6 +124,9 @@ const HomePage = () => {
 
       {/* Local Deals (region-aware, horizontal scroll) */}
       <LocalDeals />
+
+      {/* Region-aware recommendations */}
+      <RegionRecommendations />
 
       {/* Sponsored */}
       {sponsoredProducts.length > 0 && (
