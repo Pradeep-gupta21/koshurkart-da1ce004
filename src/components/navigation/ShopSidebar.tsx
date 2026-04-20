@@ -43,7 +43,9 @@ const ShopSidebar = () => {
     enabled: isOpen && !authLoading,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    retry: 1,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    refetchOnWindowFocus: false,
   });
 
   const accountSections = sections.filter(
@@ -99,11 +101,11 @@ const ShopSidebar = () => {
             </>
           ) : (
             <>
-              {/* Trending */}
+              {/* Trending — capped at 4 for premium, uncluttered feel */}
               {menu?.trending && menu.trending.length > 0 && (
                 <SidebarSection label="Trending Now">
-                  <div className="px-4 pb-2 flex gap-3 overflow-x-auto scrollbar-thin">
-                    {menu.trending.map((p) => (
+                  <div className="px-4 pb-3 flex gap-3 overflow-x-auto scrollbar-thin">
+                    {menu.trending.slice(0, 4).map((p) => (
                       <Link
                         key={p.id}
                         to={`/product/${p.slug}`}

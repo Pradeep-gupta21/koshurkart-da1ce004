@@ -11,8 +11,10 @@ interface ExpandableMenuProps {
 }
 
 const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
+  // Default collapsed for an uncluttered, premium drawer
   const [open, setOpen] = useState(false);
   const hasChildren = !!node.children && node.children.length > 0;
+  const childCount = node.children?.length ?? 0;
   const Icon = resolveLucideIcon(node.icon);
 
   if (!hasChildren) {
@@ -34,14 +36,22 @@ const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
         aria-expanded={open}
         aria-controls={`subnav-${node.id}`}
         className={cn(
-          "w-full flex items-center gap-2 px-5 py-2.5 text-sm text-foreground hover:bg-muted transition-colors",
+          "w-full flex items-center gap-3 px-5 h-11 text-sm text-foreground hover:bg-accent/40 transition-colors duration-150",
           level > 0 && "pl-10",
         )}
       >
-        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+        {Icon && <Icon className="h-4 w-4 text-muted-foreground shrink-0" />}
         <span className="truncate flex-1 text-left">{node.title}</span>
+        {childCount > 0 && (
+          <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+            {childCount}
+          </span>
+        )}
         <ChevronRight
-          className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-90")}
+          className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+            open && "rotate-90",
+          )}
           aria-hidden="true"
         />
       </button>

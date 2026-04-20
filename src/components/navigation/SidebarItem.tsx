@@ -18,10 +18,11 @@ const SidebarItem = memo(({ to, label, icon: Icon, end, badge, indent }: Sidebar
       to={to}
       end={end}
       className={cn(
-        "relative flex items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-muted transition-colors border-l-2 border-transparent",
+        "relative flex items-center gap-3 px-5 h-11 text-sm text-foreground border-l-2 border-transparent",
+        "hover:bg-accent/40 transition-colors duration-150",
         indent && "pl-10"
       )}
-      activeClassName="bg-muted text-primary font-medium border-l-primary"
+      activeClassName="bg-accent/60 text-primary font-medium border-l-primary"
     >
       {Icon && <Icon className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />}
       <span className="truncate flex-1">{label}</span>

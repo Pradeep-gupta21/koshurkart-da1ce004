@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -15,34 +16,40 @@ import HomePage from "@/pages/HomePage";
 import SearchPage from "@/pages/SearchPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
-import CheckoutPage from "@/pages/CheckoutPage";
 import AuthPage from "@/pages/AuthPage";
-import ProfilePage from "@/pages/ProfilePage";
-import VendorApplyPage from "@/pages/VendorApplyPage";
-import VendorDashboard from "@/pages/vendor/VendorDashboard";
-import VendorOverview from "@/pages/vendor/VendorOverview";
-import VendorProducts from "@/pages/vendor/VendorProducts";
-import VendorCampaigns from "@/pages/vendor/VendorCampaigns";
-import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
-import VendorPayments from "@/pages/vendor/VendorPayments";
-import VendorOrders from "@/pages/vendor/VendorOrders";
-import VendorNotifications from "@/pages/vendor/VendorNotifications";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
-import AdminOverview from "@/pages/admin/AdminOverview";
-import AdminVendors from "@/pages/admin/AdminVendors";
-import AdminCampaigns from "@/pages/admin/AdminCampaigns";
-import AdminPayouts from "@/pages/admin/AdminPayouts";
-import AdminPlacements from "@/pages/admin/AdminPlacements";
-import AdminReviews from "@/pages/admin/AdminReviews";
-import AdminPricing from "@/pages/admin/AdminPricing";
-import AdminSecurity from "@/pages/admin/AdminSecurity";
-import AdminPayments from "@/pages/admin/AdminPayments";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminMenu from "@/pages/admin/AdminMenu";
 import NotFound from "@/pages/NotFound";
 import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
+import PageSkeleton from "@/components/ui/PageSkeleton";
+
+// Lazy-loaded routes (code-splitting): trims the initial bundle. These are
+// behind auth/role guards so most users never download them.
+const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const VendorApplyPage = lazy(() => import("@/pages/VendorApplyPage"));
+
+const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
+const VendorOverview = lazy(() => import("@/pages/vendor/VendorOverview"));
+const VendorProducts = lazy(() => import("@/pages/vendor/VendorProducts"));
+const VendorCampaigns = lazy(() => import("@/pages/vendor/VendorCampaigns"));
+const VendorAnalytics = lazy(() => import("@/pages/vendor/VendorAnalytics"));
+const VendorPayments = lazy(() => import("@/pages/vendor/VendorPayments"));
+const VendorOrders = lazy(() => import("@/pages/vendor/VendorOrders"));
+const VendorNotifications = lazy(() => import("@/pages/vendor/VendorNotifications"));
+
+const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
+const AdminOverview = lazy(() => import("@/pages/admin/AdminOverview"));
+const AdminVendors = lazy(() => import("@/pages/admin/AdminVendors"));
+const AdminCampaigns = lazy(() => import("@/pages/admin/AdminCampaigns"));
+const AdminPayouts = lazy(() => import("@/pages/admin/AdminPayouts"));
+const AdminPlacements = lazy(() => import("@/pages/admin/AdminPlacements"));
+const AdminReviews = lazy(() => import("@/pages/admin/AdminReviews"));
+const AdminPricing = lazy(() => import("@/pages/admin/AdminPricing"));
+const AdminSecurity = lazy(() => import("@/pages/admin/AdminSecurity"));
+const AdminPayments = lazy(() => import("@/pages/admin/AdminPayments"));
+const AdminSettings = lazy(() => import("@/pages/admin/AdminSettings"));
+const AdminMenu = lazy(() => import("@/pages/admin/AdminMenu"));
 
 const queryClient = new QueryClient();
 
@@ -61,47 +68,49 @@ const App = () => (
               <div className="min-h-screen flex flex-col">
                 <Header />
                 <main className="flex-1">
-                  <Routes>
-                    {/* Public routes */}
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/search" element={<SearchPage />} />
-                    <Route path="/product/:slug" element={<ProductDetailPage />} />
-                    <Route path="/cart" element={<CartPage />} />
-                    <Route path="/auth" element={<AuthPage />} />
+                  <Suspense fallback={<PageSkeleton />}>
+                    <Routes>
+                      {/* Public routes */}
+                      <Route path="/" element={<HomePage />} />
+                      <Route path="/search" element={<SearchPage />} />
+                      <Route path="/product/:slug" element={<ProductDetailPage />} />
+                      <Route path="/cart" element={<CartPage />} />
+                      <Route path="/auth" element={<AuthPage />} />
 
-                    {/* Authenticated routes */}
-                    <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-                    <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-                    <Route path="/vendor/apply" element={<ProtectedRoute><VendorApplyPage /></ProtectedRoute>} />
+                      {/* Authenticated routes */}
+                      <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+                      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                      <Route path="/vendor/apply" element={<ProtectedRoute><VendorApplyPage /></ProtectedRoute>} />
 
-                    {/* Vendor routes */}
-                    <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
-                      <Route index element={<VendorOverview />} />
-                      <Route path="products" element={<VendorProducts />} />
-                      <Route path="orders" element={<VendorOrders />} />
-                      <Route path="campaigns" element={<VendorCampaigns />} />
-                      <Route path="analytics" element={<VendorAnalytics />} />
-                      <Route path="payments" element={<VendorPayments />} />
-                      <Route path="notifications" element={<VendorNotifications />} />
-                    </Route>
+                      {/* Vendor routes */}
+                      <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
+                        <Route index element={<VendorOverview />} />
+                        <Route path="products" element={<VendorProducts />} />
+                        <Route path="orders" element={<VendorOrders />} />
+                        <Route path="campaigns" element={<VendorCampaigns />} />
+                        <Route path="analytics" element={<VendorAnalytics />} />
+                        <Route path="payments" element={<VendorPayments />} />
+                        <Route path="notifications" element={<VendorNotifications />} />
+                      </Route>
 
-                    {/* Admin routes */}
-                    <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
-                      <Route index element={<AdminOverview />} />
-                      <Route path="vendors" element={<AdminVendors />} />
-                      <Route path="campaigns" element={<AdminCampaigns />} />
-                      <Route path="placements" element={<AdminPlacements />} />
-                      <Route path="payouts" element={<AdminPayouts />} />
-                      <Route path="reviews" element={<AdminReviews />} />
-                      <Route path="pricing" element={<AdminPricing />} />
-                      <Route path="security" element={<AdminSecurity />} />
-                      <Route path="payments" element={<AdminPayments />} />
-                      <Route path="settings" element={<AdminSettings />} />
-                      <Route path="menu" element={<AdminMenu />} />
-                    </Route>
+                      {/* Admin routes */}
+                      <Route path="/admin" element={<RoleRoute requiredRole="admin"><AdminDashboard /></RoleRoute>}>
+                        <Route index element={<AdminOverview />} />
+                        <Route path="vendors" element={<AdminVendors />} />
+                        <Route path="campaigns" element={<AdminCampaigns />} />
+                        <Route path="placements" element={<AdminPlacements />} />
+                        <Route path="payouts" element={<AdminPayouts />} />
+                        <Route path="reviews" element={<AdminReviews />} />
+                        <Route path="pricing" element={<AdminPricing />} />
+                        <Route path="security" element={<AdminSecurity />} />
+                        <Route path="payments" element={<AdminPayments />} />
+                        <Route path="settings" element={<AdminSettings />} />
+                        <Route path="menu" element={<AdminMenu />} />
+                      </Route>
 
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Suspense>
                 </main>
                 <Footer />
                 <DevRoleSwitcher />

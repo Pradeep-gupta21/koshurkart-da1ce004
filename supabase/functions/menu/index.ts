@@ -16,7 +16,7 @@ const corsHeaders = {
 const APP_ROLES = ["user", "vendor", "admin"] as const;
 const SECTIONS = ["shop", "dashboard"] as const;
 
-const CreateSchema = z.object({
+export const CreateSchema = z.object({
   title: z.string().trim().min(1).max(80),
   icon: z.string().trim().max(40).optional().nullable(),
   route: z.string().trim().max(200).regex(/^\//, "route must start with /").optional().nullable(),
@@ -28,7 +28,7 @@ const CreateSchema = z.object({
   badge_key: z.string().trim().max(60).optional().nullable(),
 }).strict();
 
-const UpdateSchema = CreateSchema.partial();
+export const UpdateSchema = CreateSchema.partial();
 
 interface MenuRow {
   id: string;
@@ -95,7 +95,7 @@ async function requireAdmin(req: Request): Promise<
   return { ok: true, userId, supabase };
 }
 
-function buildTree(rows: MenuRow[], userRoles: string[]): MenuNode[] {
+export function buildTree(rows: MenuRow[], userRoles: string[]): MenuNode[] {
   const allowed = (r: MenuRow) =>
     r.role_access.length === 0 || r.role_access.some((role) => userRoles.includes(role));
 
