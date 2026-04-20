@@ -67,6 +67,12 @@ const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
           open ? "max-h-[1000px]" : "max-h-0",
         )}
       >
+        {badge && level === 0 && (
+          <div className={cn("mx-5 mt-1 mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold leading-none", badge.className)}>
+            {BadgeIcon && <BadgeIcon className="h-3 w-3" aria-hidden="true" />}
+            <span>{badge.label}</span>
+          </div>
+        )}
         {node.route && <SidebarItem to={node.route} label={`All ${node.title}`} indent />}
         {node.children.map((child) => (
           <ExpandableMenu key={child.id} node={child} level={level + 1} />
