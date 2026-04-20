@@ -31,7 +31,15 @@ export default function ReviewImageGallery({ images }: Props) {
             onClick={() => openAt(i)}
             className="aspect-square w-20 rounded-lg overflow-hidden bg-muted border border-border hover:scale-105 transition-transform focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <img src={src} alt={`Review ${i + 1}`} loading="lazy" className="w-full h-full object-cover" />
+            <img
+              src={src}
+              alt={`Review ${i + 1}`}
+              width={80}
+              height={80}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           </button>
         ))}
       </div>

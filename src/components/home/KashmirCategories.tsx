@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { Gem, Shirt, Apple, Flame, Palette } from "lucide-react";
 
+// Note: KashmirCategories uses lucide-react icons (inline SVG) — no <img> tags
+// to optimize. Aspect-ratio is locked via padding utilities, so no CLS risk.
+
 const categories = [
   { label: "Handicrafts", slug: "Handicrafts", Icon: Gem, tint: "from-accent/20 to-transparent" },
   { label: "Pashmina Shawls", slug: "Pashmina", Icon: Shirt, tint: "from-wood/25 to-transparent" },

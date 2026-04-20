@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
+import RegionRecommendations from "@/components/home/RegionRecommendations";
 import KashmirCategories from "@/components/home/KashmirCategories";
 import StorySection from "@/components/home/StorySection";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
@@ -86,6 +87,12 @@ const HomePage = () => {
           <img
             src={heroBanner}
             alt="Kashmir Bazaar — crafts from the valley"
+            width={1920}
+            height={460}
+            loading="eager"
+            decoding="async"
+            // @ts-expect-error fetchpriority is a valid HTML attribute not yet typed in React
+            fetchpriority="high"
             className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[hsl(222_47%_8%)]/80 via-[hsl(222_47%_8%)]/40 to-transparent" />
@@ -117,6 +124,9 @@ const HomePage = () => {
 
       {/* Local Deals (region-aware, horizontal scroll) */}
       <LocalDeals />
+
+      {/* Region-aware recommendations */}
+      <RegionRecommendations />
 
       {/* Sponsored */}
       {sponsoredProducts.length > 0 && (
@@ -205,7 +215,15 @@ const HomePage = () => {
             {vendors.map((vendor: any) => (
               <div key={vendor.id} className="bg-card rounded-xl border border-wood marketplace-shadow p-4 text-center hover:-translate-y-0.5 hover:marketplace-shadow-hover transition-all duration-200 cursor-pointer">
                 {vendor.logo ? (
-                  <img src={vendor.logo} alt={vendor.store_name} className="h-14 w-14 rounded-full object-cover mx-auto mb-3" />
+                  <img
+                    src={vendor.logo}
+                    alt={vendor.store_name}
+                    width={56}
+                    height={56}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-14 w-14 rounded-full object-cover mx-auto mb-3"
+                  />
                 ) : (
                   <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3 text-lg font-bold text-muted-foreground">
                     {vendor.store_name?.[0]}
