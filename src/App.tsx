@@ -40,6 +40,8 @@ import AdminPayments from "@/pages/admin/AdminPayments";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import NotFound from "@/pages/NotFound";
 import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
+import { SidebarProvider } from "@/contexts/SidebarContext";
+import ShopSidebar from "@/components/navigation/ShopSidebar";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +55,8 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <SidebarProvider>
+              <ShopSidebar />
               <div className="min-h-screen flex flex-col">
                 <Header />
                 <main className="flex-1">
@@ -100,6 +104,7 @@ const App = () => (
                 <Footer />
                 <DevRoleSwitcher />
               </div>
+              </SidebarProvider>
             </BrowserRouter>
           </CartProvider>
           </CurrencyProvider>
