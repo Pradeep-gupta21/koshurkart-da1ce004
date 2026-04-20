@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, XCircle, Store, Pause, Play, ShieldCheck, ShieldOff } from "lucide-react";
+import { CheckCircle, XCircle, Store, Pause, Play, ShieldCheck, ShieldOff, FileSearch } from "lucide-react";
+import KYCReviewSheet from "@/components/vendor/KYCReviewSheet";
 
 interface VendorRow {
   id: string;
@@ -16,15 +17,17 @@ interface VendorRow {
   user_id: string;
   trust_score: number | null;
   is_verified: boolean | null;
+  kyc_status: string | null;
 }
 
-type FilterTab = "all" | "pending" | "verified" | "suspended" | "rejected";
+type FilterTab = "all" | "pending" | "verified" | "suspended" | "rejected" | "kyc";
 
 const AdminVendors = () => {
   const [vendors, setVendors] = useState<VendorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [reviewVendorId, setReviewVendorId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchVendors = async () => {
@@ -83,15 +86,26 @@ const AdminVendors = () => {
     return "text-destructive bg-destructive/10";
   };
 
-  const filtered = filter === "all" ? vendors : vendors.filter((v) => v.verification_status === filter);
+  const filtered =
+    filter === "all"
+      ? vendors
+      : filter === "kyc"
+      ? vendors.filter((v) => v.kyc_status === "pending")
+      : vendors.filter((v) => v.verification_status === filter);
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: "all", label: "All" },
     { key: "pending", label: "Pending" },
+    { key: "kyc", label: "KYC Review" },
     { key: "verified", label: "Verified" },
     { key: "suspended", label: "Suspended" },
     { key: "rejected", label: "Rejected" },
   ];
+
+  const tabCount = (key: FilterTab) =>
+    key === "kyc"
+      ? vendors.filter((v) => v.kyc_status === "pending").length
+      : vendors.filter((v) => v.verification_status === key).length;
 
   return (
     <div>
@@ -107,7 +121,7 @@ const AdminVendors = () => {
           >
             {t.label}
             {t.key !== "all" && (
-              <span className="ml-1 text-xs">({vendors.filter((v) => v.verification_status === t.key).length})</span>
+              <span className="ml-1 text-xs">({tabCount(t.key)})</span>
             )}
           </Button>
         ))}
