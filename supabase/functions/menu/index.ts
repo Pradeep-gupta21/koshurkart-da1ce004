@@ -47,12 +47,29 @@ interface MenuNode extends MenuRow {
   children: MenuNode[];
 }
 
+interface DeliveryBanner {
+  city: string;
+  state: string | null;
+  message: string;
+  badge_key: string;
+}
+
+interface MenuMeta {
+  delivery_banner?: DeliveryBanner;
+  pincode?: string | null;
+}
+
 // ---------- in-memory cache (per edge instance) ----------
-const cache = new Map<string, { data: MenuNode[]; expires: number }>();
+interface CacheEntry { tree: MenuNode[]; meta: MenuMeta; expires: number; }
+const cache = new Map<string, CacheEntry>();
 const TTL_MS = 5 * 60 * 1000;
 
-function cacheKey(section: string, roles: string[]) {
-  return `${section}::${[...roles].sort().join(",")}`;
+function pincodeBucket(pincode: string | null): string {
+  if (!pincode || pincode.length < 3) return "none";
+  return pincode.slice(0, 3);
+}
+function cacheKey(section: string, roles: string[], pincode: string | null) {
+  return `${section}::${[...roles].sort().join(",")}::${pincodeBucket(pincode)}`;
 }
 function invalidateCache() {
   cache.clear();
@@ -148,6 +165,7 @@ async function wouldCreateCycle(
 async function handleGet(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const section = url.searchParams.get("section") ?? "shop";
+  const pincode = (url.searchParams.get("pincode") ?? "").trim() || null;
   if (!SECTIONS.includes(section as typeof SECTIONS[number])) {
     return json({ error: "Invalid section" }, 400);
   }
@@ -167,11 +185,11 @@ async function handleGet(req: Request): Promise<Response> {
   }
   const roles = await getRolesForUser(supabase, userId);
 
-  const key = cacheKey(section, roles);
+  const key = cacheKey(section, roles, pincode);
   const cached = cache.get(key);
   if (cached && cached.expires > Date.now()) {
     return json(
-      { tree: cached.data },
+      { tree: cached.tree, meta: cached.meta },
       200,
       { "Cache-Control": "private, max-age=60", "X-Cache": "HIT" },
     );
@@ -186,11 +204,57 @@ async function handleGet(req: Request): Promise<Response> {
 
   if (error) return json({ error: error.message }, 500);
 
-  const tree = buildTree(rows ?? [], roles);
-  cache.set(key, { data: tree, expires: Date.now() + TTL_MS });
+  // ---- Location-aware shaping ----
+  const meta: MenuMeta = { pincode };
+  let pinInfo: { city: string; state: string | null } | null = null;
+
+  if (pincode) {
+    const { data: pin } = await supabase
+      .from("serviceable_pincodes")
+      .select("city,state,is_active")
+      .eq("pincode", pincode)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (pin) {
+      pinInfo = { city: pin.city, state: pin.state };
+      const isJK = (pin.state ?? "").toLowerCase().includes("jammu") &&
+                   (pin.state ?? "").toLowerCase().includes("kashmir");
+      if (isJK) {
+        meta.delivery_banner = {
+          city: pin.city,
+          state: pin.state,
+          message: `Now delivering essentials to ${pin.city}`,
+          badge_key: "now-delivering",
+        };
+      }
+    }
+  }
+
+  // Token-replace {pincode} in routes; bump Essentials section if J&K
+  const shaped = (rows ?? []).map((r) => {
+    let route = r.route;
+    if (route && route.includes("{pincode}")) {
+      route = pincode
+        ? route.replace(/\{pincode\}/g, encodeURIComponent(pincode))
+        : route.replace(/[?&]pincode=\{pincode\}/g, "");
+    }
+    let order_index = r.order_index;
+    if (
+      meta.delivery_banner &&
+      !r.parent_id &&
+      typeof r.title === "string" &&
+      r.title.toLowerCase().includes("essential")
+    ) {
+      order_index = -1; // float to top
+    }
+    return { ...r, route, order_index };
+  });
+
+  const tree = buildTree(shaped, roles);
+  cache.set(key, { tree, meta, expires: Date.now() + TTL_MS });
 
   return json(
-    { tree },
+    { tree, meta },
     200,
     { "Cache-Control": "private, max-age=60", "X-Cache": "MISS" },
   );
