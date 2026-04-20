@@ -103,7 +103,33 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold mb-1">Bank</h3>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold">Bank</h3>
+                <div className="flex items-center gap-2">
+                  <Badge variant={data.bank_verified ? "default" : "secondary"}>
+                    {data.bank_verified ? "Verified" : "Unverified"}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={acting}
+                    onClick={async () => {
+                      if (!vendorId) return;
+                      setActing(true);
+                      try {
+                        await vendorService.setBankVerified(vendorId, !data.bank_verified);
+                        setData({ ...data, bank_verified: !data.bank_verified });
+                        toast({ title: data.bank_verified ? "Bank marked unverified" : "Bank marked verified" });
+                        onChanged?.();
+                      } catch (e: any) {
+                        toast({ title: "Failed", description: e.message, variant: "destructive" });
+                      } finally { setActing(false); }
+                    }}
+                  >
+                    {data.bank_verified ? "Unmark" : "Mark verified"}
+                  </Button>
+                </div>
+              </div>
               <Field label="Holder" value={data.bank_account_holder} />
               <Field label="Account" value={data.bank_account_number_masked} />
               <Field label="IFSC" value={data.bank_ifsc} />
