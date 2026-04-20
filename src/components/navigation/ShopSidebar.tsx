@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation as useRouterLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Sun, Moon, LogOut, AlertCircle, Truck, X } from "lucide-react";
+import { Sun, Moon, LogOut, Truck, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +15,7 @@ import SidebarHeader from "./SidebarHeader";
 import SidebarItem from "./SidebarItem";
 import ExpandableMenu from "./ExpandableMenu";
 import SidebarSkeleton from "./SidebarSkeleton";
-import EmptyState from "@/components/ui/EmptyState";
+import SidebarError from "./SidebarError";
 
 const ShopSidebar = () => {
   const { isOpen, close } = useSidebar();
@@ -112,14 +112,7 @@ const ShopSidebar = () => {
             <SidebarSkeleton />
           ) : isError ? (
             <>
-              <EmptyState
-                icon={AlertCircle}
-                title="Couldn't load menu"
-                description="We'll show your basic options below. Tap retry to try again."
-                actionLabel="Retry"
-                onAction={() => refetch()}
-                className="py-10"
-              />
+              <SidebarError onRetry={() => refetch()} />
               {/* Fallback to static role-based sections so drawer is never empty */}
               {sections.map((section) => (
                 <SidebarSection key={section.id} label={section.label}>
