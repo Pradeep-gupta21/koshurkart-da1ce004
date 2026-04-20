@@ -95,8 +95,8 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) {
-        return new Response(JSON.stringify({ serviceable: false }), {
-          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ serviceable: false, pincode: parsed.data.pincode }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       return new Response(JSON.stringify({ serviceable: true, ...data }), {
