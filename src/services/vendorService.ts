@@ -159,6 +159,15 @@ export const vendorService = {
     if (error) throw error;
   },
 
+  /** Admin: mark a vendor's bank details as verified (or unverified). */
+  async setBankVerified(vendorId: string, verified: boolean) {
+    const { error } = await supabase
+      .from('vendors')
+      .update({ bank_verified: verified })
+      .eq('id', vendorId);
+    if (error) throw error;
+  },
+
   /** Upload vendor logo to existing public product-images bucket. */
   async uploadLogo(vendorId: string, file: File): Promise<string> {
     const blob = await compressImage(file, { maxDim: 600, quality: 0.85 });

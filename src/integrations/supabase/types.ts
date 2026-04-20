@@ -946,6 +946,7 @@ export type Database = {
           bank_account_holder: string | null
           bank_account_number_masked: string | null
           bank_ifsc: string | null
+          bank_verified: boolean
           banner: string | null
           business_name: string | null
           business_type: string | null
@@ -992,6 +993,7 @@ export type Database = {
           bank_account_holder?: string | null
           bank_account_number_masked?: string | null
           bank_ifsc?: string | null
+          bank_verified?: boolean
           banner?: string | null
           business_name?: string | null
           business_type?: string | null
@@ -1038,6 +1040,7 @@ export type Database = {
           bank_account_holder?: string | null
           bank_account_number_masked?: string | null
           bank_ifsc?: string | null
+          bank_verified?: boolean
           banner?: string | null
           business_name?: string | null
           business_type?: string | null
