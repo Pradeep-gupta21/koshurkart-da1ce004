@@ -4,10 +4,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * J&K-inspired theme
+ * Deep Navy #0F172A | Snow White #F8FAFC | Saffron #F59E0B
+ * Soft Green #4ADE80 | Walnut #8B5E3C
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 210 40% 98%;            /* Snow White #F8FAFC */
+    --foreground: 222 47% 11%;            /* Deep Navy #0F172A */
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -15,89 +21,97 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 224 76% 33%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 222 47% 11%;               /* Deep Navy */
+    --primary-foreground: 210 40% 98%;    /* Snow */
 
-    --secondary: 142 76% 36%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 142 71% 58%;             /* Soft Green #4ADE80 */
+    --secondary-foreground: 222 47% 11%;
 
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 16% 40%;
 
-    --accent: 25 95% 53%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 38 92% 50%;                 /* Saffron #F59E0B */
+    --accent-foreground: 222 47% 11%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 32% 91%;
+    --border: 27 39% 39% / 0.18;          /* Walnut tint */
     --input: 214 32% 91%;
-    --ring: 224 76% 33%;
+    --ring: 38 92% 50%;                   /* Saffron focus */
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 224 76% 33%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 224 76% 33%;
+    /* Walnut wood */
+    --wood: 27 39% 39%;                   /* #8B5E3C */
+    --wood-foreground: 210 40% 98%;
 
-    /* Custom marketplace tokens */
-    --success: 142 76% 36%;
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 222 47% 11%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 38 92% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 27 39% 39% / 0.15;
+    --sidebar-ring: 38 92% 50%;
+
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 25 95% 53%;
-    --warning-foreground: 0 0% 100%;
-    --marketplace-shadow: 0 0 0 1px rgba(0,0,0,.03), 0 2px 4px rgba(0,0,0,.05), 0 12px 24px rgba(0,0,0,.05);
-    --marketplace-shadow-hover: 0 0 0 1px rgba(0,0,0,.03), 0 4px 8px rgba(0,0,0,.08), 0 16px 32px rgba(0,0,0,.08);
+    --warning: 38 92% 50%;                /* Saffron */
+    --warning-foreground: 222 47% 11%;
+
+    --marketplace-shadow: 0 0 0 1px hsl(var(--wood) / 0.08), 0 2px 4px hsl(222 47% 11% / 0.04), 0 12px 24px hsl(222 47% 11% / 0.05);
+    --marketplace-shadow-hover: 0 0 0 1px hsl(var(--wood) / 0.12), 0 4px 8px hsl(222 47% 11% / 0.08), 0 16px 32px hsl(222 47% 11% / 0.10);
   }
 
   .dark {
-    --background: 222 47% 4%;
+    --background: 222 47% 6%;             /* Deep Navy darker */
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 6%;
+    --card: 222 47% 9%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 6%;
+    --popover: 222 47% 9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 224 76% 48%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 38 92% 50%;                /* Saffron leads in dark */
+    --primary-foreground: 222 47% 11%;
 
-    --secondary: 142 76% 36%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 142 71% 45%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 222 33% 15%;
+    --muted-foreground: 215 20% 70%;
 
-    --accent: 25 95% 53%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
 
-    --destructive: 0 63% 31%;
+    --destructive: 0 63% 41%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 224 76% 48%;
+    --border: 27 39% 39% / 0.25;
+    --input: 222 33% 18%;
+    --ring: 38 92% 50%;
 
-    --sidebar-background: 222 47% 6%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224 76% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 224 76% 48%;
+    --wood: 27 45% 50%;
+    --wood-foreground: 222 47% 11%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-    --warning: 25 95% 53%;
-    --warning-foreground: 0 0% 100%;
-    --marketplace-shadow: 0 0 0 1px rgba(255,255,255,.05), 0 2px 4px rgba(0,0,0,.3);
-    --marketplace-shadow-hover: 0 0 0 1px rgba(255,255,255,.08), 0 4px 8px rgba(0,0,0,.4);
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 95%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 222 33% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 27 39% 39% / 0.25;
+    --sidebar-ring: 38 92% 50%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --marketplace-shadow: 0 0 0 1px hsl(var(--wood) / 0.15), 0 2px 4px hsl(0 0% 0% / 0.3);
+    --marketplace-shadow-hover: 0 0 0 1px hsl(38 92% 50% / 0.25), 0 4px 8px hsl(0 0% 0% / 0.4);
   }
 }
 
@@ -111,8 +125,14 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    letter-spacing: -0.02em;
+  h1, h2, h3, h4 {
+    @apply font-serif tracking-tight;
+    font-optical-sizing: auto;
+    font-variation-settings: "opsz" 144;
+  }
+  h5, h6 {
+    @apply font-sans;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -125,6 +145,39 @@
   }
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Walnut-tinted border helper */
+  .border-wood {
+    border-color: hsl(var(--wood) / 0.18);
+  }
+
+  /* Kashmiri paisley motif — very low opacity, decorative only */
+  .bg-paisley {
+    background-image: url("/src/assets/paisley-pattern.svg");
+    background-repeat: repeat;
+    background-size: 160px 160px;
+    background-blend-mode: overlay;
+    opacity: 1;
+  }
+  .bg-paisley::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("/src/assets/paisley-pattern.svg");
+    background-repeat: repeat;
+    background-size: 160px 160px;
+    opacity: 0.05;
+    pointer-events: none;
+    color: hsl(var(--accent));
+  }
+
+  /* Saffron radial glow — Dal Lake at dusk */
+  .bg-dusk {
+    background:
+      radial-gradient(ellipse 80% 50% at 80% 20%, hsl(var(--accent) / 0.18), transparent 60%),
+      radial-gradient(ellipse 60% 60% at 10% 90%, hsl(var(--wood) / 0.20), transparent 60%),
+      linear-gradient(135deg, hsl(222 47% 11%) 0%, hsl(222 47% 7%) 100%);
   }
 
   /* Shimmer skeleton effect */

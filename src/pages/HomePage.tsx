@@ -77,25 +77,32 @@ const HomePage = () => {
 
   return (
     <div>
-      {/* Hero */}
+      {/* Hero — Dal Lake at dusk */}
       <section className="relative overflow-hidden rounded-2xl mx-4 mt-4 lg:mx-0">
-        <div className="relative h-[340px] md:h-[420px] overflow-hidden rounded-2xl">
-          <img src={heroBanner} alt="Nexus Market" className="absolute inset-0 w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-foreground/80 via-foreground/50 to-transparent" />
-          <div className="relative z-10 flex flex-col justify-center h-full px-8 md:px-12 max-w-xl">
-            <span className="text-accent font-semibold text-sm mb-2">NEW SEASON</span>
-            <h1 className="text-3xl md:text-5xl font-bold text-background leading-tight">
-              Discover Premium Products
+        <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
+          <img
+            src={heroBanner}
+            alt="Kashmir Bazaar — crafts from the valley"
+            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[hsl(222_47%_8%)]/80 via-[hsl(222_47%_8%)]/40 to-transparent" />
+          <div className="relative z-10 flex flex-col justify-center h-full px-8 md:px-14 max-w-2xl">
+            <span className="text-accent font-sans font-semibold text-xs tracking-[0.2em] mb-3 uppercase">
+              From the Valley
+            </span>
+            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-[hsl(210_40%_98%)] leading-[1.05]">
+              The soul of Kashmir,<br />
+              <span className="text-accent italic">delivered.</span>
             </h1>
-            <p className="mt-3 text-background/70 text-sm md:text-base max-w-md">
-              Shop from thousands of verified vendors. Quality guaranteed, delivered to your doorstep.
+            <p className="mt-4 text-[hsl(210_40%_98%)]/75 text-sm md:text-base max-w-lg leading-relaxed">
+              Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans, shipped across India.
             </p>
-            <div className="mt-6 flex gap-3">
-              <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold" asChild>
-                <Link to="/search">Shop Now</Link>
+            <div className="mt-7 flex gap-3">
+              <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20" asChild>
+                <Link to="/search">Shop the Valley</Link>
               </Button>
-              <Button size="lg" variant="outline" className="border-background/30 text-background hover:bg-background/10" asChild>
-                <Link to="/vendor">Start Selling</Link>
+              <Button size="lg" variant="outline" className="border-[hsl(210_40%_98%)]/30 text-[hsl(210_40%_98%)] hover:bg-[hsl(210_40%_98%)]/10 hover:text-[hsl(210_40%_98%)]" asChild>
+                <Link to="/vendor">Sell Your Craft</Link>
               </Button>
             </div>
           </div>

@@ -36,7 +36,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const isVerified = vendorData?.is_verified ?? false;
 
   return (
-    <div className="group relative bg-card rounded-xl marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover overflow-hidden">
+    <div className="group relative bg-card rounded-xl border border-wood marketplace-shadow transition-all duration-200 hover:-translate-y-0.5 hover:marketplace-shadow-hover hover:ring-1 hover:ring-accent/40 overflow-hidden">
       {product.isSponsored && (
         <span className="absolute top-2 left-2 z-10 bg-background/90 backdrop-blur px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-muted-foreground border">
           SPONSORED
