@@ -4,8 +4,8 @@
 //   POST   /menu                          -> admin only, create item
 //   PUT    /menu/:id                      -> admin only, update item
 //   DELETE /menu/:id                      -> admin only, soft delete (cascades to descendants)
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { z } from "https://esm.sh/zod@3.23.8";
+import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.45.0";
+import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
