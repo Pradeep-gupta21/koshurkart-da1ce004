@@ -11,9 +11,7 @@ export const MAX_DOC_BYTES = 5 * 1024 * 1024; // 5MB
 
 export const kycBusinessSchema = z.object({
   business_name: z.string().trim().min(2, "Required").max(120),
-  business_type: z.enum(["individual", "proprietorship", "partnership", "pvt-ltd", "llp"], {
-    required_error: "Select a business type",
-  }),
+  business_type: z.enum(["individual", "proprietorship", "partnership", "pvt-ltd", "llp"] as const),
   pan_number: z
     .string()
     .trim()
