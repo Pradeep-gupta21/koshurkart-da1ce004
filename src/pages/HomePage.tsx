@@ -11,6 +11,7 @@ import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
+import LocalDeals from "@/components/home/LocalDeals";
 
 const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
   campaignId: c.campaign_id,
@@ -100,6 +101,9 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+
+      {/* Local Deals (region-aware) */}
+      <LocalDeals />
 
       {/* Sponsored */}
       {sponsoredProducts.length > 0 && (
