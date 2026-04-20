@@ -143,6 +143,59 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_items: {
+        Row: {
+          badge_key: string | null
+          created_at: string
+          icon: string | null
+          id: string
+          is_active: boolean
+          order_index: number
+          parent_id: string | null
+          role_access: Database["public"]["Enums"]["app_role"][]
+          route: string | null
+          section: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          badge_key?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          order_index?: number
+          parent_id?: string | null
+          role_access?: Database["public"]["Enums"]["app_role"][]
+          route?: string | null
+          section?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          badge_key?: string | null
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_active?: boolean
+          order_index?: number
+          parent_id?: string | null
+          role_access?: Database["public"]["Enums"]["app_role"][]
+          route?: string | null
+          section?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
