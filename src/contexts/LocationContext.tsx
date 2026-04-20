@@ -48,7 +48,27 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
   const detectAuto = useCallback(async () => {
     setIsDetecting(true);
     try {
-      const d = await locationService.detect();
+      // 1) Try precise GPS first (browser prompts user)
+      const gps = await new Promise<GeolocationPosition | null>((resolve) => {
+        if (!("geolocation" in navigator)) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(pos),
+          () => resolve(null),
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
+        );
+      });
+
+      let d: DetectedLocation | null = null;
+      if (gps) {
+        try {
+          d = await locationService.reverseGeocode(gps.coords.latitude, gps.coords.longitude);
+        } catch (e) {
+          console.warn("reverse geocode failed, falling back to IP", e);
+        }
+      }
+      // 2) Fallback to server IP detection
+      if (!d) d = await locationService.detect();
+
       const next: ActiveLocation = {
         pincode: d.pincode,
         city: d.city,

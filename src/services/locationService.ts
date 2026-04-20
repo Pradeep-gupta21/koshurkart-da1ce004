@@ -58,6 +58,13 @@ export const locationService = {
     return fetchJson("detect");
   },
 
+  async reverseGeocode(lat: number, lng: number): Promise<DetectedLocation> {
+    return fetchJson("reverse-geocode", {
+      method: "POST",
+      body: JSON.stringify({ lat, lng }),
+    });
+  },
+
   async lookup(pincode: string): Promise<PincodeInfo> {
     return fetchJson("lookup", {
       method: "POST",
