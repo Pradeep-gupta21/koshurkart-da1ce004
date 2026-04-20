@@ -1,81 +1,162 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Sun, Moon, LogOut, User as UserIcon } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useQuery } from "@tanstack/react-query";
+import { Sun, Moon, LogOut, Tag, Sparkles, Trophy, Flame } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useShopperNavigation } from "@/hooks/useNavigation";
+import { useSidebar } from "@/contexts/SidebarContext";
+import { sidebarMenuService } from "@/services/sidebarMenuService";
 import SidebarSection from "./SidebarSection";
+import SidebarHeader from "./SidebarHeader";
+import SidebarItem from "./SidebarItem";
+import ExpandableMenu from "./ExpandableMenu";
+import SidebarSkeleton from "./SidebarSkeleton";
 
-interface ShopSidebarProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+const PROGRAM_ICONS: Record<string, LucideIcon> = {
+  tag: Tag,
+  sparkles: Sparkles,
+  trophy: Trophy,
+  flame: Flame,
+};
 
-const ShopSidebar = ({ open, onOpenChange }: ShopSidebarProps) => {
-  const sections = useShopperNavigation();
+const ShopSidebar = () => {
+  const { isOpen, close } = useSidebar();
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const sections = useShopperNavigation();
   const location = useLocation();
 
   // Close on route change
   useEffect(() => {
-    if (open) onOpenChange(false);
+    if (isOpen) close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
-  const displayName = (user?.user_metadata?.name as string) || user?.email?.split("@")[0] || "";
-  const initial = displayName.charAt(0).toUpperCase() || "G";
+  // Lazy fetch — only when opened
+  const { data: menu, isLoading } = useQuery({
+    queryKey: ["sidebar-menu"],
+    queryFn: () => sidebarMenuService.fetchMenu(),
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Pre-built role/account section is the LAST one in shopperNav after categories.
+  // We render dynamic sections in their own slots, then auth/account/sell from config.
+  const accountSections = sections.filter(
+    (s) => s.id === "account" || s.id === "sell" || s.id === "help",
+  );
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-[320px] p-0 flex flex-col">
-        {/* Header */}
-        <div className="bg-primary text-primary-foreground px-5 py-5">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10 border-2 border-primary-foreground/20">
-              <AvatarFallback className="bg-primary-foreground/10 text-primary-foreground font-semibold">
-                {user ? initial : <UserIcon className="h-5 w-5" />}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="text-xs opacity-80">{user ? "Hello," : "Welcome"}</p>
-              <p className="font-semibold truncate">
-                {user ? displayName : "Sign in for the best experience"}
-              </p>
-            </div>
-          </div>
-        </div>
+    <Sheet open={isOpen} onOpenChange={(v) => (v ? null : close())}>
+      <SheetContent
+        side="left"
+        className="w-[320px] sm:w-[360px] p-0 flex flex-col gap-0"
+        aria-label="Main navigation"
+      >
+        <SheetTitle className="sr-only">Main navigation</SheetTitle>
+        <SheetDescription className="sr-only">
+          Browse departments, trending products, your account and settings
+        </SheetDescription>
 
-        {/* Sections */}
-        <nav className="flex-1 overflow-y-auto">
-          {sections.map((section) => (
-            <SidebarSection key={section.id} label={section.label}>
-              <ul>
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <li key={item.id}>
+        <SidebarHeader />
+
+        <nav className="flex-1 overflow-y-auto" aria-label="Main">
+          {isLoading && !menu ? (
+            <SidebarSkeleton />
+          ) : (
+            <>
+              {/* Trending */}
+              {menu?.trending && menu.trending.length > 0 && (
+                <SidebarSection label="Trending Now">
+                  <div className="px-4 pb-2 flex gap-3 overflow-x-auto scrollbar-thin">
+                    {menu.trending.map((p) => (
                       <Link
-                        to={item.to ?? "#"}
-                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                        key={p.id}
+                        to={`/product/${p.slug}`}
+                        className="flex-shrink-0 w-24 group"
                       >
-                        {Icon && <Icon className="h-4 w-4 text-muted-foreground shrink-0" />}
-                        <span className="truncate">{item.label}</span>
+                        <div className="aspect-square rounded-md overflow-hidden bg-muted mb-1.5">
+                          {p.image ? (
+                            <img
+                              src={p.image}
+                              alt={p.title}
+                              loading="lazy"
+                              className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                          ) : (
+                            <div className="h-full w-full bg-muted" />
+                          )}
+                        </div>
+                        <p className="text-xs line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+                          {p.title}
+                        </p>
                       </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </SidebarSection>
-          ))}
+                    ))}
+                  </div>
+                </SidebarSection>
+              )}
+
+              {/* Categories */}
+              {menu?.categories && menu.categories.length > 0 && (
+                <SidebarSection label="Shop by Department">
+                  <div role="tree">
+                    {menu.categories.map((cat) => (
+                      <ExpandableMenu key={cat.id} node={cat} />
+                    ))}
+                  </div>
+                </SidebarSection>
+              )}
+
+              {/* Programs & Features */}
+              {menu?.programs && menu.programs.length > 0 && (
+                <SidebarSection label="Programs & Features">
+                  <ul role="list">
+                    {menu.programs.map((p) => {
+                      const Icon = PROGRAM_ICONS[p.icon] ?? Tag;
+                      return (
+                        <li key={p.id}>
+                          <SidebarItem to={p.to} label={p.label} icon={Icon} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </SidebarSection>
+              )}
+
+              {/* Auth / Account / Sell / Help (config-driven, role-aware) */}
+              {accountSections.map((section) => (
+                <SidebarSection key={section.id} label={section.label}>
+                  <ul role="list">
+                    {section.items.map((item) => (
+                      <li key={item.id}>
+                        <SidebarItem
+                          to={item.to ?? "#"}
+                          label={item.label}
+                          icon={item.icon}
+                          end={item.end}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </SidebarSection>
+              ))}
+            </>
+          )}
         </nav>
 
         {/* Footer */}
         <div className="border-t p-3 space-y-1">
-          <Button variant="ghost" size="sm" onClick={toggleTheme} className="w-full justify-start gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleTheme}
+            className="w-full justify-start gap-3"
+          >
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             {theme === "light" ? "Dark Mode" : "Light Mode"}
           </Button>
