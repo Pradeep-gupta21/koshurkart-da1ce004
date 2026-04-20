@@ -1,69 +1,77 @@
 
 ## Reality check
 
-This request is largely **already shipped** in your codebase. Here's the honest gap analysis before proposing work:
+Most of this spec is already shipped. Honest gap analysis before proposing work:
 
 | Spec ask | Status | Evidence |
 |---|---|---|
-| **Roles: Guest / User / Vendor / Admin** | ✅ | `app_role` enum, `user_roles` table, `has_role()` SECURITY DEFINER, `useAuth` exposes `roles/isAdmin/isVendor` |
-| **Sidebar changes by role** | ✅ | `menu` edge function filters by `role_access[]`; `useNavigation` passes role; `SidebarHeader` shows role badge |
-| **Secure APIs (JWT + RBAC)** | ✅ | RLS on every table via `has_role()`; edge functions validate JWT via `auth.getClaims()`; `ProtectedRoute` + `RoleRoute` on `/admin/*`, `/vendor/*` |
-| **Frontend↔backend role sync** | ✅ | `useAuth` subscribes to `onAuthStateChange` and refetches `user_roles` |
-| **Menu fully backend-driven** | ✅ | `menu_items` table + admin CRUD via `MenuTreeEditor` |
-| **API caching** | ✅ | Edge function in-memory cache (5min, pincode-bucketed) + React Query `staleTime` |
-| **Code splitting / lazy loading** | ⚠️ Partial | All routes in `App.tsx` are eagerly imported; admin & vendor bundles ship to every guest |
-| **API failure fallback + retry** | ⚠️ Partial | React Query default retry on `useNavigation`; no explicit error UI in sidebar; no retry/backoff config |
-| **Smooth animations / premium feel** | ✅ | Already polished in last passes |
-| **Unit tests** | ✅ exists | `SidebarItem.test.tsx`, `ExpandableMenu.test.tsx`, `CartContext.test.tsx`, `cacheService.test.ts`, `sidebarMenuService.test.ts` |
-| **Edge function tests** | ✅ exists | `supabase/functions/menu/menu_test.ts`, `_tests/location_test.ts` |
-| **Env configs / secret management** | ✅ | `.env` auto-managed; secrets in Supabase vault (Razorpay, Lovable AI, etc.) |
+| **Categories/products/vendors from backend** | ✅ | `productService`, `vendorService`, `menu_items` table — all live queries |
+| **Location-based products + delivery estimates** | ✅ | `LocationContext`, `useServiceability`, `get_local_deals(_pincode)`, `serviceable_pincodes`, `vendor_serviceability` |
+| **Lazy loading (routes)** | ✅ | `App.tsx` uses `React.lazy` + `Suspense` (verified last loop) |
+| **Modular components / API-driven UI** | ✅ | Sidebar, ProductGrid, ProductCard, KashmirCategories all data-driven |
+| **Local deals + region recommendations** | ✅ | `LocalDeals` calls `get_local_deals` with pincode; `aiRecommendationService` exists |
+| **Mobile responsive** | ✅ | Tailwind breakpoints throughout; verified in last UI passes |
+| **Clean architecture / reusable components** | ✅ | `components/ui`, `components/product`, `components/home`, services layer |
+| **Image optimization** | ⚠️ Partial | `compressImage` exists for uploads. Display-side: no `loading="lazy"`, no width/height hints, no `decoding="async"` on `<img>` tags in `ProductCard`, `VendorCard`, `KashmirCategories`. CLS + bandwidth waste on slow J&K connections. |
+| **Region-based "Recommended for you near {city}"** | ⚠️ Partial | Local deals exist; no homepage section that says "recommended for your region" with a city-aware heading. |
 
-**Verdict:** The auth + RBAC + backend-driven menu + testing + env story is already production-ready. The two real gaps are **route-level code splitting** and **explicit sidebar error UX with retry**. Everything else would be busywork or duplication.
+**Verdict:** Two real, shippable gaps. Everything else is already production-grade — proposing a rewrite would be busywork.
 
-## Plan — ship the two real gaps, document the rest
+## Plan — fix the two real gaps
 
-### 1. Route-level code splitting (`src/App.tsx`)
+### 1. Image optimization across product/vendor/category surfaces
 
-Convert all page imports to `React.lazy()` and wrap `<Routes>` in a `<Suspense>` with the existing `PageSkeleton` fallback. Group by role for clean chunk names:
+Add three universally-supported `<img>` attributes wherever product/vendor/category imagery renders. No new deps, no architecture change, measurable LCP/CLS win:
 
-- **Public chunks**: `HomePage`, `SearchPage`, `ProductDetailPage`, `AuthPage`, `CartPage`, `CheckoutPage`, `VendorApplyPage`, `NotFound`
-- **User chunk**: `ProfilePage`
-- **Vendor chunk** (loaded only when a vendor hits `/vendor/*`): `VendorDashboard` + nested `VendorOverview`, `VendorProducts`, `VendorOrders`, `VendorPayments`, `VendorCampaigns`, `VendorAnalytics`, `VendorNotifications`
-- **Admin chunk** (loaded only when an admin hits `/admin/*`): `AdminDashboard` + nested `AdminOverview`, `AdminVendors`, `AdminPayments`, `AdminPayouts`, `AdminReviews`, `AdminCampaigns`, `AdminPlacements`, `AdminPricing`, `AdminMenu`, `AdminSecurity`, `AdminSettings`
+- `loading="lazy"` on every off-screen image (skip the homepage hero — that one stays eager)
+- `decoding="async"` on all
+- explicit `width` + `height` (or `aspect-ratio` via Tailwind class) to prevent layout shift
 
-Result: a guest's initial JS payload drops the entire admin + vendor surface. Vite emits separate chunks automatically.
+Files touched:
+- `src/components/product/ProductCard.tsx` — main product tile (highest impact)
+- `src/components/product/SponsoredProductCard.tsx` — same treatment
+- `src/components/vendor/VendorCard.tsx` — vendor logo
+- `src/components/home/KashmirCategories.tsx` — category tiles
+- `src/components/reviews/ReviewImageGallery.tsx` — thumbnail grid
 
-Keep the eagerly-needed shells (`DashboardLayout`, `Header`, `Footer`, `ProtectedRoute`, `RoleRoute`) eager so route transitions stay instant.
+For the LCP image specifically (first hero in `HomePage.tsx`), set `loading="eager"` + `fetchpriority="high"` so we don't regress the above-the-fold paint.
 
-### 2. Sidebar error fallback + retry (`useNavigation.ts` + `ShopSidebar.tsx`)
+### 2. "Recommended near {city}" homepage section
 
-- In `useNavigation.ts`, configure React Query with `retry: 2`, `retryDelay: exponential backoff (1s, 2s)`, and surface `error` + `refetch` from the hook.
-- In `ShopSidebar.tsx`, when `error` is truthy and not loading, render an inline error state: small alert icon, "Couldn't load menu", and a **Retry** button that calls `refetch()`. Keep `SidebarHeader` and the dismissible delivery banner visible even on error so the panel never feels broken.
-- Add a tiny test in `ExpandableMenu.test.tsx` style (`SidebarError.test.tsx`) that asserts the retry button calls a passed handler.
+A small, region-personalized strip below `LocalDeals` that uses the existing `get_ranked_products` RPC filtered by the user's pincode via `vendor_serviceability` (already returned by `check_serviceability`). When no pincode is set, gracefully falls back to global trending — no broken state.
 
-### 3. Confirm-and-document what's already production-ready
+- Heading: *"Recommended for {city}"* (city from `LocationContext`); fallback *"Recommended for you"*
+- Reuses existing `ProductGrid` component (no new card)
+- Uses existing `useServiceability` hook to filter the ranked list to deliverable products only
+- Skeleton loader during fetch (existing `SkeletonLoader`)
+- Empty state: hide the entire section if zero serviceable items (don't show an empty band)
 
-No new code for these — just verify in QA pass:
-- Auth state hydration (anon → signed-in role flip updates sidebar live via existing `onAuthStateChange`)
-- RLS coverage (every table has `has_role()`-gated admin policies; vendor/user policies use ownership joins)
-- Edge function JWT validation (`menu`, `location`, `create-razorpay-order`, `verify-razorpay-payment`)
-- Menu CRUD respects soft-delete + Zod validation (shipped last loop)
+New component: `src/components/home/RegionRecommendations.tsx`. Inserted into `HomePage.tsx` between `LocalDeals` and the existing vendor showcase.
+
+### 3. Document confirmed-shipped items
+
+No code changes for these — verify in QA pass:
+- Backend-driven categories/products/vendors (RLS-gated, role-aware)
+- Route-level code splitting for `/admin/*` and `/vendor/*` chunks
+- `LocationContext` → `LocalDeals` → `get_local_deals(_pincode)` data flow
+- Mobile breakpoints across `Header`, `Footer`, `ProductCard`, sidebar Sheet
 
 ## Out of scope (intentional)
 
-- Rewriting the sidebar in Zustand/Redux — `SidebarContext` + React Query is already the production pattern for this app
-- Adding a separate Express backend — Supabase edge functions cover the API contract
-- Moving to Next.js — incompatible with the Vite/React stack
-- Service worker / offline cache — premature for current scale
-- New tests beyond the one retry test — existing coverage is appropriate for the surface area
+- Switching to a CDN image transformer (Cloudinary/imgix) — requires infra setup; current Supabase storage + canvas compression is sufficient for current scale
+- Service worker / offline cache — premature
+- Replacing React Query with SWR/Zustand — current stack is production-grade
+- New recommendation algorithm — existing `get_ranked_products` already weights popularity + rating + recency + ad signal
 
 ## Files
 
 **Edit**
-- `src/App.tsx` — convert page imports to `React.lazy`, wrap routes in `<Suspense>` with `PageSkeleton`
-- `src/hooks/useNavigation.ts` — add `retry`, `retryDelay`, expose `error` + `refetch`
-- `src/components/navigation/ShopSidebar.tsx` — render error state with Retry button when menu query fails
+- `src/components/product/ProductCard.tsx` — add `loading="lazy"`, `decoding="async"`, dimensions
+- `src/components/product/SponsoredProductCard.tsx` — same
+- `src/components/vendor/VendorCard.tsx` — same on logo
+- `src/components/home/KashmirCategories.tsx` — same on category tiles
+- `src/components/reviews/ReviewImageGallery.tsx` — same on thumbs
+- `src/pages/HomePage.tsx` — eager+high-priority hero image; insert `<RegionRecommendations />` strip
 
 **Create**
-- `src/components/navigation/SidebarError.tsx` — tiny presentational error block (icon + message + retry button)
-- `src/components/navigation/SidebarError.test.tsx` — asserts retry handler is called
+- `src/components/home/RegionRecommendations.tsx` — region-aware ranked products strip with city-aware heading, serviceability filter, skeleton, hide-when-empty
