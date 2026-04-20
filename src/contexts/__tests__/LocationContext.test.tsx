@@ -31,10 +31,8 @@ describe("LocationContext", () => {
     mockDetect.mockReset();
     mockReverse.mockReset();
     mockLookup.mockReset();
-    // Disable browser geolocation so detectAuto falls straight through to IP detect
-    // jsdom doesn't have it by default; if a previous test added it, remove it
-    // @ts-expect-error - test cleanup
-    delete (global.navigator as any).geolocation;
+    // jsdom doesn't define geolocation by default; ensure it's absent so detectAuto skips GPS
+    delete (global.navigator as unknown as { geolocation?: unknown }).geolocation;
   });
 
   it("loads saved location from localStorage on mount", async () => {
