@@ -921,13 +921,28 @@ export type Database = {
       }
       vendors: {
         Row: {
+          aadhaar_last4: string | null
+          bank_account_holder: string | null
+          bank_account_number_masked: string | null
+          bank_ifsc: string | null
+          business_name: string | null
+          business_type: string | null
           cancellation_rate: number | null
           created_at: string
           delivery_rate: number | null
           description: string | null
+          gstin: string | null
           id: string
           is_verified: boolean | null
+          kyc_doc_address: string | null
+          kyc_doc_business: string | null
+          kyc_doc_pan: string | null
+          kyc_rejection_reason: string | null
+          kyc_reviewed_at: string | null
+          kyc_status: string
+          kyc_submitted_at: string | null
           logo: string | null
+          pan_number: string | null
           rating: number | null
           return_rate: number | null
           review_rating: number | null
@@ -941,13 +956,28 @@ export type Database = {
           withdrawable_balance: number | null
         }
         Insert: {
+          aadhaar_last4?: string | null
+          bank_account_holder?: string | null
+          bank_account_number_masked?: string | null
+          bank_ifsc?: string | null
+          business_name?: string | null
+          business_type?: string | null
           cancellation_rate?: number | null
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
+          gstin?: string | null
           id?: string
           is_verified?: boolean | null
+          kyc_doc_address?: string | null
+          kyc_doc_business?: string | null
+          kyc_doc_pan?: string | null
+          kyc_rejection_reason?: string | null
+          kyc_reviewed_at?: string | null
+          kyc_status?: string
+          kyc_submitted_at?: string | null
           logo?: string | null
+          pan_number?: string | null
           rating?: number | null
           return_rate?: number | null
           review_rating?: number | null
@@ -961,13 +991,28 @@ export type Database = {
           withdrawable_balance?: number | null
         }
         Update: {
+          aadhaar_last4?: string | null
+          bank_account_holder?: string | null
+          bank_account_number_masked?: string | null
+          bank_ifsc?: string | null
+          business_name?: string | null
+          business_type?: string | null
           cancellation_rate?: number | null
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
+          gstin?: string | null
           id?: string
           is_verified?: boolean | null
+          kyc_doc_address?: string | null
+          kyc_doc_business?: string | null
+          kyc_doc_pan?: string | null
+          kyc_rejection_reason?: string | null
+          kyc_reviewed_at?: string | null
+          kyc_status?: string
+          kyc_submitted_at?: string | null
           logo?: string | null
+          pan_number?: string | null
           rating?: number | null
           return_rate?: number | null
           review_rating?: number | null
