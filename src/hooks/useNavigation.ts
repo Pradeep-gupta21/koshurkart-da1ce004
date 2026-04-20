@@ -23,6 +23,11 @@ export function useNavigationRoles(): NavRole[] {
   }, [user, roles]);
 }
 
+/** Auth loading flag — sidebars use this to show a skeleton instead of guest items. */
+export function useAuthLoading(): boolean {
+  return useAuth().loading;
+}
+
 export function useShopperNavigation(): NavSection[] {
   const roles = useNavigationRoles();
   return useMemo(() => filterSections(shopperNav, roles), [roles]);
