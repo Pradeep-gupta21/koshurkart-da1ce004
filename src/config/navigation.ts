@@ -120,6 +120,7 @@ export const vendorNav: NavSection[] = [
       { id: "v-analytics", label: "Analytics", to: "/vendor/analytics", icon: BarChart3 },
       { id: "v-payments", label: "Payments", to: "/vendor/payments", icon: Wallet },
       { id: "v-notifications", label: "Notifications", to: "/vendor/notifications", icon: Bell, badgeKey: "unreadNotifications" },
+      { id: "v-settings", label: "Store Settings", to: "/vendor/settings", icon: Settings },
     ],
   },
 ];

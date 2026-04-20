@@ -10,6 +10,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import RoleRoute from "@/components/auth/RoleRoute";
+import VendorStatusGate from "@/components/auth/VendorStatusGate";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import HomePage from "@/pages/HomePage";
@@ -29,6 +30,8 @@ import { LocationProvider } from "@/contexts/LocationContext";
 const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 const VendorApplyPage = lazy(() => import("@/pages/VendorApplyPage"));
+const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
+const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
 
 const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
 const VendorOverview = lazy(() => import("@/pages/vendor/VendorOverview"));
@@ -83,9 +86,10 @@ const App = () => (
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
                       <Route path="/vendor/apply" element={<ProtectedRoute><VendorApplyPage /></ProtectedRoute>} />
+                      <Route path="/vendor/apply/kyc" element={<ProtectedRoute><VendorKYCPage /></ProtectedRoute>} />
 
                       {/* Vendor routes */}
-                      <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorDashboard /></RoleRoute>}>
+                      <Route path="/vendor" element={<RoleRoute requiredRole="vendor"><VendorStatusGate><VendorDashboard /></VendorStatusGate></RoleRoute>}>
                         <Route index element={<VendorOverview />} />
                         <Route path="products" element={<VendorProducts />} />
                         <Route path="orders" element={<VendorOrders />} />
@@ -93,6 +97,7 @@ const App = () => (
                         <Route path="analytics" element={<VendorAnalytics />} />
                         <Route path="payments" element={<VendorPayments />} />
                         <Route path="notifications" element={<VendorNotifications />} />
+                        <Route path="settings" element={<VendorSettings />} />
                       </Route>
 
                       {/* Admin routes */}
