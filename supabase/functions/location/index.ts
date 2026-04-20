@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // GET suggestions?q=  — unified pincode + city autocomplete
+    // GET suggestions?q=  — unified pincode + city + state autocomplete
     if (req.method === "GET" && path === "suggestions") {
       const q = (url.searchParams.get("q") ?? "").trim();
       if (q.length < 2) {
@@ -133,14 +133,18 @@ Deno.serve(async (req) => {
         });
       }
       const isNumeric = /^\d+$/.test(q);
-      const query = supabase
+      let query = supabase
         .from("serviceable_pincodes")
         .select("city, state, pincode")
         .eq("is_active", true)
         .limit(8);
-      const { data, error } = isNumeric
-        ? await query.ilike("pincode", `${q}%`)
-        : await query.ilike("city", `${q}%`);
+      if (isNumeric) {
+        query = query.ilike("pincode", `${q}%`);
+      } else {
+        // match city OR state (prefix-insensitive)
+        query = query.or(`city.ilike.${q}%,state.ilike.${q}%`);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return new Response(JSON.stringify(data ?? []), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
