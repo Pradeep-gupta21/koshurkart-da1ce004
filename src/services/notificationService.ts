@@ -53,8 +53,12 @@ export const notificationService = {
   },
 
   subscribeToNotifications(userId: string, callback: (notification: AppNotification) => void) {
+    // Unique channel name per subscription instance avoids
+    // "cannot add postgres_changes callbacks ... after subscribe()" errors
+    // from StrictMode double-mounts or re-subscribes reusing a live channel.
+    const channelName = `notifications:${userId}:${Math.random().toString(36).slice(2, 10)}`;
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
