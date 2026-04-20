@@ -1,4 +1,4 @@
-import { Mountain, Sparkles } from "lucide-react";
+import { Mountain, Sparkles, Truck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface BadgeMeta {
@@ -20,6 +20,12 @@ export const BADGE_REGISTRY: Record<string, BadgeMeta> = {
     tone: "kashmir",
     icon: Mountain,
     className: "bg-success/10 text-success border-success/30",
+  },
+  "now-delivering": {
+    label: "Now delivering to {city}",
+    tone: "saffron",
+    icon: Truck,
+    className: "bg-accent/15 text-accent border-accent/30",
   },
 };
 

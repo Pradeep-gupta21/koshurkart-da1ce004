@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import {
   sidebarMenuService, type MenuItemInput, type MenuNode,
 } from "@/services/sidebarMenuService";
+import { menuItemSchema } from "@/lib/validators/menuItemSchema";
 import MenuItemForm from "@/components/admin/MenuItemForm";
 import MenuTreeEditor from "@/components/admin/MenuTreeEditor";
 
@@ -23,6 +26,7 @@ const AdminMenu = () => {
   const [section, setSection] = useState<Section>("shop");
   const [editing, setEditing] = useState<MenuNode | null>(null);
   const [open, setOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const qc = useQueryClient();
 
   const { data: tree = [], isLoading } = useQuery({
@@ -67,22 +71,52 @@ const AdminMenu = () => {
     onError: (e: Error) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
   });
 
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => sidebarMenuService.updateItem(id, { is_active: true }),
+    onSuccess: () => {
+      toast({ title: "Menu item restored" });
+      invalidate();
+    },
+    onError: (e: Error) => toast({ title: "Restore failed", description: e.message, variant: "destructive" }),
+  });
+
   const handleSubmit = async (input: MenuItemInput) => {
+    // Client-side Zod validation as a safety net (server also validates)
+    const parsed = menuItemSchema.safeParse({ ...input, section });
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "field"}: ${i.message}`).join("; ");
+      toast({ title: "Invalid menu item", description: issues, variant: "destructive" });
+      return;
+    }
     if (editing) {
-      await updateMut.mutateAsync({ id: editing.id, patch: input });
+      await updateMut.mutateAsync({ id: editing.id, patch: parsed.data });
     } else {
-      await createMut.mutateAsync({ ...input, section });
+      await createMut.mutateAsync({ ...parsed.data, section });
     }
   };
 
   const handleDelete = (node: MenuNode) => {
-    if (confirm(`Deactivate "${node.title}" and all its children?`)) {
+    if (confirm(`Archive "${node.title}" and all its children?`)) {
       deleteMut.mutate(node.id);
     }
   };
 
+  const handleRestore = (node: MenuNode) => {
+    restoreMut.mutate(node.id);
+  };
+
   const openCreate = () => { setEditing(null); setOpen(true); };
   const openEdit = (node: MenuNode) => { setEditing(node); setOpen(true); };
+
+  // Filter archived nodes from tree unless toggled on
+  const visibleTree = useMemo(() => {
+    if (showArchived) return tree;
+    const filter = (nodes: MenuNode[]): MenuNode[] =>
+      nodes
+        .filter((n) => n.is_active)
+        .map((n) => ({ ...n, children: filter(n.children) }));
+    return filter(tree);
+  }, [tree, showArchived]);
 
   return (
     <div className="p-6 space-y-6">
@@ -105,13 +139,30 @@ const AdminMenu = () => {
         </TabsList>
 
         <TabsContent value={section} className="mt-4">
-          <Card className="p-4">
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-end gap-2">
+              <Switch
+                id="show-archived"
+                checked={showArchived}
+                onCheckedChange={setShowArchived}
+              />
+              <Label htmlFor="show-archived" className="text-sm cursor-pointer">
+                Show archived
+              </Label>
+            </div>
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading menu…</p>
-            ) : tree.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No items yet. Create your first one.</p>
+            ) : visibleTree.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {showArchived ? "No items yet. Create your first one." : "No active items. Toggle 'Show archived' to view archived items."}
+              </p>
             ) : (
-              <MenuTreeEditor nodes={tree} onEdit={openEdit} onDelete={handleDelete} />
+              <MenuTreeEditor
+                nodes={visibleTree}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onRestore={handleRestore}
+              />
             )}
           </Card>
         </TabsContent>
