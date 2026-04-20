@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck } from "lucide-react";
+import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck, Mountain, Truck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +20,7 @@ import { analyticsService } from "@/services/analyticsService";
 import ReviewSection from "@/components/reviews/ReviewSection";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 import LocationDialog from "@/components/location/LocationDialog";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
