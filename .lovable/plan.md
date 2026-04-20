@@ -1,78 +1,66 @@
 
 
-## Reality check
+## Goal
+Re-skin the existing eCommerce app with a J&K-inspired identity (Deep Navy / Snow / Saffron / Soft Green / Walnut Brown) and a serif-headings + sans-body typography system. Keep all existing features and Amazon-like structure intact — purely a design system pass plus a few high-impact surface refinements.
 
-Most of this is already in place. Let me audit precisely.
+## Approach
+Update the design tokens at the root (`index.css` + `tailwind.config.ts`) so every component re-themes automatically. Then refine the most-seen surfaces (Header, Hero, ProductCard, Footer) with subtle Kashmiri visual cues. No layout restructure — that would break tested flows (cart, checkout, location, ads).
 
-| Spec | Status | Where |
-|---|---|---|
-| Cache location responses | ✅ Partial | `cacheService` wraps `checkServiceability` (10min) + `getLocalDeals` (5min); `useServiceability` also has `staleTime: 10min` via React Query. **Gap:** `lookup`, `detect`, `reverse-geocode` calls not cached. |
-| Optimize API calls | ✅ | Batched serviceability lookup via `useServiceability(productIds[])` — single RPC per page; React Query dedupes. |
-| Scalability / CDN | ⚠️ N/A | Edge functions already run on Supabase global edge. Nothing actionable in code — Lovable Cloud handles infra. |
-| GPS denied handling | ✅ | `LocationContext.detectAuto` silently falls back to IP detect. |
-| API failure handling | ⚠️ Partial | `locationService` throws on edge function errors but UI doesn't always render a graceful state (e.g. `LocalDeals` just hides on error; `useServiceability` returns empty map silently — products still work). **Gap:** no toast on persistent failures, no retry policy on React Query. |
-| Invalid input | ✅ | Zod schemas in `validators/locationSchema.ts` + server-side validation in `supabase/functions/location/index.ts`. |
-| Log failures | ⚠️ Partial | Edge function uses `console.error`. **Gap:** no client-side error logging — silent failures invisible. |
-| Track API usage | ⚠️ Partial | `analytics_events` table exists but no `location_lookup` / `serviceability_check` events recorded. |
-| Unit tests frontend | ⚠️ | Vitest configured, only `example.test.ts` + 2 navigation tests exist. **Gap:** no tests for `LocationContext`, `useServiceability`, `cacheService`, `CartContext` location math. |
-| Unit tests backend | ⚠️ | Only `menu_test.ts` exists for edge functions. **Gap:** no tests for `location/index.ts`. |
-| Env vars / secret storage | ✅ | All secrets in Supabase secrets vault, no hardcoded keys. Nominatim is keyless. |
+## Changes
 
-## Plan — close the real gaps only
+### 1. Design tokens (`src/index.css`)
+- Light mode:
+  - `--background`: Snow White `#F8FAFC`
+  - `--foreground` / `--primary`: Deep Navy `#0F172A`
+  - `--accent` / `--warning`: Saffron `#F59E0B`
+  - `--success`: Soft Green `#4ADE80`
+  - New: `--wood: 27 39% 39%` (Walnut `#8B5E3C`) for borders/dividers
+  - `--radius`: bump to `0.75rem` for premium softness
+- Dark mode: invert to navy-dominant with saffron accent retained
+- Sidebar tokens recoloured to match navy/snow
 
-### 1. Cache the remaining location endpoints
-- Wrap `locationService.lookup(pincode)` in `cacheService` — key `loc:lookup:{pincode}`, TTL 1 hour (pincodes are static).
-- Wrap `locationService.reverseGeocode(lat, lng)` — key rounded to 3 decimals (~110m), TTL 1 hour. Respects Nominatim usage policy.
-- Skip caching `detect()` (IP-based, varies per request) but add a 30s in-flight dedupe to prevent double-fire on first paint.
+### 2. Typography (`tailwind.config.ts` + `index.html`)
+- Add Google Fonts: **Fraunces** (serif headings) + **Inter** (body, already in use)
+- Tailwind `fontFamily`: `serif: ['Fraunces', ...]`, `sans: ['Inter', ...]`
+- Global rule in `index.css`: `h1, h2, h3, h4 { @apply font-serif tracking-tight; }`
 
-### 2. Resilient error handling
-- Add React Query defaults in `useServiceability`: `retry: 2, retryDelay: exp backoff, refetchOnWindowFocus: false`.
-- `LocationContext.detectAuto` already swallows errors silently — keep that, but add a one-time toast if **both** GPS and IP detect fail (currently no user feedback).
-- `LocalDeals` already gracefully hides on error — fine.
-- `CartContext` shipping math already returns 0 if serviceability missing — fine.
+### 3. Header polish (`src/components/layout/Header.tsx`)
+- Navy background, snow text, saffron hover/active accent
+- Subtle 1px walnut-tinted bottom border
+- Logo wordmark in serif
 
-### 3. Lightweight client-side logging + usage tracking
-- New `src/lib/logger.ts` — thin wrapper: `logger.error(scope, msg, meta)` calls `console.error` and (when authenticated) inserts an `analytics_events` row with `event_type='client_error'` and metadata `{scope, msg, ...meta}`. Throttle to 1 per (scope+msg) per minute via in-memory map to prevent flooding.
-- Replace bare `console.error` in `locationService`, `LocationContext`, `useServiceability` with `logger.error`.
-- Track usage: emit `analytics_events` rows with `event_type='location_lookup'` from edge function `location/index.ts` (lookup + reverse-geocode actions) — uses existing `record_analytics_event` RPC, no new tables.
+### 4. Hero / Homepage top (`src/pages/HomePage.tsx`)
+- Replace any generic gradient with a navy → deep-navy gradient + faint saffron radial glow (evoking Dal Lake at dusk)
+- Serif headline, snow body, saffron CTA
 
-### 4. Edge function logging
-- `supabase/functions/location/index.ts` — add structured `console.log({ action, status, durationMs, pincode })` per request. Already has try/catch; just standardize the log shape so Supabase log search works.
+### 5. ProductCard (`src/components/product/ProductCard.tsx`)
+- Card border: walnut at 15% opacity
+- Price in navy, discount badge in saffron, "Deliverable" badge in soft green
+- Hover: lift + saffron ring
 
-### 5. Tests
-- **Frontend (Vitest):**
-  - `src/lib/__tests__/cacheService.test.ts` — get/set/expiry/invalidatePattern (skipping; covered by usage but worth a smoke test).
-  - `src/contexts/__tests__/LocationContext.test.tsx` — load saved location from localStorage, fallback chain on auto-detect.
-  - `src/hooks/__tests__/useServiceability.test.ts` — returns Map keyed by product_id; disabled when no pincode.
-  - `src/contexts/__tests__/CartContext.test.tsx` — `shippingTotal` math, `hasUnserviceableItem` flag, `codAvailable` gating.
-- **Backend (Deno):**
-  - `supabase/functions/location/location_test.ts` — covers each action (`detect`, `lookup`, `reverse-geocode`, `save`, `list`, `delete`, `default`) with input validation cases (invalid pincode → 400; missing action → 400). Uses `dotenv/load.ts` per project convention.
+### 6. Footer (`src/components/layout/Footer.tsx`)
+- Navy background, snow text, walnut divider, saffron link hover
 
-### 6. No-op on
-- **Env vars / secret storage** — already correct (Supabase secrets vault, no hardcoded keys).
-- **CDN / edge caching** — Supabase edge functions already run globally; no app code change needed.
-- **Scalability** — handled by infra; no action for in-app code.
-- **Backend rate limiting** — already documented as known gap (no primitives); skipped per project policy.
+### 7. Subtle Kashmiri motif
+- Add one reusable SVG pattern (paisley-inspired, very low opacity) as an optional `bg-paisley` utility — used only on hero + auth page backgrounds. Tokenized so it's easy to remove.
+
+## Out of scope
+- No changes to cart/checkout/location/admin/vendor logic
+- No new pages or features
+- No image/asset replacements (user can swap hero imagery later)
+- No restructuring of navigation or product grid
 
 ## Files
 
-### Create
-- `src/lib/logger.ts` — error logger + throttle + analytics insert
-- `src/lib/__tests__/cacheService.test.ts`
-- `src/contexts/__tests__/LocationContext.test.tsx`
-- `src/hooks/__tests__/useServiceability.test.ts`
-- `src/contexts/__tests__/CartContext.test.tsx`
-- `supabase/functions/location/location_test.ts`
+**Edit**
+- `src/index.css` — token overhaul, serif heading rule, paisley utility
+- `tailwind.config.ts` — add `serif` family + `wood` color
+- `index.html` — Fraunces font link
+- `src/components/layout/Header.tsx` — navy/saffron polish
+- `src/components/layout/Footer.tsx` — navy/walnut polish
+- `src/pages/HomePage.tsx` — hero gradient + serif headline
+- `src/components/product/ProductCard.tsx` — walnut border, saffron accents
 
-### Edit
-- `src/services/locationService.ts` — wrap `lookup` + `reverseGeocode` in `cacheService`; add in-flight dedupe for `detect`; replace `console.error` with `logger.error`
-- `src/hooks/useServiceability.ts` — add `retry`/`refetchOnWindowFocus: false` query defaults
-- `src/contexts/LocationContext.tsx` — toast once if both GPS and IP fail; use `logger.error`
-- `supabase/functions/location/index.ts` — standardized structured logging; emit `location_lookup` analytics event on `lookup` + `reverse-geocode`
-
-## Out of scope
-- Backend rate limiting (no primitive available)
-- New monitoring dashboard UI (analytics already feeds existing admin pages)
-- Replacing React Query with anything custom
-- CDN configuration (managed by Lovable Cloud)
+**Create**
+- `src/assets/paisley-pattern.svg` — single low-opacity motif
 
