@@ -89,6 +89,24 @@ const ShopSidebar = () => {
 
         <SidebarHeader />
 
+        {banner && !bannerDismissed && (
+          <div
+            role="status"
+            className="flex items-center gap-2 px-4 py-2 border-b bg-accent/10 text-accent text-xs font-medium"
+          >
+            <Truck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="flex-1 truncate">{banner.message}</span>
+            <button
+              type="button"
+              onClick={dismissBanner}
+              aria-label="Dismiss delivery banner"
+              className="opacity-70 hover:opacity-100 transition"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <nav className="flex-1 overflow-y-auto" aria-label="Main">
           {showSkeleton ? (
             <SidebarSkeleton />
