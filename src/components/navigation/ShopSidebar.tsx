@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Sun, Moon, LogOut, Tag, Sparkles, Trophy, Flame } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Sun, Moon, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,18 +9,12 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShopperNavigation } from "@/hooks/useNavigation";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { sidebarMenuService } from "@/services/sidebarMenuService";
+import { resolveLucideIcon } from "@/lib/iconRegistry";
 import SidebarSection from "./SidebarSection";
 import SidebarHeader from "./SidebarHeader";
 import SidebarItem from "./SidebarItem";
 import ExpandableMenu from "./ExpandableMenu";
 import SidebarSkeleton from "./SidebarSkeleton";
-
-const PROGRAM_ICONS: Record<string, LucideIcon> = {
-  tag: Tag,
-  sparkles: Sparkles,
-  trophy: Trophy,
-  flame: Flame,
-};
 
 const ShopSidebar = () => {
   const { isOpen, close } = useSidebar();
@@ -101,30 +94,14 @@ const ShopSidebar = () => {
                 </SidebarSection>
               )}
 
-              {/* Categories */}
-              {menu?.categories && menu.categories.length > 0 && (
-                <SidebarSection label="Shop by Department">
+              {/* Admin-managed dynamic tree (categories + programs + custom) */}
+              {menu?.tree && menu.tree.length > 0 && (
+                <SidebarSection label="Browse">
                   <div role="tree">
-                    {menu.categories.map((cat) => (
-                      <ExpandableMenu key={cat.id} node={cat} />
+                    {menu.tree.map((node) => (
+                      <ExpandableMenu key={node.id} node={node} />
                     ))}
                   </div>
-                </SidebarSection>
-              )}
-
-              {/* Programs & Features */}
-              {menu?.programs && menu.programs.length > 0 && (
-                <SidebarSection label="Programs & Features">
-                  <ul role="list">
-                    {menu.programs.map((p) => {
-                      const Icon = PROGRAM_ICONS[p.icon] ?? Tag;
-                      return (
-                        <li key={p.id}>
-                          <SidebarItem to={p.to} label={p.label} icon={Icon} />
-                        </li>
-                      );
-                    })}
-                  </ul>
                 </SidebarSection>
               )}
 
