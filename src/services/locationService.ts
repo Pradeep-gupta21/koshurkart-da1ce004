@@ -69,6 +69,10 @@ export const locationService = {
     return fetchJson(`cities?q=${encodeURIComponent(q)}`);
   },
 
+  async suggestions(q: string): Promise<Array<{ city: string; state: string; pincode: string }>> {
+    return fetchJson(`suggestions?q=${encodeURIComponent(q)}`);
+  },
+
   async checkServiceability(pincode: string, productIds: string[]) {
     const { data, error } = await supabase.rpc("check_serviceability" as any, {
       _pincode: pincode,
