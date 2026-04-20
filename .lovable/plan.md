@@ -1,100 +1,69 @@
 
+## Goal
+Extend the existing sidebar backend so it returns location-aware sections and supports admin CRUD with soft-deletes — without rebuilding what already works.
 
 ## Reality check
 
-You already have a production-grade sidebar foundation. Here's what exists vs what's needed:
-
-| Spec requirement | Status | Notes |
+| Spec ask | Status | Notes |
 |---|---|---|
-| Slide-in from left + overlay blur | ✅ | Radix `Sheet` (`side="left"`) — already animated |
-| Close on outside click + ESC | ✅ | Built into Radix Sheet |
-| Global state | ✅ | `SidebarContext` (Cmd/Ctrl+B too) |
-| Backend-driven menu | ✅ | `menu` edge function + `menu_items` table (RLS, role-aware, cached 5min) |
-| Role-based filtering | ✅ | Server-side (`role_access[]`) + client (`navigation.ts`) |
-| Lazy load | ✅ | React Query, `enabled: isOpen && !authLoading` |
-| Skeleton loaders | ✅ | `SidebarSkeleton` |
-| Focus trap + ARIA | ✅ | Radix Sheet handles trap; ARIA labels present |
-| Component arch (Container/Header/Section/Item/Expandable) | ✅ | All exist |
-| Badges (`badge_key`) | ✅ schema | Not rendered in `ExpandableMenu` yet |
-| **J&K Essentials section** | ❌ | DB has 4 generic items; needs Essentials + Kashmiri Products + Programs + Help & Support |
-| **"Hard to get in J&K" / "Authentic from Kashmir" labels** | ❌ | `badge_key` column unused |
-| **"Most Ordered Near You"** | ❌ | Trending exists; nothing pincode-aware |
-
-This is a **content + polish pass**, not a rebuild. Reusing the existing system keeps everything tested and admin-editable.
+| `menu_items` table with role_access, badge_key, parent_id, section, order_index, is_active | ✅ | Already in DB |
+| `GET /menu` returns role-filtered nested tree, cached 5min | ✅ | `supabase/functions/menu/index.ts` |
+| Admin CRUD UI | ✅ | `AdminMenu.tsx` + `MenuTreeEditor.tsx` writes via Supabase client (RLS-gated to admins) |
+| RLS protects writes | ✅ | "Admin manages menu items" policy |
+| Input validation on writes | ⚠️ Partial | Client-only via React state; no Zod schema |
+| Location detection (GPS/IP) + storage (localStorage + `user_locations`) | ✅ | `LocationContext` + `serviceable_pincodes` |
+| **Location → menu**: prioritize Essentials, show "Now delivering to your area" | ❌ | Menu doesn't know about pincode |
+| **"Most Ordered Near You"** dynamic | ❌ | Static link to `/search?sort=trending&local=1` |
+| Soft-delete (`is_active=false`) | ✅ schema | Editor currently hard-deletes — should flip to soft |
 
 ## Plan
 
-### 1. Seed J&K menu structure (data migration)
+### 1. Make `menu` edge function location-aware
+Accept optional `?pincode=XXXXXX`. Resolve serviceability via `serviceable_pincodes`:
+- If pincode is in **J&K** (state = "Jammu and Kashmir"), bump the **Essentials** section's `order_index` to top and inject a synthetic banner item: *"Now delivering essentials to {city}"* (badge_key: `now-delivering`, returned as a `meta` field, not persisted).
+- Replace the *"Most Ordered Near You"* leaf's `route` with `/search?sort=popularity&pincode={pincode}` so the search page filters by serviceable products.
+- Cache key includes pincode bucket (first 3 digits) so we don't blow up cache cardinality.
 
-Replace the 4 generic items with a curated J&K tree via SQL migration. Five top-level groups, each with children, all `is_active=true`, role-filtered where appropriate, with `badge_key` set for visual labels:
+Response shape stays the same (sections + nested tree) plus a new optional `meta: { delivery_banner?: { city, message, badge_key } }`.
 
-```text
-A. Essentials                    badge_key: hard-to-get
-   ├─ Electronics
-   ├─ Appliances
-   ├─ Home Essentials
-   └─ Groceries
+### 2. Add `now-delivering` badge to registry
+Extend `src/lib/badgeRegistry.ts` with `now-delivering` (saffron with Truck icon, label *"Now delivering to {city}"* — supports `{city}` token replacement at render time).
 
-B. Kashmiri Products             badge_key: authentic-kashmir
-   ├─ Handicrafts
-   ├─ Pashmina & Clothing
-   ├─ Dry Fruits
-   ├─ Spices (Saffron)
-   └─ Home Decor
+### 3. Render delivery banner in sidebar
+In `ShopSidebar.tsx`, when `meta.delivery_banner` is present, render a thin saffron strip above sections with the message and a small Truck icon. Dismissable per-session via `sessionStorage`.
 
-C. Trending in J&K
-   ├─ Bestsellers in J&K     → /search?sort=popularity
-   ├─ New Arrivals           → /search?sort=newest
-   └─ Most Ordered Near You  → /search?sort=trending&local=1
+### 4. Wire pincode into the menu query
+`useNavigation.ts` already fetches the menu via React Query. Read pincode from `LocationContext` and pass it to the edge function; include it in the queryKey so cache buckets per-pincode.
 
-D. Programs
-   ├─ Become a Vendor        → /vendor/apply   (role_access: guest+user)
-   ├─ Vendor Dashboard       → /vendor         (role_access: vendor)
-   └─ Local Seller Program   → /vendor/apply?program=local
+### 5. Switch admin delete to soft-delete
+`MenuTreeEditor.tsx` currently calls `.delete()`. Change to `.update({ is_active: false })`. Add an "Archived" toggle in the admin view to surface inactive items and a "Restore" action that flips it back. The edge function already filters `is_active=true` so soft-deleted items disappear from the public menu automatically.
 
-E. Help & Support
-   ├─ Track Order            → /profile?tab=orders
-   ├─ Customer Support       → /help
-   └─ J&K Delivery Info      → /help#jk-delivery
-```
+### 6. Add server-side validation to admin writes
+Two paths:
+- **Client**: add `src/lib/validators/menuItemSchema.ts` (Zod) — `title 1–80`, `route` optional URL/path, `icon` ≤ 40, `section` enum, `role_access` array of `app_role`, `order_index` int, `badge_key` ≤ 40. Validate on save in `MenuTreeEditor`.
+- **Server**: a tiny new edge function `menu-admin` is overkill since RLS already enforces auth+admin role and the Supabase client write goes through PostgREST with column-level type checks. Skip a custom write endpoint; rely on RLS + Zod + DB types.
 
-Each child route uses `?category=Electronics` etc. so they hit the existing search page with no new routes.
-
-### 2. Render `badge_key` labels in the menu (`ExpandableMenu.tsx`)
-
-Add a small badge next to group titles when `node.badge_key` is set. Two known keys:
-- `hard-to-get` → saffron pill: *"Hard to get in J&K — now available"*
-- `authentic-kashmir` → green pill with mountain icon: *"Authentic from Kashmir"*
-
-Centralise the mapping in a tiny `badgeRegistry.ts` so admin can add more later without code changes (unknown keys render as a neutral muted pill with the key humanised).
-
-### 3. Backend overlay polish (`ShopSidebar.tsx`)
-
-Add `bg-background/40 backdrop-blur-sm` to the Sheet overlay via the Sheet's overlay class to satisfy "background overlay (blur + dark)" — currently it's a flat dim. Done by passing a custom overlay through the existing Sheet primitive (already supports `className` on overlay).
-
-### 4. Role-aware "Account" header CTAs already work — just verify
-
-Guest sees *"Sign in"* (already), user/vendor/admin see role-tagged header (already). No change needed; section D handles vendor/admin entry points via `role_access` filtering done by the edge function.
-
-### 5. Cache invalidation after seed
-
-The edge function caches per-instance for 5 min. Migration runs server-side so cold edges will pick up new data. Add a one-shot `cache.clear()`-equivalent by bumping React Query `queryKey` to include a build version — simpler: just rely on the 5min TTL + `staleTime`. No code change needed.
+### 7. "Most Ordered Near You" — quick wire
+Update the seed entry's route to `/search?sort=popularity&pincode={user_pincode}` (token replaced server-side in the menu function based on `?pincode=` query). Search page already supports `sort=popularity`; pincode filter falls back to global if unset. No new ranking algorithm — that's a follow-up.
 
 ## Out of scope
-
-- New auth, new state library (Zustand/Redux) — current `SidebarContext` + React Query is already production-grade
-- A separate Express backend — Supabase edge functions cover the API contract
-- "Most Ordered Near You" geo-ranking algorithm (uses existing `trending` sort with a `local=1` flag we can wire later)
-- New routes, new pages
+- Redis (5-min in-memory cache in the edge function is sufficient at current scale)
+- A separate Express backend (Supabase edge functions cover the API contract)
+- Geo-distance ranking for "Most Ordered Near You" (ship the link wiring; real algorithm is a separate task)
+- Storing the menu in a different shape (current schema already covers all spec fields except `priority` → we use `order_index`, and `badge` → `badge_key`)
 
 ## Files
 
-**Create**
-- `supabase/migrations/<ts>_seed_jk_menu.sql` — wipe-and-seed J&K tree with `badge_key`s
-- `src/lib/badgeRegistry.ts` — `badge_key → { label, tone }` map
-
 **Edit**
-- `src/components/navigation/ExpandableMenu.tsx` — render badge from `badge_key` next to title
-- `src/components/navigation/SidebarItem.tsx` — accept optional `badgeKey` for leaf items (small inline pill)
-- `src/components/ui/sheet.tsx` — add `backdrop-blur-sm` to the overlay (one-line tweak, affects all sheets consistently)
+- `supabase/functions/menu/index.ts` — accept `?pincode`, resolve J&K, reorder Essentials, inject delivery_banner meta, token-replace pincode in routes
+- `src/lib/badgeRegistry.ts` — add `now-delivering` entry
+- `src/components/navigation/ShopSidebar.tsx` — render `meta.delivery_banner` strip with dismiss
+- `src/hooks/useNavigation.ts` — read pincode from LocationContext, include in query + queryKey
+- `src/components/admin/MenuTreeEditor.tsx` — soft-delete, archived toggle, restore action, Zod validation on save
+- `src/pages/admin/AdminMenu.tsx` — pass through archived state if needed
 
+**Create**
+- `src/lib/validators/menuItemSchema.ts` — Zod schema for menu item create/update
+
+**Data**
+- One INSERT/UPDATE migration to ensure the seeded "Most Ordered Near You" leaf uses the `{pincode}` token in its route
