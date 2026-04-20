@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SidebarItem from "./SidebarItem";
 import { resolveLucideIcon } from "@/lib/iconRegistry";
+import { getBadge } from "@/lib/badgeRegistry";
 import type { MenuNode } from "@/services/sidebarMenuService";
 
 interface ExpandableMenuProps {
@@ -16,6 +17,8 @@ const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
   const hasChildren = !!node.children && node.children.length > 0;
   const childCount = node.children?.length ?? 0;
   const Icon = resolveLucideIcon(node.icon);
+  const badge = getBadge(node.badge_key);
+  const BadgeIcon = badge?.icon;
 
   if (!hasChildren) {
     return (
@@ -41,12 +44,13 @@ const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
         )}
       >
         {Icon && <Icon className="h-4 w-4 text-muted-foreground shrink-0" />}
-        <span className="truncate flex-1 text-left">{node.title}</span>
+        <span className="truncate text-left font-medium">{node.title}</span>
         {childCount > 0 && (
-          <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+          <span className="text-[10px] font-medium text-muted-foreground tabular-nums ml-1">
             {childCount}
           </span>
         )}
+        <span className="flex-1" />
         <ChevronRight
           className={cn(
             "h-4 w-4 text-muted-foreground transition-transform duration-200",
@@ -63,6 +67,12 @@ const ExpandableMenu = memo(({ node, level = 0 }: ExpandableMenuProps) => {
           open ? "max-h-[1000px]" : "max-h-0",
         )}
       >
+        {badge && level === 0 && (
+          <div className={cn("mx-5 mt-1 mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold leading-none", badge.className)}>
+            {BadgeIcon && <BadgeIcon className="h-3 w-3" aria-hidden="true" />}
+            <span>{badge.label}</span>
+          </div>
+        )}
         {node.route && <SidebarItem to={node.route} label={`All ${node.title}`} indent />}
         {node.children.map((child) => (
           <ExpandableMenu key={child.id} node={child} level={level + 1} />
