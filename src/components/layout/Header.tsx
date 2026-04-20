@@ -9,6 +9,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { currencyService, CURRENCIES, CurrencyCode } from "@/services/currencyService";
 import ShopSidebarTrigger from "@/components/navigation/ShopSidebarTrigger";
+import LocationPill from "@/components/location/LocationPill";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
@@ -26,6 +27,7 @@ const Header = () => {
         <div className="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
           <span className="hidden sm:inline">Free shipping on orders over $50</span>
           <div className="flex items-center gap-4">
+            <LocationPill />
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-1 hover:underline cursor-pointer">
                 <Globe className="h-3 w-3" />

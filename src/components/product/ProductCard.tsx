@@ -7,6 +7,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 
 interface ProductCardProps {
   product: Product;
@@ -86,6 +87,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
             <span className="text-[11px] font-medium text-destructive/70">Only {availableStock} left</span>
           </div>
         )}
+
+        <div className="mt-1.5">
+          <ServiceabilityBadge productId={product.id} />
+        </div>
 
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-baseline gap-1.5">

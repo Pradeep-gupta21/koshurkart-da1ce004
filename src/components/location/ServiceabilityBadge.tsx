@@ -45,7 +45,7 @@ const ServiceabilityBadge = ({ productId, className, variant = "compact" }: Prop
   const Icon = isFast ? Truck : Clock;
   return (
     <div className={cn("flex items-center gap-1 text-[11px] font-medium",
-      isFast ? "text-primary" : "text-amber-600 dark:text-amber-400", className)}>
+      isFast ? "text-primary" : "text-accent-foreground/80", className)}>
       <Icon className="h-3 w-3" />
       <span>
         {variant === "full" ? `Delivery by ${formatEta(eta)}` : `By ${formatEta(eta)}`}

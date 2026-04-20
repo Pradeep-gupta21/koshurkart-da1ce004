@@ -36,7 +36,7 @@ const LocationDialog = ({ open, onOpenChange }: Props) => {
   const submit = async (pin: string) => {
     const parsed = inPincodeSchema.safeParse(pin);
     if (!parsed.success) {
-      toast({ title: "Invalid pincode", description: parsed.error.errors[0].message, variant: "destructive" });
+      toast({ title: "Invalid pincode", description: parsed.error.issues[0]?.message ?? "Please enter a valid pincode", variant: "destructive" });
       return;
     }
     setSubmitting(true);
