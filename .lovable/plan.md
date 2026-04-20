@@ -1,128 +1,114 @@
 
 
-The user wants an "Amazon-style" sidebar navigation system. Important context:
+Current state: ShopSidebar exists (Sheet-based, role-aware via useNavigation, closes on route change). Missing from user's spec: dynamic backend-driven menu, nested expandable subcategories, focus trapping, skeleton loaders, global state, ESC handling beyond Sheet defaults.
 
-1. This project is **React + Vite + Tailwind + Supabase (Lovable Cloud)** — NOT Next.js, NOT Express, NOT MongoDB, NOT Zustand/Redux. I cannot change the stack. I'll adapt the request to the existing stack.
-2. The project already has shadcn `sidebar.tsx`, role-based auth (`useAuth` with user/vendor/admin), and admin/vendor sub-routes that currently use top tabs.
-3. Amazon's sidebar = hamburger-triggered off-canvas drawer with categories, account links, and "Shop by Department" sections — different from a persistent admin sidebar.
+Sheet already handles: slide-in animation, backdrop, ESC, outside click, focus trap (Radix). So I'll build on it, not replace it.
 
-I'll propose **two complementary sidebars** since the project has two surfaces:
-- **Public/shopper sidebar**: off-canvas Amazon-style drawer triggered from the header (categories, account, sell, help)
-- **Dashboard sidebar**: persistent collapsible sidebar replacing the current top-tab nav in admin/vendor dashboards
-
-Both role-aware, both backed by a single config source, both responsive.
-
-Let me check current header & dashboards briefly to scope accurately.
+Key gaps to close:
+1. Backend-driven menu (categories from DB, not hardcoded)
+2. Nested expandable subcategories (Categories → subcats)
+3. Global open state (so any component can open sidebar)
+4. Skeleton loaders while fetching
+5. Trending section (from analytics/products)
+6. Explicit ARIA + active route highlight in items
 
 ---
 
-## Production-Ready Sidebar Navigation System
+## Production Sidebar Upgrade
 
-Adapted to this project's stack (React + Vite + Tailwind + shadcn + Supabase). Two coordinated sidebars, both role-aware, sharing one config source.
+Enhance the existing `ShopSidebar` to meet the full spec: backend-driven menu, nested subcategories, global state, skeletons, and a Trending section. Reuses Radix `Sheet` (already gives slide-in, backdrop, ESC, outside-click, focus trap).
 
-### 1. Architecture
+### 1. Global State — `SidebarContext`
 
-```text
-src/
-├─ config/navigation.ts          ← single source of truth
-├─ hooks/useNavigation.ts        ← filters items by role + counts (badges)
-├─ components/navigation/
-│   ├─ ShopSidebar.tsx           ← Amazon-style off-canvas drawer
-│   ├─ ShopSidebarTrigger.tsx    ← hamburger in Header
-│   ├─ DashboardSidebar.tsx      ← persistent collapsible (admin/vendor)
-│   └─ SidebarSection.tsx        ← reusable group with collapse
-└─ components/layout/
-    └─ DashboardLayout.tsx       ← wraps admin/vendor pages with SidebarProvider
+`src/contexts/SidebarContext.tsx` — exposes `{ isOpen, open(), close(), toggle() }`. Provider mounted in `App.tsx`. Any component (Header, deep links, keyboard shortcut) can control the sidebar.
+
+### 2. Backend-Driven Menu
+
+New edge function `get-sidebar-menu` returns a typed tree:
+```ts
+{
+  trending: Product[],          // top 6 by sales last 7d
+  categories: CategoryNode[],   // {id, label, slug, children[]}
+  programs: NavItem[],          // Today's Deals, New Arrivals, Best Sellers
+}
+```
+- `categories` pulled from `products.category` distinct + grouped (or new `categories` table if exists)
+- Cached server-side 5min, client-side via React Query (`staleTime: 5min`)
+- User/role section stays config-driven (`navigation.ts`) — it's auth-state, not content
+
+### 3. Component Structure (per spec)
+
+```
+src/components/navigation/
+├─ ShopSidebar.tsx            ← SidebarContainer (orchestrator)
+├─ SidebarHeader.tsx          ← user greeting + avatar
+├─ SidebarSection.tsx         ← already exists, add ARIA
+├─ SidebarItem.tsx            ← single nav row, active highlight
+├─ ExpandableMenu.tsx         ← nested subcategories (Radix Collapsible)
+└─ SidebarSkeleton.tsx        ← loading state
 ```
 
-### 2. Single Navigation Config (`config/navigation.ts`)
+### 4. Sections Rendered
 
-Typed tree consumed by both sidebars. Each item: `{ id, label, to, icon, roles?, children?, badgeKey? }`. Role gating happens here, not in components — easy to scale to hundreds of items.
-
-```text
-shopper nav:
-  - Shop by Department (Electronics, Fashion, Home, …) ← from categories table
-  - Today's Deals
-  - Sponsored / Trending
-  - Your Account → Orders, Reviews, Profile
-  - Sell on Platform → /vendor/apply or /vendor (role-aware)
-  - Help & Settings
-
-dashboard nav (admin):
-  - Overview, Vendors, Reviews, Payments, Payouts,
-    Campaigns, Placements, Pricing, Settings, Security
-
-dashboard nav (vendor):
-  - Overview, Products, Orders, Campaigns, Analytics,
-    Payments, Notifications
-```
-
-### 3. Shop Sidebar (Amazon-style)
-
-- Off-canvas drawer using existing shadcn `Sheet` (left side, full-height, 320px).
-- Header: "Hello, {name}" or "Hello, sign in", avatar.
-- Sections with collapsible `SidebarSection` (chevron, smooth animation).
-- "Shop by Department" pulls live categories from Supabase (cached 5min via existing `cacheService`).
-- Footer: theme toggle, currency switcher (already in app), sign out.
-- Triggered from a hamburger button added to `Header.tsx` (left of logo on mobile, hidden on desktop or icon-only).
-- Closes on route change, swipe, ESC, backdrop click.
-
-### 4. Dashboard Sidebar (persistent, scalable)
-
-- Replaces current top-tab nav in `AdminDashboard.tsx` and `VendorDashboard.tsx`.
-- Built on existing shadcn `sidebar.tsx` with `collapsible="icon"` (Amazon-internal style: full labels → icon-only mini rail).
-- `SidebarTrigger` in dashboard header — always visible.
-- Active route highlighting via `NavLink` (already in project).
-- Live badges (e.g. pending vendors, new orders, unread notifications) via `useNavigation` hook polling small count queries with React Query.
-- Search input at top filters menu items client-side (handles 50+ items gracefully).
-- Persists collapsed state to `localStorage`.
-- Mobile (`<768px`): becomes off-canvas via shadcn's built-in responsive behavior.
-
-### 5. Role-Based Access (already aligned with project)
-
-- Uses existing `useAuth()` (`roles`, `isAdmin`, `isVendor`).
-- `useNavigation()` filters config tree by `roles` array per item.
-- Items with no `roles` = public. Items with `roles: ['admin']` = admin only.
-- Defense in depth: `RoleRoute` guards routes (already exists) — sidebar just hides what user can't access.
-
-### 6. Performance & Scalability
-
-- Config-driven: adding nav items = one line, no component changes.
-- Memoized filter (`useMemo` keyed on roles).
-- Code-split badge count queries (React Query, 30s stale time).
-- Lazy-loaded category list inside drawer (only fetched when opened).
-- Virtualized list ready (current scale doesn't need it; structure supports drop-in `react-window` later).
-- Zero new dependencies — everything uses existing shadcn + React Query + Supabase.
-
-### 7. Responsive Behavior
-
-| Viewport | Shop Sidebar | Dashboard Sidebar |
+| Section | Source | Behavior |
 |---|---|---|
-| Mobile (<768px) | Off-canvas, full-height drawer | Off-canvas (auto by shadcn) |
-| Tablet (768–1024) | Off-canvas | Mini rail (icons), expand on hover |
-| Desktop (>1024) | Off-canvas (Amazon does same) | Persistent expanded, toggle to mini |
+| Header | `useAuth` | Greeting + sign-in CTA |
+| Trending | API (lazy) | Horizontal scroll of 6 products |
+| Categories | API (lazy) | Expandable tree, 2 levels deep |
+| Programs & Features | API | Flat list with icons |
+| Your Account | config + role | Orders, Wishlist (user) / Dashboard, Add Product (vendor) / Admin Panel (admin) / Sign In (guest) |
+| Footer | static | Theme toggle, sign out |
 
-### 8. Files
+### 5. Role-Based Items
+
+Already handled by `useNavigation` filtering on `roles: ['user'|'vendor'|'admin'|'guest']`. Add the missing items: Wishlist (user), Add Product (vendor), Admin Panel (admin).
+
+### 6. Performance
+
+- React Query: menu fetched once, cached 5min, shared across opens
+- Lazy load: query only fires when sidebar opens (`enabled: isOpen`)
+- `React.memo` on `SidebarItem` and `ExpandableMenu` (prevents re-render on parent state changes)
+- Skeleton during initial fetch (`SidebarSkeleton` — animated bars matching layout)
+- Subcategory render is virtualizable later (drop-in `react-window` if categories grow >50)
+
+### 7. Accessibility
+
+- Sheet (Radix) provides: focus trap, ESC, focus return, aria-modal
+- Add: `aria-label="Main navigation"` on `<nav>`, `aria-expanded` on ExpandableMenu, `aria-current="page"` on active SidebarItem
+- Full keyboard nav: Tab/Shift-Tab cycles items, Enter/Space toggles expand, arrow keys optional (Radix handles for us)
+
+### 8. UX
+
+- Active route: `NavLink` with `activeClassName="bg-muted text-primary font-medium"` + left border accent
+- Expand/collapse: Radix `Collapsible` with existing Tailwind `accordion-down/up` animations
+- Mobile-first: 320px drawer, 100vh, safe-area padding, larger touch targets (`py-3`)
+- Smooth slide-in: Sheet's built-in `data-[state=open]:slide-in-from-left`
+
+### 9. Trigger Points
+
+- Hamburger in `Header.tsx` (already wired) → calls `useSidebar().open()`
+- Optional: `Cmd+B` shortcut (added in `App.tsx` keydown listener)
+
+### Files
 
 **Create**
-- `src/config/navigation.ts`
-- `src/hooks/useNavigation.ts`
-- `src/components/navigation/ShopSidebar.tsx`
-- `src/components/navigation/ShopSidebarTrigger.tsx`
-- `src/components/navigation/DashboardSidebar.tsx`
-- `src/components/navigation/SidebarSection.tsx`
-- `src/components/layout/DashboardLayout.tsx`
+- `src/contexts/SidebarContext.tsx`
+- `src/components/navigation/SidebarHeader.tsx`
+- `src/components/navigation/SidebarItem.tsx`
+- `src/components/navigation/ExpandableMenu.tsx`
+- `src/components/navigation/SidebarSkeleton.tsx`
+- `src/services/sidebarMenuService.ts`
+- `supabase/functions/get-sidebar-menu/index.ts`
 
 **Modify**
-- `src/components/layout/Header.tsx` — add hamburger + mount `ShopSidebar`
-- `src/pages/admin/AdminDashboard.tsx` — wrap in `DashboardLayout`, remove top tabs
-- `src/pages/vendor/VendorDashboard.tsx` — same
-
-### 9. Stack Note
-
-Your request mentioned Next.js / Express / MongoDB / Zustand. This project is **React + Vite + Supabase (Lovable Cloud)** and cannot change frameworks. The plan delivers the same outcome — role-based, scalable, production-ready sidebar — using the existing stack. Auth, DB, and state are already handled by `useAuth` + Supabase RLS + React Query, which is the production equivalent.
+- `src/components/navigation/ShopSidebar.tsx` — consume context, fetch menu, render new sections, add Trending + nested categories
+- `src/components/navigation/ShopSidebarTrigger.tsx` — use context instead of local state
+- `src/components/navigation/SidebarSection.tsx` — add ARIA props
+- `src/config/navigation.ts` — add Wishlist, Add Product, Admin Panel
+- `src/App.tsx` — wrap in `SidebarProvider`
+- `src/components/layout/Header.tsx` — (no change if trigger already mounted)
 
 ### Out of scope
-- Replacing React Query with Zustand/Redux (current setup is already production-grade)
-- Server-rendered nav (Vite SPA — nav config is static + cached queries)
+- Wishlist feature itself (link only; full feature is separate)
+- Replacing dashboard sidebar (that one is correctly persistent, not a drawer)
 
