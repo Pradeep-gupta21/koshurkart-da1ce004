@@ -241,6 +241,22 @@ const SearchPage = () => {
             </div>
           </div>
 
+          {/* Deliverable toggle */}
+          {pincode && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Delivery</p>
+              <Button
+                size="sm"
+                variant={deliverableOnly ? "default" : "outline"}
+                onClick={() => setDeliverableOnly(!deliverableOnly)}
+                className="h-8 text-xs gap-1.5"
+              >
+                <Truck className="h-3.5 w-3.5" />
+                Deliverable to {pincode}
+              </Button>
+            </div>
+          )}
+
           {/* Sort + Clear */}
           <div className="flex items-center gap-3">
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SearchSortOption)}>

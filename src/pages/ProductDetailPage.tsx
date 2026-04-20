@@ -19,6 +19,8 @@ import { useState, useEffect, useRef } from "react";
 import { analyticsService } from "@/services/analyticsService";
 import ReviewSection from "@/components/reviews/ReviewSection";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
+import LocationDialog from "@/components/location/LocationDialog";
+import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
   const p = c.products;
@@ -89,6 +91,8 @@ const ProductDetailPage = () => {
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [locationDialogOpen, setLocationDialogOpen] = useState(false);
+  const { location: userLocation } = useUserLocation();
   const trackedRef = useRef(false);
 
   const { data: product, isLoading, error } = useQuery({
@@ -260,8 +264,15 @@ const ProductDetailPage = () => {
                       </>
                     )}
                   </div>
-                  <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="rounded-lg border bg-muted/30 p-3 flex items-center justify-between gap-3 flex-wrap">
                     <ServiceabilityBadge productId={product.id} variant="full" />
+                    <button
+                      type="button"
+                      onClick={() => setLocationDialogOpen(true)}
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      {userLocation?.pincode ? "Change location" : "Set location"}
+                    </button>
                   </div>
                 </div>
 
@@ -311,6 +322,8 @@ const ProductDetailPage = () => {
           </ProductGrid>
         </section>
       )}
+
+      <LocationDialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen} />
     </div>
   );
 };
