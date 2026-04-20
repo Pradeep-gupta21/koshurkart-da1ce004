@@ -1,45 +1,42 @@
 
 
 ## Goal
-Refine the existing top nav with an Amazon-style structure customized for J&K — premium glassmorphism, Kashmiri search placeholder, mountain motif, and J&K-flavored category strip. No structural rewrite; tighten what's there.
+Add Kashmiri storytelling to the homepage and add "From Kashmir" trust signaling on product cards & detail pages. Keep all existing data/queries intact — this is additive layout and badges.
 
 ## Changes
 
-### 1. `Header.tsx` — premium polish
-- **Glass top bar**: Navy at `90%` opacity + `backdrop-blur-md` + soft saffron-tinted bottom shadow (`shadow-[0_1px_0_hsl(var(--accent)/0.15)]`).
-- **Logo**: Add a tiny inline mountain SVG (3 triangles) next to the "K" badge for regional identity. Keep serif "Kashmir Bazaar" wordmark.
-- **Main bar**: `bg-background/80 backdrop-blur-md` with a subtle wood-tinted shadow on scroll feel (always-on soft shadow `shadow-sm`).
-- **Action buttons** (Account / Cart / Theme): wrap each in a subtle hover treatment — `hover:bg-accent/10 hover:text-accent transition-all duration-200 hover:-translate-y-0.5`. Cart badge gets a soft saffron glow (`shadow-[0_0_8px_hsl(var(--accent)/0.5)]`).
-- **Account dropdown**: Replace the bare `User` icon link with a dropdown showing "Hello, Sign in" / "Account & Orders" / "Profile" / "Wishlist" — Amazon-style two-line label on `md+`.
-- **Category bar**: Replace generic categories with **J&K-local set**: Pashmina · Saffron · Dry Fruits · Walnut Wood · Papier-mâché · Kahwa · Handicrafts · Carpets. First item ("All") opens the existing ShopSidebar. Add a leading `Mountain` lucide icon as a subtle local marker.
+### 1. Homepage (`src/pages/HomePage.tsx`)
+- **Hero copy tweak**: Update headline to *"Discover Kashmir's Finest Products"* with a subtler subhead and primary CTA *"Explore Now"* → `/search`. Keep current dusk gradient + paisley.
+- **NEW: Kashmir Categories grid** (after hero, before LocalDeals). 5 curated tiles: Handicrafts · Pashmina Shawls · Dry Fruits · Saffron · Local Art. Each card: rounded-2xl, walnut border, soft shadow, gradient overlay, emoji/lucide icon + serif label, `hover:scale-[1.02]` zoom. Links to `/search?category=…`.
+- **Deals → horizontal scroll**: Add a `LocalDealsScroller` variant that renders deals in `overflow-x-auto snap-x` strip with section title *"Today's Kashmiri Deals"*. Keep existing `LocalDeals` query/data; just swap layout when ≥4 items.
+- **Featured Vendors polish**: Add small saffron *"From Kashmir"* badge under each vendor name. Heading → *"Artisans of the Valley"*.
+- **NEW: Story section** (before "All Products"): Two-column band — left: serif title *"Handmade with Love in Kashmir"*, two short paragraphs about artisan partnership, CTA *"Meet Our Artisans"* → `/search`; right: paisley-pattern panel with `bg-dusk` and a soft saffron glow. Wood-tinted border, generous padding.
 
-### 2. `LocationPill.tsx` — clearer J&K copy
-- Two-line layout already exists. When pincode resolves to J&K (state === "Jammu and Kashmir" or city in {Srinagar, Jammu, ...}), show **"Delivering to {City}"** in saffron; otherwise keep current behavior.
-- Add chevron-down indicator and `hover:bg-primary-foreground/15` for affordance.
-- Show on mobile too (currently `hidden md:flex`) — compact variant with just icon + city.
+### 2. Product Card (`src/components/product/ProductCard.tsx`)
+- Add a small *"From Kashmir"* badge (saffron pill with mountain icon) in the top-left, stacked under the SPONSORED badge if present. Shown for all products (this is a J&K-only marketplace).
+- Slightly larger image area is already aspect-square — keep. Increase title to `line-clamp-2` and bump font to `text-sm font-semibold` for breathing room. No structural change.
 
-### 3. `SearchBar.tsx` — J&K placeholder + premium shell
-- Placeholder: `"Search for Pashmina, Dry Fruits, Handicrafts…"`
-- Wrap input in a premium shell: `rounded-full` (or keep `rounded-md` to match radius), `ring-1 ring-wood/30 focus-within:ring-2 focus-within:ring-accent shadow-sm hover:shadow-md transition-shadow`.
-- Add a saffron **Search button** appended on the right (Amazon-style) that submits the query: `bg-accent text-accent-foreground rounded-r-md px-4`.
-- Dropdown: `backdrop-blur-md bg-popover/95` for glass feel.
+### 3. Product Detail Page (`src/pages/ProductDetailPage.tsx`)
+- **Trust badge row** under the price: three pill badges in a row — *"Authentic Kashmiri Product"* (saffron + Mountain icon), *"Verified Artisan"* (navy + ShieldCheck, only if `vendorTrust.is_verified`), *"Secure Delivery"* (green + Truck icon). Wraps responsively.
+- **Vendor card**: Replace the inline single-line vendor row with a compact card above the title — avatar/initial, store name, *"From Kashmir"* badge, trust score chip, `View store` link. Keeps existing data, just better presented.
+- Keep gallery, location-aware delivery (already there via `ServiceabilityBadge`), reviews, recs untouched.
 
-### 4. Mobile responsiveness
-- `< sm`: Hide wordmark (keep K badge), hide top utility row (currency stays in profile menu later — out of scope), search shrinks to full width on a second row.
-- `sm–md`: Keep current single-row, hide category bar.
-- `lg+`: Full layout with category bar.
-- LocationPill mobile variant: compact icon + city only.
+### 4. Reusable bits
+- New tiny component `src/components/product/FromKashmirBadge.tsx` — saffron pill, `Mountain` icon, `text-[10px] font-semibold` — used by ProductCard, vendor tiles, story section.
 
 ## Out of scope
-- Language toggle (project uses currency toggle; adding i18n is a separate feature)
-- Wishlist page (would require new route)
-- Restructuring search service or ShopSidebar
-- Animated hero, re-skinning other pages
+- New routes/pages, new DB queries, image asset generation, animations beyond simple hover, i18n, wishlist.
 
 ## Files
 
+**Create**
+- `src/components/product/FromKashmirBadge.tsx`
+- `src/components/home/KashmirCategories.tsx`
+- `src/components/home/StorySection.tsx`
+
 **Edit**
-- `src/components/layout/Header.tsx` — glass effect, mountain logo mark, account dropdown, J&K category list, hover polish
-- `src/components/location/LocationPill.tsx` — J&K-aware copy, mobile variant, chevron
-- `src/components/search/SearchBar.tsx` — Kashmiri placeholder, saffron submit button, glass dropdown, focus ring
+- `src/pages/HomePage.tsx` — hero copy/CTA, insert categories + story sections, vendor heading, "From Kashmir" badge on vendor tiles
+- `src/components/home/LocalDeals.tsx` — switch to horizontal snap-scroll layout + new heading
+- `src/components/product/ProductCard.tsx` — From Kashmir badge, title polish
+- `src/pages/ProductDetailPage.tsx` — trust badge row, vendor card refactor
 
