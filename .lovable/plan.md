@@ -1,44 +1,24 @@
 
 
-User wants the location pill to show the user's **exact** location automatically, not just IP-based approximation.
+User wants browser-based verification of the GPS auto-detect flow. This requires browser automation tools (navigate_to_sandbox, act, screenshot, read_console_logs) which are unavailable in plan mode.
 
-## Current state
-- `LocationContext.detect()` is only called when the user clicks "Use current location" in the dialog.
-- On first load, the pill shows nothing (or last saved location from localStorage).
-- GPS is attempted via `navigator.geolocation`, but reverse-geocoding currently maps lat/lng → pincode using a coarse lookup (or falls back to IP).
+## Important caveat
+The browser automation tool **cannot grant or deny real GPS permissions** — Chrome's geolocation prompt is a native browser dialog outside the page DOM, and headless browsers default to denying geolocation unless explicitly configured. So the realistic verification I can perform:
 
-## Plan — auto-detect exact location on first visit
+1. **GPS-denied path (default in automation)** — Load preview fresh, observe console for the auto-detect flow, confirm it falls back to `/location/detect` (IP) and the pill shows a city + pincode.
+2. **Network confirmation** — Verify the sequence: `reverse-geocode` attempted (or skipped on denial) → `detect` IP fallback fires → `lookup` resolves to a serviceable pincode → pill renders.
+3. **Pill state** — Screenshot the header, confirm "Delivering to {City} {PIN}" is visible and not stuck on "Detecting…".
 
-### 1. Auto-trigger detection on app load
-In `LocationContext`, add a `useEffect` that runs once on mount:
-- If a location already exists in `localStorage` → skip (respect user's choice).
-- Else → silently call `detect()` which already tries GPS first, then IP fallback.
-- No toast on silent auto-detect (only show errors if both fail).
+For the **GPS-allowed path**, I'll explain that real-device verification is required (the user must do this manually in their own browser) since automation can't simulate a real geolocation grant accurately.
 
-### 2. Improve GPS → address accuracy (reverse geocoding)
-Currently GPS returns lat/lng but mapping to a precise city + pincode is weak. Add a proper reverse-geocoding step in the `location` edge function:
-- New action: `POST { action: "reverse-geocode", lat, lng }`
-- Uses **Nominatim (OpenStreetMap)** — free, no API key, returns city/state/postcode/country from coordinates
-- Returns normalized `{ pincode, city, state, country, lat, lng, source: "geo" }`
-- Client `LocationContext.detect()` calls this after `getCurrentPosition` succeeds, instead of the current coarse mapping.
+## Test sequence (after approval)
 
-### 3. Permission UX
-- First load: silently request GPS (browser shows native prompt).
-- If user **denies** → fall back to server IP detect (no error toast, just less precise).
-- If user **allows** → exact street-level city + pincode shown in pill.
-- Add a small "Detecting…" state on the `LocationPill` while initial detection runs.
+1. `navigate_to_sandbox` → `/` (fresh session, no localStorage)
+2. `read_console_logs` → look for detect flow logs / errors
+3. `list_network_requests` → confirm `/location/detect` fired and returned IP-based location
+4. `observe` → locate the LocationPill in header
+5. `screenshot` → verify pill shows "Delivering to {City} {PIN}"
+6. Report findings; explicitly note the GPS-allowed path needs manual verification by the user
 
-### 4. Pill display
-Already shows `City PIN` — no change needed; just ensure it updates after auto-detect resolves.
-
-## Files to edit
-- `supabase/functions/location/index.ts` — add `reverse-geocode` action calling Nominatim
-- `src/services/locationService.ts` — add `reverseGeocode(lat, lng)` wrapper
-- `src/contexts/LocationContext.tsx` — auto-detect on mount (if no saved location); use `reverseGeocode` after GPS success
-- `src/components/location/LocationPill.tsx` — show "Detecting location…" placeholder while initial detect is in flight
-
-## Out of scope
-- Google Maps Geocoding API (requires paid key; Nominatim is sufficient and free, with a usage policy we comply with via low volume + UA header)
-- Background re-detection on every visit (respect saved location)
-- Asking permission via custom UI before native prompt (adds friction; native prompt is standard)
+If anything is broken (pill stuck on "Detecting…", console error, missing fallback), I'll stop and surface the bug before suggesting a fix.
 
