@@ -55,6 +55,7 @@ const SearchPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
   const [minRating, setMinRating] = useState<number>(0);
+  const [deliverableOnly, setDeliverableOnly] = useState(false);
 
   // Sync URL params
   useEffect(() => {
