@@ -114,6 +114,17 @@ export const locationService = {
     if (error) throw error;
   },
 
+  async updateUserLocation(id: string, updates: { label?: string }) {
+    const { data, error } = await supabase
+      .from("user_locations" as any)
+      .update(updates as any)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as unknown as UserLocation;
+  },
+
   async deleteUserLocation(id: string) {
     const { error } = await supabase.from("user_locations" as any).delete().eq("id", id);
     if (error) throw error;

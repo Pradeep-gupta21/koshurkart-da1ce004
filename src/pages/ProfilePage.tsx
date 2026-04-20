@@ -14,6 +14,7 @@ import type { ShippingStatus } from "@/types/order";
 import type { AppNotification } from "@/types/notification";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
+import SavedAddresses from "@/components/location/SavedAddresses";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -241,6 +242,8 @@ const ProfilePage = () => {
           )}
         </CardContent>
       </Card>
+
+      <SavedAddresses />
 
       <Card className="marketplace-shadow">
         <CardHeader><CardTitle className="text-lg">Order History</CardTitle></CardHeader>
