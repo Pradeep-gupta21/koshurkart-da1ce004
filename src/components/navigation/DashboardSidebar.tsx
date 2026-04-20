@@ -11,8 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   useAdminNavigation, useVendorNavigation,
-  useAdminBadges, useVendorBadges, type BadgeMap,
+  useAdminBadges, useVendorBadges, useAuthLoading, type BadgeMap,
 } from "@/hooks/useNavigation";
+import SidebarSkeleton from "./SidebarSkeleton";
 
 interface DashboardSidebarProps {
   variant: "admin" | "vendor";
@@ -28,6 +29,7 @@ const DashboardSidebar = ({ variant }: DashboardSidebarProps) => {
   const vendorSections = useVendorNavigation();
   const adminBadges = useAdminBadges();
   const vendorBadges = useVendorBadges();
+  const authLoading = useAuthLoading();
 
   const sections = variant === "admin" ? adminSections : vendorSections;
   const badges: BadgeMap = variant === "admin" ? adminBadges : vendorBadges;
@@ -73,7 +75,8 @@ const DashboardSidebar = ({ variant }: DashboardSidebarProps) => {
       </SidebarHeader>
 
       <SidebarContent>
-        {filtered.map((section) => (
+        {authLoading && <SidebarSkeleton />}
+        {!authLoading && filtered.map((section) => (
           <SidebarGroup key={section.id}>
             {!collapsed && <SidebarGroupLabel>{section.label}</SidebarGroupLabel>}
             <SidebarGroupContent>

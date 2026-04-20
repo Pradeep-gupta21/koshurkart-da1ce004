@@ -1,12 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Sun, Moon, LogOut } from "lucide-react";
+import { Sun, Moon, LogOut, AlertCircle } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { useShopperNavigation } from "@/hooks/useNavigation";
+import { useShopperNavigation, useAuthLoading } from "@/hooks/useNavigation";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { sidebarMenuService } from "@/services/sidebarMenuService";
 import SidebarSection from "./SidebarSection";
@@ -14,10 +14,12 @@ import SidebarHeader from "./SidebarHeader";
 import SidebarItem from "./SidebarItem";
 import ExpandableMenu from "./ExpandableMenu";
 import SidebarSkeleton from "./SidebarSkeleton";
+import EmptyState from "@/components/ui/EmptyState";
 
 const ShopSidebar = () => {
   const { isOpen, close } = useSidebar();
-  const { user, signOut } = useAuth();
+  const { user, roles, signOut } = useAuth();
+  const authLoading = useAuthLoading();
   const { theme, toggleTheme } = useTheme();
   const sections = useShopperNavigation();
   const location = useLocation();
@@ -28,20 +30,27 @@ const ShopSidebar = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
-  // Lazy fetch — only when opened
-  const { data: menu, isLoading } = useQuery({
-    queryKey: ["sidebar-menu"],
-    queryFn: () => sidebarMenuService.fetchMenu(),
-    enabled: isOpen,
+  // Cache key includes roles so menu refreshes instantly on sign-in/out
+  const rolesKey = useMemo(
+    () => (user ? [...roles].sort().join(",") || "user" : "guest"),
+    [user, roles],
+  );
+
+  // Lazy fetch — only when opened AND auth resolved
+  const { data: menu, isLoading, isError, refetch } = useQuery({
+    queryKey: ["sidebar-menu", "shop", rolesKey],
+    queryFn: () => sidebarMenuService.fetchMenu("shop"),
+    enabled: isOpen && !authLoading,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    retry: 1,
   });
 
-  // Pre-built role/account section is the LAST one in shopperNav after categories.
-  // We render dynamic sections in their own slots, then auth/account/sell from config.
   const accountSections = sections.filter(
     (s) => s.id === "account" || s.id === "sell" || s.id === "help",
   );
+
+  const showSkeleton = authLoading || (isLoading && !menu);
 
   return (
     <Sheet open={isOpen} onOpenChange={(v) => (v ? null : close())}>
@@ -58,8 +67,36 @@ const ShopSidebar = () => {
         <SidebarHeader />
 
         <nav className="flex-1 overflow-y-auto" aria-label="Main">
-          {isLoading && !menu ? (
+          {showSkeleton ? (
             <SidebarSkeleton />
+          ) : isError ? (
+            <>
+              <EmptyState
+                icon={AlertCircle}
+                title="Couldn't load menu"
+                description="We'll show your basic options below. Tap retry to try again."
+                actionLabel="Retry"
+                onAction={() => refetch()}
+                className="py-10"
+              />
+              {/* Fallback to static role-based sections so drawer is never empty */}
+              {sections.map((section) => (
+                <SidebarSection key={section.id} label={section.label}>
+                  <ul role="list">
+                    {section.items.map((item) => (
+                      <li key={item.id}>
+                        <SidebarItem
+                          to={item.to ?? "#"}
+                          label={item.label}
+                          icon={item.icon}
+                          end={item.end}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </SidebarSection>
+              ))}
+            </>
           ) : (
             <>
               {/* Trending */}
@@ -93,7 +130,7 @@ const ShopSidebar = () => {
                 </SidebarSection>
               )}
 
-              {/* Admin-managed dynamic tree (categories + programs + custom) */}
+              {/* Admin-managed dynamic tree */}
               {menu?.tree && menu.tree.length > 0 && (
                 <SidebarSection label="Browse">
                   <div role="tree">
@@ -140,7 +177,10 @@ const ShopSidebar = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => signOut()}
+              onClick={async () => {
+                await signOut();
+                close();
+              }}
               className="w-full justify-start gap-3 text-destructive hover:text-destructive"
             >
               <LogOut className="h-4 w-4" />
