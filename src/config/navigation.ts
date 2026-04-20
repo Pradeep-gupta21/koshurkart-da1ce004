@@ -98,6 +98,7 @@ export const adminNav: NavSection[] = [
       { id: "a-reviews", label: "Reviews", to: "/admin/reviews", icon: MessageSquare, badgeKey: "suspiciousReviews" },
       { id: "a-pricing", label: "Dynamic Pricing", to: "/admin/pricing", icon: DollarSign },
       { id: "a-payments", label: "Payments", to: "/admin/payments", icon: CreditCard, badgeKey: "pendingPayments" },
+      { id: "a-menu", label: "Menu", to: "/admin/menu", icon: LayoutGrid },
       { id: "a-security", label: "Security", to: "/admin/security", icon: ShieldAlert },
       { id: "a-settings", label: "Settings", to: "/admin/settings", icon: Settings },
     ],
