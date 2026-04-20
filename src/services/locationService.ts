@@ -1,7 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
+import { cacheService } from "./cacheService";
 
 const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/location`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const SERVICEABILITY_TTL = 600; // 10 min
+const LOCAL_DEALS_TTL = 300; // 5 min
 
 export interface DetectedLocation {
   pincode: string | null;
