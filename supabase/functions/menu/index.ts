@@ -85,12 +85,11 @@ async function requireAdmin(req: Request): Promise<
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } },
   );
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims?.sub) {
+  const { data: userData, error } = await supabase.auth.getUser();
+  if (error || !userData?.user?.id) {
     return { ok: false, res: json({ error: "Unauthorized" }, 401) };
   }
-  const userId = data.claims.sub as string;
+  const userId = userData.user.id;
   const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
   if (!isAdmin) return { ok: false, res: json({ error: "Forbidden" }, 403) };
   return { ok: true, userId, supabase };
@@ -163,8 +162,8 @@ async function handleGet(req: Request): Promise<Response> {
   let userId: string | null = null;
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabase.auth.getClaims(token);
-    userId = (data?.claims?.sub as string) ?? null;
+    const { data } = await supabase.auth.getUser(token);
+    userId = data?.user?.id ?? null;
   }
   const roles = await getRolesForUser(supabase, userId);
 
