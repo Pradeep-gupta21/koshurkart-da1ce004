@@ -597,20 +597,29 @@ const CheckoutPage = () => {
               <Separator />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipping</span>
-                <span className="text-success font-medium">Free</span>
+                {shippingTotal > 0 ? (
+                  <span className="tabular-nums">{formatPrice(shippingTotal)}</span>
+                ) : (
+                  <span className="text-success font-medium">Free</span>
+                )}
               </div>
               <div className="flex justify-between font-semibold text-base">
                 <span>Total</span>
-                <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+                <span className="tabular-nums">{formatPrice(grandTotal)}</span>
               </div>
             </div>
+            {hasUnserviceableItem && (
+              <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">
+                Some items can't be delivered. Update your delivery location or remove them.
+              </p>
+            )}
             <Button
               size="lg"
               className="w-full mt-6 h-12"
-              disabled={submitting}
+              disabled={submitting || hasUnserviceableItem}
               onClick={handlePlaceOrder}
             >
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(totalPrice)}`}
+              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(grandTotal)}`}
             </Button>
           </div>
         </div>
