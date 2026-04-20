@@ -26,7 +26,7 @@ const ALL_PAYMENT_METHODS = [
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, totalPrice, shippingTotal, grandTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -48,12 +48,20 @@ const CheckoutPage = () => {
     });
   }, []);
 
+  // If COD is unavailable for this destination but it was selected, switch away
+  useEffect(() => {
+    if (paymentMethod === "cod" && !codAvailable && pmSettings) {
+      if (pmSettings.upiEnabled) setPaymentMethod("upi");
+      else if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
+    }
+  }, [codAvailable, paymentMethod, pmSettings]);
+
   const availableMethods = useMemo(() => {
     if (!pmSettings) return ALL_PAYMENT_METHODS.filter((m) => m.value === "cod");
     return ALL_PAYMENT_METHODS.filter((m) => {
       if (m.value === "upi") return pmSettings.upiEnabled;
       if (m.value === "razorpay") return pmSettings.razorpayEnabled;
-      return true; // cod always available
+      return true; // cod always listed; disabled below if not available
     });
   }, [pmSettings]);
 
@@ -148,6 +156,14 @@ const CheckoutPage = () => {
     if (!user) return;
     if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
       toast({ title: "Missing shipping info", description: "Please fill in all shipping fields.", variant: "destructive" });
+      return;
+    }
+    if (hasUnserviceableItem) {
+      toast({ title: "Delivery unavailable", description: "Some items can't ship to your delivery location. Please update it.", variant: "destructive" });
+      return;
+    }
+    if (paymentMethod === "cod" && !codAvailable) {
+      toast({ title: "COD not available", description: "Cash on Delivery isn't supported for this destination.", variant: "destructive" });
       return;
     }
 
