@@ -67,6 +67,13 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const path = url.pathname.split("/").pop();
+  const startedAt = Date.now();
+  const log = (status: number, extra: Record<string, unknown> = {}) => {
+    console.log(JSON.stringify({
+      fn: "location", action: path, method: req.method, status,
+      durationMs: Date.now() - startedAt, ...extra,
+    }));
+  };
 
   try {
     // GET detect
@@ -83,6 +90,7 @@ Deno.serve(async (req) => {
       const body = await req.json().catch(() => ({}));
       const parsed = PincodeSchema.safeParse(body);
       if (!parsed.success) {
+        log(400, { reason: "invalid_pincode" });
         return new Response(JSON.stringify({ error: "Invalid pincode" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -94,11 +102,18 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .maybeSingle();
       if (error) throw error;
+      // Best-effort usage tracking
+      void supabase.rpc("record_analytics_event", {
+        _event_type: "location_lookup",
+        _metadata: { pincode: parsed.data.pincode, serviceable: !!data },
+      });
       if (!data) {
+        log(200, { pincode: parsed.data.pincode, serviceable: false });
         return new Response(JSON.stringify({ serviceable: false, pincode: parsed.data.pincode }), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      log(200, { pincode: parsed.data.pincode, serviceable: true });
       return new Response(JSON.stringify({ serviceable: true, ...data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -150,11 +165,18 @@ Deno.serve(async (req) => {
           lat, lng,
           source: "geo" as const,
         };
+        // Best-effort usage tracking
+        void supabase.rpc("record_analytics_event", {
+          _event_type: "location_lookup",
+          _metadata: { kind: "reverse_geocode", pincode: result.pincode, country: result.country },
+        });
+        log(200, { kind: "reverse_geocode", pincode: result.pincode });
         return new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (e) {
-        console.error("reverse-geocode failed", e);
+        console.error(JSON.stringify({ fn: "location", action: "reverse-geocode", err: (e as Error).message }));
+        log(502, { error: (e as Error).message });
         return new Response(JSON.stringify({ error: "Reverse geocoding failed" }), {
           status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -188,11 +210,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    log(404);
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("location error", e);
+    console.error(JSON.stringify({ fn: "location", action: path, err: (e as Error).message }));
+    log(500, { error: (e as Error).message });
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
