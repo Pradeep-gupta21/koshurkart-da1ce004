@@ -532,13 +532,17 @@ const CheckoutPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {availableMethods.map(({ value, label, description, icon: Icon, iconBg }) => {
                 const isSelected = paymentMethod === value;
+                const isDisabled = value === "cod" && !codAvailable;
                 return (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setPaymentMethod(value)}
+                    disabled={isDisabled}
+                    onClick={() => !isDisabled && setPaymentMethod(value)}
                     className={cn(
-                      "relative flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 transition-all cursor-pointer",
+                      "relative flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 transition-all",
+                      isDisabled && "opacity-50 cursor-not-allowed",
+                      !isDisabled && "cursor-pointer",
                       isSelected
                         ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm"
                         : "border-border hover:border-primary/30 hover:bg-muted/30"
@@ -554,7 +558,9 @@ const CheckoutPage = () => {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {isDisabled ? "Not available for this PIN" : description}
+                      </p>
                     </div>
                   </button>
                 );
