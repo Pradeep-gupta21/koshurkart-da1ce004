@@ -38,6 +38,7 @@ import AdminPricing from "@/pages/admin/AdminPricing";
 import AdminSecurity from "@/pages/admin/AdminSecurity";
 import AdminPayments from "@/pages/admin/AdminPayments";
 import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminMenu from "@/pages/admin/AdminMenu";
 import NotFound from "@/pages/NotFound";
 import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
 import { SidebarProvider } from "@/contexts/SidebarContext";
@@ -96,6 +97,7 @@ const App = () => (
                       <Route path="security" element={<AdminSecurity />} />
                       <Route path="payments" element={<AdminPayments />} />
                       <Route path="settings" element={<AdminSettings />} />
+                      <Route path="menu" element={<AdminMenu />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

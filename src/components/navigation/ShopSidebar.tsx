@@ -9,7 +9,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { useShopperNavigation } from "@/hooks/useNavigation";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { sidebarMenuService } from "@/services/sidebarMenuService";
-import { resolveLucideIcon } from "@/lib/iconRegistry";
 import SidebarSection from "./SidebarSection";
 import SidebarHeader from "./SidebarHeader";
 import SidebarItem from "./SidebarItem";
