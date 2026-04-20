@@ -1,101 +1,128 @@
 
-## Product Review & Feedback System
 
-Build a production-quality review system with verified-purchase gating, image uploads, helpful voting, sorting, and a premium UI on the product detail page.
+The user wants an "Amazon-style" sidebar navigation system. Important context:
 
-### Database Changes (migration)
+1. This project is **React + Vite + Tailwind + Supabase (Lovable Cloud)** — NOT Next.js, NOT Express, NOT MongoDB, NOT Zustand/Redux. I cannot change the stack. I'll adapt the request to the existing stack.
+2. The project already has shadcn `sidebar.tsx`, role-based auth (`useAuth` with user/vendor/admin), and admin/vendor sub-routes that currently use top tabs.
+3. Amazon's sidebar = hamburger-triggered off-canvas drawer with categories, account links, and "Shop by Department" sections — different from a persistent admin sidebar.
 
-**1. Extend `reviews` table:**
-- `order_id uuid` — links review to specific order (proof of purchase)
-- `images text[] default '{}'` — uploaded review images
-- `helpful_count integer default 0` — denormalized for sorting
-- Unique constraint on `(user_id, product_id)` — prevents duplicate reviews
-- Index on `(product_id, created_at)` and `(product_id, helpful_count)` for sorting
+I'll propose **two complementary sidebars** since the project has two surfaces:
+- **Public/shopper sidebar**: off-canvas Amazon-style drawer triggered from the header (categories, account, sell, help)
+- **Dashboard sidebar**: persistent collapsible sidebar replacing the current top-tab nav in admin/vendor dashboards
 
-**2. New `review_helpful_votes` table:**
-- `review_id`, `user_id`, `created_at`
-- Unique `(review_id, user_id)` — one vote per user per review
-- RLS: users insert/delete own votes; anyone reads
-- Trigger: increments/decrements `reviews.helpful_count` on insert/delete
+Both role-aware, both backed by a single config source, both responsive.
 
-**3. New `can_review_product(_user_id, _product_id)` SECURITY DEFINER function:**
-- Returns the most recent `delivered` order_id where user purchased that product, or NULL
-- Used both client-side (gating UI) and as RLS check
+Let me check current header & dashboards briefly to scope accurately.
 
-**4. Update RLS on `reviews`:**
-- INSERT policy: requires `order_id IS NOT NULL` AND `can_review_product(auth.uid(), product_id) = order_id` AND `user_id = auth.uid()`
-- Auto-set `is_verified_purchase = true` since gating ensures it
+---
 
-**5. Storage bucket `review-images`:**
-- Public read; authenticated upload to own folder `{user_id}/...`
-- 5MB per file, image/* only
+## Production-Ready Sidebar Navigation System
 
-**6. Trigger to update product `rating` and `review_count`:**
-- After insert/update/delete on `reviews` (where `moderation_status = 'approved'`), recompute `AVG(rating)` and `COUNT(*)` on the product row
+Adapted to this project's stack (React + Vite + Tailwind + shadcn + Supabase). Two coordinated sidebars, both role-aware, sharing one config source.
 
-### Frontend Components
+### 1. Architecture
 
-**`src/lib/imageCompression.ts`** — Canvas-based compression (max 1600px, JPEG quality 0.8) before upload. No new dependencies.
+```text
+src/
+├─ config/navigation.ts          ← single source of truth
+├─ hooks/useNavigation.ts        ← filters items by role + counts (badges)
+├─ components/navigation/
+│   ├─ ShopSidebar.tsx           ← Amazon-style off-canvas drawer
+│   ├─ ShopSidebarTrigger.tsx    ← hamburger in Header
+│   ├─ DashboardSidebar.tsx      ← persistent collapsible (admin/vendor)
+│   └─ SidebarSection.tsx        ← reusable group with collapse
+└─ components/layout/
+    └─ DashboardLayout.tsx       ← wraps admin/vendor pages with SidebarProvider
+```
 
-**`src/services/reviewService.ts`** — Centralized API:
-- `getReviews(productId, { sort, withImagesOnly, limit, offset })` — paginated, sortable
-- `getReviewSummary(productId)` — avg, total, distribution {5★: n, 4★: n, ...}
-- `canReview(productId)` — calls `can_review_product` RPC
-- `submitReview({ productId, orderId, rating, comment, images })` — uploads images then inserts
-- `toggleHelpful(reviewId)` — insert/delete vote
+### 2. Single Navigation Config (`config/navigation.ts`)
 
-**`src/components/reviews/ReviewSummary.tsx`** — Big avg rating, star bar distribution (Amazon-style horizontal bars per star level).
+Typed tree consumed by both sidebars. Each item: `{ id, label, to, icon, roles?, children?, badgeKey? }`. Role gating happens here, not in components — easy to scale to hundreds of items.
 
-**`src/components/reviews/ReviewCard.tsx`** — User avatar/name, stars, date, "Verified Purchase" badge, comment, image thumbnails (click to enlarge in Dialog), Helpful button with count.
+```text
+shopper nav:
+  - Shop by Department (Electronics, Fashion, Home, …) ← from categories table
+  - Today's Deals
+  - Sponsored / Trending
+  - Your Account → Orders, Reviews, Profile
+  - Sell on Platform → /vendor/apply or /vendor (role-aware)
+  - Help & Settings
 
-**`src/components/reviews/ReviewImageGallery.tsx`** — Grid of thumbnails; lightbox via existing `Dialog` component with prev/next navigation.
+dashboard nav (admin):
+  - Overview, Vendors, Reviews, Payments, Payouts,
+    Campaigns, Placements, Pricing, Settings, Security
 
-**`src/components/reviews/ReviewForm.tsx`** — Star picker (hover preview), textarea (max 2000 chars with counter), drag-drop image uploader (max 6 images, compressed client-side, preview thumbnails with remove), submit button. Uses `react-hook-form` + existing `reviewSchema` (extended with `images` and `orderId`).
+dashboard nav (vendor):
+  - Overview, Products, Orders, Campaigns, Analytics,
+    Payments, Notifications
+```
 
-**`src/components/reviews/ReviewSection.tsx`** — Orchestrates everything on the product page:
-- Header: ReviewSummary + "Write a Review" button (disabled with tooltip if not eligible)
-- Sort tabs: Top (helpful_count desc) / Latest (created_at desc) / With Images (images != '{}')
-- Infinite scroll list of ReviewCards using `useInfiniteQuery` (10 per page) — lazy loading
-- Inline ReviewForm in a Dialog when triggered
-- Empty state, loading skeletons
+### 3. Shop Sidebar (Amazon-style)
 
-### Product Detail Page Update
-Replace the existing inline reviews section in `ProductDetailPage.tsx` (lines 280-313) with `<ReviewSection productId={product.id} />`.
+- Off-canvas drawer using existing shadcn `Sheet` (left side, full-height, 320px).
+- Header: "Hello, {name}" or "Hello, sign in", avatar.
+- Sections with collapsible `SidebarSection` (chevron, smooth animation).
+- "Shop by Department" pulls live categories from Supabase (cached 5min via existing `cacheService`).
+- Footer: theme toggle, currency switcher (already in app), sign out.
+- Triggered from a hamburger button added to `Header.tsx` (left of logo on mobile, hidden on desktop or icon-only).
+- Closes on route change, swipe, ESC, backdrop click.
 
-### UX Details
-- Premium card layout: rounded-xl, soft shadow, hover lift, smooth fade-in
-- Star picker: large clickable stars with hover preview
-- "Top Reviews" badge on reviews with helpful_count ≥ 5
-- Image thumbnails: aspect-square rounded-lg, hover zoom
-- Mobile: single column, larger touch targets, bottom-sheet form on small screens
-- Gating UI: 
-  - Not logged in → "Sign in to review"
-  - Logged in but no delivered order → "Only customers who received this product can review"
-  - Already reviewed → "You've already reviewed this product"
-  - Eligible → primary "Write a Review" CTA
+### 4. Dashboard Sidebar (persistent, scalable)
 
-### Files to Create
-- `supabase/migrations/<timestamp>_review_system.sql`
-- `src/lib/imageCompression.ts`
-- `src/services/reviewService.ts`
-- `src/components/reviews/ReviewSummary.tsx`
-- `src/components/reviews/ReviewCard.tsx`
-- `src/components/reviews/ReviewImageGallery.tsx`
-- `src/components/reviews/ReviewForm.tsx`
-- `src/components/reviews/ReviewSection.tsx`
+- Replaces current top-tab nav in `AdminDashboard.tsx` and `VendorDashboard.tsx`.
+- Built on existing shadcn `sidebar.tsx` with `collapsible="icon"` (Amazon-internal style: full labels → icon-only mini rail).
+- `SidebarTrigger` in dashboard header — always visible.
+- Active route highlighting via `NavLink` (already in project).
+- Live badges (e.g. pending vendors, new orders, unread notifications) via `useNavigation` hook polling small count queries with React Query.
+- Search input at top filters menu items client-side (handles 50+ items gracefully).
+- Persists collapsed state to `localStorage`.
+- Mobile (`<768px`): becomes off-canvas via shadcn's built-in responsive behavior.
 
-### Files to Modify
-- `src/lib/validators/reviewSchema.ts` — add `orderId`, `images`
-- `src/types/product.ts` — add `images`, `helpfulCount`, `orderId` to `Review`
-- `src/pages/ProductDetailPage.tsx` — replace inline reviews with `<ReviewSection />`
+### 5. Role-Based Access (already aligned with project)
 
-### Out of scope (not requested)
-- Vendor/admin replies to reviews (admin moderation already exists)
-- Edit/delete own review UI (can be added later)
+- Uses existing `useAuth()` (`roles`, `isAdmin`, `isVendor`).
+- `useNavigation()` filters config tree by `roles` array per item.
+- Items with no `roles` = public. Items with `roles: ['admin']` = admin only.
+- Defense in depth: `RoleRoute` guards routes (already exists) — sidebar just hides what user can't access.
 
-<lov-actions>
-<lov-suggestion message="Test the full review flow end-to-end: place an order, mark it delivered, submit a review with images, and verify it appears with the Verified badge and image gallery">Verify it works end-to-end</lov-suggestion>
-<lov-suggestion message="Add the ability for users to edit or delete their own reviews from the product page">Allow edit/delete own reviews</lov-suggestion>
-<lov-suggestion message="Add a 'Vendor Response' feature so vendors can publicly reply to reviews on their products">Add vendor responses</lov-suggestion>
-<lov-suggestion message="Add a 'My Reviews' tab on the profile page where users can see and manage all reviews they've written">My Reviews page</lov-suggestion>
-</lov-actions>
+### 6. Performance & Scalability
+
+- Config-driven: adding nav items = one line, no component changes.
+- Memoized filter (`useMemo` keyed on roles).
+- Code-split badge count queries (React Query, 30s stale time).
+- Lazy-loaded category list inside drawer (only fetched when opened).
+- Virtualized list ready (current scale doesn't need it; structure supports drop-in `react-window` later).
+- Zero new dependencies — everything uses existing shadcn + React Query + Supabase.
+
+### 7. Responsive Behavior
+
+| Viewport | Shop Sidebar | Dashboard Sidebar |
+|---|---|---|
+| Mobile (<768px) | Off-canvas, full-height drawer | Off-canvas (auto by shadcn) |
+| Tablet (768–1024) | Off-canvas | Mini rail (icons), expand on hover |
+| Desktop (>1024) | Off-canvas (Amazon does same) | Persistent expanded, toggle to mini |
+
+### 8. Files
+
+**Create**
+- `src/config/navigation.ts`
+- `src/hooks/useNavigation.ts`
+- `src/components/navigation/ShopSidebar.tsx`
+- `src/components/navigation/ShopSidebarTrigger.tsx`
+- `src/components/navigation/DashboardSidebar.tsx`
+- `src/components/navigation/SidebarSection.tsx`
+- `src/components/layout/DashboardLayout.tsx`
+
+**Modify**
+- `src/components/layout/Header.tsx` — add hamburger + mount `ShopSidebar`
+- `src/pages/admin/AdminDashboard.tsx` — wrap in `DashboardLayout`, remove top tabs
+- `src/pages/vendor/VendorDashboard.tsx` — same
+
+### 9. Stack Note
+
+Your request mentioned Next.js / Express / MongoDB / Zustand. This project is **React + Vite + Supabase (Lovable Cloud)** and cannot change frameworks. The plan delivers the same outcome — role-based, scalable, production-ready sidebar — using the existing stack. Auth, DB, and state are already handled by `useAuth` + Supabase RLS + React Query, which is the production equivalent.
+
+### Out of scope
+- Replacing React Query with Zustand/Redux (current setup is already production-grade)
+- Server-rendered nav (Vite SPA — nav config is static + cached queries)
+
