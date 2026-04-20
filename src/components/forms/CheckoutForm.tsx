@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { sanitizeFormValues } from "@/lib/sanitize";
+import { useLocation } from "@/contexts/LocationContext";
 
 export interface CheckoutFormValues {
   firstName: string;
@@ -21,9 +22,22 @@ interface CheckoutFormProps {
 }
 
 const CheckoutForm = ({ onSubmit, submitLabel = "Place Order" }: CheckoutFormProps) => {
+  const { location, savedLocations } = useLocation();
   const [form, setForm] = useState<CheckoutFormValues>({
     firstName: "", lastName: "", address: "", city: "", zipCode: "", cardNumber: "", expiry: "", cvc: "",
   });
+
+  // Prefill city/zip from default saved location or active location
+  useEffect(() => {
+    const def = savedLocations.find((l) => l.is_default);
+    const seedCity = def?.city ?? location?.city ?? "";
+    const seedZip = def?.pincode ?? location?.pincode ?? "";
+    setForm((f) => ({
+      ...f,
+      city: f.city || seedCity,
+      zipCode: f.zipCode || seedZip,
+    }));
+  }, [location?.pincode, savedLocations]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +67,7 @@ const CheckoutForm = ({ onSubmit, submitLabel = "Place Order" }: CheckoutFormPro
             <Input placeholder="New York" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} required />
           </div>
           <div className="space-y-2">
-            <Label>Zip Code</Label>
+            <Label>Zip / Pincode</Label>
             <Input placeholder="10001" value={form.zipCode} onChange={e => setForm(f => ({ ...f, zipCode: e.target.value }))} required />
           </div>
         </div>

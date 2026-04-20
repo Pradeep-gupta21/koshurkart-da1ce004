@@ -18,6 +18,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useState, useEffect, useRef } from "react";
 import { analyticsService } from "@/services/analyticsService";
 import ReviewSection from "@/components/reviews/ReviewSection";
+import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
   const p = c.products;
@@ -258,6 +259,9 @@ const ProductDetailPage = () => {
                         <span>In Stock ({availableStock} available)</span>
                       </>
                     )}
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <ServiceabilityBadge productId={product.id} variant="full" />
                   </div>
                 </div>
 
