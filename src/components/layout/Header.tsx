@@ -1,14 +1,14 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User, Menu, Sun, Moon, Globe } from "lucide-react";
+import { ShoppingCart, User, Sun, Moon, Globe } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useTheme } from "@/hooks/useTheme";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { currencyService, CURRENCIES, CurrencyCode } from "@/services/currencyService";
+import ShopSidebarTrigger from "@/components/navigation/ShopSidebarTrigger";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 
@@ -53,31 +53,8 @@ const Header = () => {
       {/* Main header */}
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center gap-4">
-          {/* Mobile menu */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72">
-              <nav className="mt-8 flex flex-col gap-2">
-                <Link to="/" className="text-lg font-semibold text-primary mb-4">Nexus Market</Link>
-                {categories.map(cat => (
-                  <Link key={cat} to={`/search?category=${cat}`} className="py-2 px-3 rounded-lg hover:bg-muted transition-colors text-sm">
-                    {cat}
-                  </Link>
-                ))}
-                <button
-                  onClick={toggleTheme}
-                  className="mt-4 py-2 px-3 rounded-lg hover:bg-muted transition-colors text-sm flex items-center gap-2 text-left"
-                >
-                  {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  {theme === "light" ? "Dark Mode" : "Light Mode"}
-                </button>
-              </nav>
-            </SheetContent>
-          </Sheet>
+          {/* Sidebar trigger (Amazon-style) */}
+          <ShopSidebarTrigger />
 
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0">
