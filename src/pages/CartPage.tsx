@@ -9,7 +9,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 
 const CartPage = () => {
-  const { items, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+  const { items, removeFromCart, updateQuantity, totalPrice, clearCart, shippingTotal, grandTotal, hasUnserviceableItem } = useCart();
   const { formatPrice } = useCurrency();
   const { location } = useLocation();
 
@@ -92,20 +92,37 @@ const CartPage = () => {
               <span className="tabular-nums">{formatPrice(totalPrice)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Shipping</span>
-              <span className="text-success font-medium">Free</span>
+              <span className="text-muted-foreground">
+                Shipping{location?.pincode ? ` (to ${location.pincode})` : ""}
+              </span>
+              {shippingTotal > 0 ? (
+                <span className="tabular-nums">{formatPrice(shippingTotal)}</span>
+              ) : (
+                <span className="text-success font-medium">Free</span>
+              )}
             </div>
             <Separator />
             <div className="flex justify-between font-semibold text-base">
               <span>Total</span>
-              <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+              <span className="tabular-nums">{formatPrice(grandTotal)}</span>
             </div>
           </div>
-          <Button size="lg" className="w-full mt-6 h-12 gap-2" asChild>
-            <Link to="/checkout">
-              Checkout <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          {hasUnserviceableItem && (
+            <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">
+              Some items can't be delivered to {location?.pincode}. Remove them or change your delivery location to continue.
+            </p>
+          )}
+          {hasUnserviceableItem ? (
+            <Button size="lg" className="w-full mt-6 h-12 gap-2" disabled>
+              Resolve delivery issues
+            </Button>
+          ) : (
+            <Button size="lg" className="w-full mt-6 h-12 gap-2" asChild>
+              <Link to="/checkout">
+                Checkout <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
     </div>

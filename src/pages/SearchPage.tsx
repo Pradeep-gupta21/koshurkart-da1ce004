@@ -13,6 +13,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
+import { useServiceability } from "@/hooks/useServiceability";
+import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
 const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
@@ -53,6 +55,7 @@ const SearchPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
   const [minRating, setMinRating] = useState<number>(0);
+  const [deliverableOnly, setDeliverableOnly] = useState(false);
 
   // Sync URL params
   useEffect(() => {
@@ -95,10 +98,30 @@ const SearchPage = () => {
 
   const sponsoredAds = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
+  // Batched serviceability for current results
+  const productIds = products.map((p) => p.id);
+  const { pincode, map: serviceabilityMap } = useServiceability(productIds);
+
+  // Apply deliverable-only filter + sort deliverable first
+  const filteredProducts = (() => {
+    if (!pincode) return products;
+    const list = deliverableOnly
+      ? products.filter((p) => serviceabilityMap.get(p.id)?.deliverable !== false)
+      : [...products];
+    // Sort deliverable items first
+    list.sort((a, b) => {
+      const da = serviceabilityMap.get(a.id)?.deliverable === false ? 1 : 0;
+      const db = serviceabilityMap.get(b.id)?.deliverable === false ? 1 : 0;
+      return da - db;
+    });
+    return list;
+  })();
+
   const activeFilterCount = [
     selectedCategory !== "All",
     priceRange[0] > 0 || priceRange[1] < 10000,
     minRating > 0,
+    deliverableOnly,
   ].filter(Boolean).length;
 
   const clearFilters = () => {
@@ -106,12 +129,13 @@ const SearchPage = () => {
     setPriceRange([0, 10000]);
     setMinRating(0);
     setSortBy("relevance");
+    setDeliverableOnly(false);
   };
 
   // Intersperse sponsored ads
   const interspersed: React.ReactNode[] = [];
   let adIndex = 0;
-  products.forEach((product, i) => {
+  filteredProducts.forEach((product, i) => {
     if (i > 0 && i % 4 === 0 && adIndex < sponsoredAds.length) {
       const ad = sponsoredAds[adIndex];
       interspersed.push(

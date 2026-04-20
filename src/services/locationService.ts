@@ -1,7 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
+import { cacheService } from "./cacheService";
 
 const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/location`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const SERVICEABILITY_TTL = 600; // 10 min
+const LOCAL_DEALS_TTL = 300; // 5 min
 
 export interface DetectedLocation {
   pincode: string | null;
@@ -81,18 +85,51 @@ export const locationService = {
   },
 
   async checkServiceability(pincode: string, productIds: string[]) {
+    const sortedIds = [...productIds].sort();
+    const cacheKey = `serviceability:${pincode}:${sortedIds.join(",")}`;
+    const cached = cacheService.get<Array<{
+      product_id: string;
+      deliverable: boolean;
+      eta_days: number | null;
+      surcharge_pct: number;
+      cod: boolean;
+    }>>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase.rpc("check_serviceability" as any, {
       _pincode: pincode,
       _product_ids: productIds,
     });
     if (error) throw error;
-    return (data ?? []) as Array<{
+    const result = (data ?? []) as Array<{
       product_id: string;
       deliverable: boolean;
       eta_days: number | null;
       surcharge_pct: number;
       cod: boolean;
     }>;
+    cacheService.set(cacheKey, result, SERVICEABILITY_TTL);
+    return result;
+  },
+
+  async getLocalDeals(pincode: string | null, limit = 8) {
+    const cacheKey = `local-deals:${pincode ?? "global"}:${limit}`;
+    const cached = cacheService.get<any[]>(cacheKey);
+    if (cached) return cached;
+
+    const { data, error } = await supabase.rpc("get_local_deals" as any, {
+      _pincode: pincode,
+      _limit: limit,
+    });
+    if (error) throw error;
+    const result = data ?? [];
+    cacheService.set(cacheKey, result, LOCAL_DEALS_TTL);
+    return result;
+  },
+
+  invalidateLocationCaches() {
+    cacheService.invalidatePattern("serviceability:");
+    cacheService.invalidatePattern("local-deals:");
   },
 
   async listUserLocations(): Promise<UserLocation[]> {

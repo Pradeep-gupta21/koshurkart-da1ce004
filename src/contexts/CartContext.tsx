@@ -1,9 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { CartItem, Product } from "@/types";
 import { toast } from "sonner";
 import { analyticsService } from "@/services/analyticsService";
+import { locationService } from "@/services/locationService";
+import { useLocation } from "@/contexts/LocationContext";
 
 const CART_STORAGE_KEY = "marketplace_cart";
+
+export interface CartServiceabilityRow {
+  product_id: string;
+  deliverable: boolean;
+  eta_days: number | null;
+  surcharge_pct: number;
+  cod: boolean;
+}
 
 interface CartContextType {
   items: CartItem[];
@@ -13,6 +24,11 @@ interface CartContextType {
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
+  shippingTotal: number;
+  grandTotal: number;
+  hasUnserviceableItem: boolean;
+  codAvailable: boolean;
+  serviceability: Map<string, CartServiceabilityRow>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -27,6 +43,8 @@ function loadCart(): CartItem[] {
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(loadCart);
+  const { location } = useLocation();
+  const pincode = location?.pincode ?? null;
 
   useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
@@ -80,8 +98,39 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return sum + price * item.quantity;
   }, 0);
 
+  const productIds = items.map(i => i.product.id).sort();
+  const serviceabilityKey = productIds.join(",");
+
+  const { data: rows = [] } = useQuery({
+    queryKey: ["cart-serviceability", pincode, serviceabilityKey],
+    queryFn: () => locationService.checkServiceability(pincode!, productIds),
+    enabled: !!pincode && productIds.length > 0,
+    staleTime: 10 * 60_000,
+  });
+
+  const serviceability = new Map<string, CartServiceabilityRow>();
+  for (const r of rows) serviceability.set(r.product_id, r);
+
+  let shippingTotal = 0;
+  let hasUnserviceableItem = false;
+  let codAvailable = items.length > 0;
+  for (const { product, quantity } of items) {
+    const row = serviceability.get(product.id);
+    if (pincode && row) {
+      if (!row.deliverable) hasUnserviceableItem = true;
+      if (!row.cod) codAvailable = false;
+      const price = product.discountPrice ?? product.price;
+      shippingTotal += price * quantity * (Number(row.surcharge_pct) / 100);
+    }
+  }
+  const grandTotal = totalPrice + shippingTotal;
+
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, totalPrice }}>
+    <CartContext.Provider value={{
+      items, addToCart, removeFromCart, updateQuantity, clearCart,
+      totalItems, totalPrice, shippingTotal, grandTotal,
+      hasUnserviceableItem, codAvailable, serviceability,
+    }}>
       {children}
     </CartContext.Provider>
   );

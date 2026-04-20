@@ -100,6 +100,7 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
     };
     setLocation(next);
     persist(next);
+    locationService.invalidateLocationCaches();
     setIsServiceable(true);
     if (user) {
       try {

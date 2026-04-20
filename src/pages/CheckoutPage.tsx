@@ -26,7 +26,7 @@ const ALL_PAYMENT_METHODS = [
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
-  const { items, totalPrice, clearCart } = useCart();
+  const { items, totalPrice, shippingTotal, grandTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -48,12 +48,20 @@ const CheckoutPage = () => {
     });
   }, []);
 
+  // If COD is unavailable for this destination but it was selected, switch away
+  useEffect(() => {
+    if (paymentMethod === "cod" && !codAvailable && pmSettings) {
+      if (pmSettings.upiEnabled) setPaymentMethod("upi");
+      else if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
+    }
+  }, [codAvailable, paymentMethod, pmSettings]);
+
   const availableMethods = useMemo(() => {
     if (!pmSettings) return ALL_PAYMENT_METHODS.filter((m) => m.value === "cod");
     return ALL_PAYMENT_METHODS.filter((m) => {
       if (m.value === "upi") return pmSettings.upiEnabled;
       if (m.value === "razorpay") return pmSettings.razorpayEnabled;
-      return true; // cod always available
+      return true; // cod always listed; disabled below if not available
     });
   }, [pmSettings]);
 
@@ -148,6 +156,14 @@ const CheckoutPage = () => {
     if (!user) return;
     if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
       toast({ title: "Missing shipping info", description: "Please fill in all shipping fields.", variant: "destructive" });
+      return;
+    }
+    if (hasUnserviceableItem) {
+      toast({ title: "Delivery unavailable", description: "Some items can't ship to your delivery location. Please update it.", variant: "destructive" });
+      return;
+    }
+    if (paymentMethod === "cod" && !codAvailable) {
+      toast({ title: "COD not available", description: "Cash on Delivery isn't supported for this destination.", variant: "destructive" });
       return;
     }
 
@@ -516,13 +532,17 @@ const CheckoutPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {availableMethods.map(({ value, label, description, icon: Icon, iconBg }) => {
                 const isSelected = paymentMethod === value;
+                const isDisabled = value === "cod" && !codAvailable;
                 return (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setPaymentMethod(value)}
+                    disabled={isDisabled}
+                    onClick={() => !isDisabled && setPaymentMethod(value)}
                     className={cn(
-                      "relative flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 transition-all cursor-pointer",
+                      "relative flex flex-col items-center text-center gap-3 p-5 rounded-xl border-2 transition-all",
+                      isDisabled && "opacity-50 cursor-not-allowed",
+                      !isDisabled && "cursor-pointer",
                       isSelected
                         ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm"
                         : "border-border hover:border-primary/30 hover:bg-muted/30"
@@ -538,7 +558,9 @@ const CheckoutPage = () => {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {isDisabled ? "Not available for this PIN" : description}
+                      </p>
                     </div>
                   </button>
                 );
@@ -575,20 +597,29 @@ const CheckoutPage = () => {
               <Separator />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipping</span>
-                <span className="text-success font-medium">Free</span>
+                {shippingTotal > 0 ? (
+                  <span className="tabular-nums">{formatPrice(shippingTotal)}</span>
+                ) : (
+                  <span className="text-success font-medium">Free</span>
+                )}
               </div>
               <div className="flex justify-between font-semibold text-base">
                 <span>Total</span>
-                <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+                <span className="tabular-nums">{formatPrice(grandTotal)}</span>
               </div>
             </div>
+            {hasUnserviceableItem && (
+              <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">
+                Some items can't be delivered. Update your delivery location or remove them.
+              </p>
+            )}
             <Button
               size="lg"
               className="w-full mt-6 h-12"
-              disabled={submitting}
+              disabled={submitting || hasUnserviceableItem}
               onClick={handlePlaceOrder}
             >
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(totalPrice)}`}
+              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(grandTotal)}`}
             </Button>
           </div>
         </div>

@@ -1052,6 +1052,33 @@ export type Database = {
           vendor_id: string
         }[]
       }
+      get_local_deals: {
+        Args: { _limit?: number; _pincode?: string }
+        Returns: {
+          category: string
+          created_at: string
+          description: string
+          discount_pct: number
+          discount_price: number
+          id: string
+          images: string[]
+          is_sponsored: boolean
+          low_stock_threshold: number
+          price: number
+          rating: number
+          reserved_stock: number
+          review_count: number
+          sales_count: number
+          slug: string
+          status: string
+          stock: number
+          store_name: string
+          title: string
+          trending_score: number
+          vendor_id: string
+          view_count: number
+        }[]
+      }
       get_ranked_products: {
         Args: { p_category?: string; p_limit?: number; p_search?: string }
         Returns: {
