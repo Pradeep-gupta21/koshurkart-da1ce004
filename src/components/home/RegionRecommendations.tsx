@@ -40,7 +40,7 @@ const RegionRecommendations = () => {
           <div className="h-6 w-64 rounded-md shimmer" />
           <div className="h-4 w-48 rounded-md shimmer mt-2" />
         </div>
-        <ProductGrid loading skeletonCount={8} />
+        <ProductGrid loading skeletonCount={8}>{null}</ProductGrid>
       </section>
     );
   }
