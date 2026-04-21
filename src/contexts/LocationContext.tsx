@@ -16,6 +16,8 @@ export interface ActiveLocation {
 
 interface LocationContextValue {
   location: ActiveLocation | null;
+  /** Convenience accessor — derived from location.state. */
+  userState: string | null;
   savedLocations: UserLocation[];
   isDetecting: boolean;
   isServiceable: boolean | null;
@@ -181,7 +183,7 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
   }, [location?.pincode]);
 
   const value = useMemo<LocationContextValue>(() => ({
-    location, savedLocations, isDetecting, isServiceable,
+    location, userState: location?.state ?? null, savedLocations, isDetecting, isServiceable,
     setLocationByPincode, detectAuto, refreshSaved,
   }), [location, savedLocations, isDetecting, isServiceable, setLocationByPincode, detectAuto, refreshSaved]);
 

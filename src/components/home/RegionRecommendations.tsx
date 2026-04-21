@@ -13,12 +13,12 @@ import ProductGrid from "@/components/product/ProductGrid";
  * - Hides entire section if no items remain after filtering.
  */
 const RegionRecommendations = () => {
-  const { location } = useLocation();
+  const { location, userState } = useLocation();
   const pincode = location?.pincode ?? null;
 
   const { data: ranked = [], isLoading } = useQuery({
-    queryKey: ["products", "region-ranked", 12],
-    queryFn: () => productService.getRanked({ limit: 12 }),
+    queryKey: ["products", "region-ranked", 12, userState ?? ""],
+    queryFn: () => productService.getRanked({ limit: 12, userState }),
     staleTime: 5 * 60_000,
   });
 

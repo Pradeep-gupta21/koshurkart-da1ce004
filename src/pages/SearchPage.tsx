@@ -14,6 +14,7 @@ import { productService } from "@/services/productService";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
 import { useServiceability } from "@/hooks/useServiceability";
+import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
@@ -86,9 +87,11 @@ const SearchPage = () => {
     minRating: minRating > 0 ? minRating : undefined,
   };
 
+  const { userState } = useUserLocation();
+
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ["products", "search", query, selectedCategory, sortBy, priceRange[0], priceRange[1], minRating],
-    queryFn: () => searchService.searchProducts(query, filters, sortBy),
+    queryKey: ["products", "search", query, selectedCategory, sortBy, priceRange[0], priceRange[1], minRating, userState ?? ""],
+    queryFn: () => searchService.searchProducts(query, filters, sortBy, 30, userState),
   });
 
   const { data: sponsoredCampaigns = [] } = useQuery({

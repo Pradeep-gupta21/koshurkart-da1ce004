@@ -21,6 +21,8 @@ import ReviewSection from "@/components/reviews/ReviewSection";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 import LocationDialog from "@/components/location/LocationDialog";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
+import { isKashmirVendor, isVerifiedLocalSeller } from "@/lib/regionUtils";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 
 const mapCampaignToProduct = (c: any): Product & { campaignId: string } => {
@@ -128,7 +130,7 @@ const ProductDetailPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('vendors')
-        .select('trust_score, is_verified, review_rating')
+        .select('trust_score, is_verified, review_rating, pickup_state, verification_status, kyc_status')
         .eq('id', product!.vendorId)
         .single();
       return data;
@@ -202,7 +204,7 @@ const ProductDetailPage = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold truncate">{product.vendorName}</p>
                 {vendorTrust?.is_verified && <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />}
-                <FromKashmirBadge />
+                {isKashmirVendor(vendorTrust) && <FromKashmirBadge />}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 {vendorTrust?.trust_score != null && (
@@ -247,7 +249,11 @@ const ProductDetailPage = () => {
             )}
           </div>
 
-          {/* Trust badges */}
+          {isVerifiedLocalSeller(vendorTrust) && (
+            <div className="mt-3">
+              <VerifiedLocalSellerBadge />
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge variant="outline" className="gap-1 text-[10px] h-6 text-accent border-accent/40 bg-accent/5">
               <Mountain className="h-3 w-3" /> Authentic Kashmiri Product

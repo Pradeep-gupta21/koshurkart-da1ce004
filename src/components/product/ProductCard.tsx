@@ -1,13 +1,14 @@
 import { Link } from "react-router-dom";
-import { Star, AlertTriangle, ShieldCheck, Mountain } from "lucide-react";
+import { Star, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Product } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import { isKashmirVendor } from "@/lib/regionUtils";
 
 interface ProductCardProps {
   product: Product;
@@ -43,10 +44,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
             SPONSORED
           </span>
         )}
-        <span className="inline-flex items-center gap-1 rounded-full bg-accent/90 text-accent-foreground px-1.5 py-0.5 text-[10px] font-semibold tracking-wide shadow-sm">
-          <Mountain className="h-2.5 w-2.5" />
-          From Kashmir
-        </span>
+        {isKashmirVendor({ pickup_state: product.vendorPickupState }) && <FromKashmirBadge />}
       </div>
       {isOutOfStock && (
         <span className="absolute top-2 right-2 z-10 bg-destructive text-destructive-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">

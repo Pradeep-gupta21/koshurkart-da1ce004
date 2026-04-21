@@ -2,6 +2,8 @@ export interface Product {
   id: string;
   vendorId: string;
   vendorName: string;
+  /** Vendor pickup state — used to derive "From Kashmir" / Verified Local Seller badges. */
+  vendorPickupState?: string | null;
   title: string;
   slug: string;
   description: string;
@@ -51,11 +53,13 @@ export interface Vendor {
   description: string;
   rating: number;
   totalSales: number;
-  verificationStatus: 'pending' | 'approved' | 'rejected';
+  verificationStatus: 'pending' | 'approved' | 'rejected' | 'suspended';
   trustScore: number;
   deliveryRate: number;
   cancellationRate: number;
   returnRate: number;
   reviewRating: number;
   isVerified: boolean;
+  pickupState?: string | null;
+  kycStatus?: 'not_submitted' | 'pending' | 'approved' | 'rejected';
 }
