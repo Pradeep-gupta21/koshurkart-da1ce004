@@ -216,6 +216,46 @@ curl "https://xlqzbomiuuadxcygnsal.supabase.co/rest/v1/vendors?user_id=eq.$USER_
 - **KYC documents** live in a private bucket; admins access them via short-lived
   signed URLs (default 5 minutes).
 
+## Region awareness (J&K)
+
+The marketplace surfaces and ranks local Kashmir/Jammu sellers more prominently.
+
+### Locality derivation
+
+A vendor is considered local when their `pickup_state` (set during onboarding
+step 3) contains the keywords `kashmir` or `jammu` (case-insensitive). No
+separate flag column — the helper `isKashmirVendor(vendor)` in
+`src/lib/regionUtils.ts` is the single source of truth.
+
+### Region-aware ranking
+
+`get_ranked_products` and `search_products` accept an optional
+`p_user_state text` parameter. When supplied, products whose vendor's
+`pickup_state` matches receive a `+0.10` additive boost on `rank_score`.
+Backwards compatible — callers that omit the parameter see identical results
+to the previous behaviour.
+
+```ts
+// Wired automatically via LocationContext.userState
+const { data } = await supabase.rpc("get_ranked_products", {
+  p_category: "Handicrafts",
+  p_limit: 20,
+  p_user_state: "Jammu & Kashmir", // optional boost
+});
+```
+
+### Badges
+
+| Badge | Component | Shown when |
+|---|---|---|
+| **From Kashmir** | `<FromKashmirBadge />` | `isKashmirVendor(vendor)` |
+| **Verified Local Seller** | `<VerifiedLocalSellerBadge />` | Kashmir vendor AND `verification_status='approved'` AND `kyc_status='approved'` |
+
+Rendered on `ProductCard`, `VendorCard`, `ProductDetailPage`, and the vendor's
+own `VendorOverview` header.
+
+---
+
 ## Why no Express layer?
 
 PostgREST + RLS already provides:
