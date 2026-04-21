@@ -8,6 +8,7 @@ import {
   ShieldCheck, Lightbulb, BarChart3, Wallet, Info, CreditCard,
 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import VendorGettingStarted from "@/components/vendor/VendorGettingStarted";
 import { pricingService, PricingSuggestion } from "@/services/pricingService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
@@ -151,6 +152,8 @@ const VendorOverview = () => {
         <h1 className="text-2xl font-bold">Dashboard Overview</h1>
         <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
       </div>
+
+      {vendorId && <VendorGettingStarted vendorId={vendorId} />}
 
       {/* Commission info banner */}
       <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">

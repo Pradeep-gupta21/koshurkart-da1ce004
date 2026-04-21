@@ -884,6 +884,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_audit_log: {
+        Row: {
+          action: string
+          actor_user_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          new_status: string | null
+          previous_status: string | null
+          reason: string | null
+          vendor_id: string
+        }
+        Insert: {
+          action: string
+          actor_user_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          previous_status?: string | null
+          reason?: string | null
+          vendor_id: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          previous_status?: string | null
+          reason?: string | null
+          vendor_id?: string
+        }
+        Relationships: []
+      }
       vendor_onboarding_drafts: {
         Row: {
           current_step: number
@@ -985,6 +1021,7 @@ export type Database = {
           total_sales: number | null
           trust_score: number | null
           user_id: string
+          verification_rejection_reason: string | null
           verification_status: string
           withdrawable_balance: number | null
         }
@@ -1032,6 +1069,7 @@ export type Database = {
           total_sales?: number | null
           trust_score?: number | null
           user_id: string
+          verification_rejection_reason?: string | null
           verification_status?: string
           withdrawable_balance?: number | null
         }
@@ -1079,6 +1117,7 @@ export type Database = {
           total_sales?: number | null
           trust_score?: number | null
           user_id?: string
+          verification_rejection_reason?: string | null
           verification_status?: string
           withdrawable_balance?: number | null
         }
