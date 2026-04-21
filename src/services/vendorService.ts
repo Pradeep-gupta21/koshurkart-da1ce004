@@ -165,7 +165,11 @@ export const vendorService = {
     status: 'pending' | 'approved' | 'verified' | 'rejected' | 'suspended',
     reason?: string,
   ) {
-    const updates: Record<string, any> = { verification_status: status };
+    const updates: Partial<{
+      verification_status: string;
+      verification_rejection_reason: string | null;
+      is_verified: boolean;
+    }> = { verification_status: status };
     if (status === 'rejected' || status === 'suspended') {
       updates.verification_rejection_reason = reason ?? null;
     } else {
