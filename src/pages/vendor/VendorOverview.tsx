@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
 import VendorGettingStarted from "@/components/vendor/VendorGettingStarted";
+import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import { isKashmirVendor, isVerifiedLocalSeller } from "@/lib/regionUtils";
 import { pricingService, PricingSuggestion } from "@/services/pricingService";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +50,7 @@ const VendorOverview = () => {
     trustScore: number; deliveryRate: number; cancellationRate: number;
     returnRate: number; reviewRating: number; isVerified: boolean;
   } | null>(null);
+  const [vendorLocality, setVendorLocality] = useState<{ pickup_state: string | null; verification_status: string; kyc_status: string } | null>(null);
 
   const fetchAll = useCallback(async () => {
     if (!vendorId) return;
@@ -116,6 +120,12 @@ const VendorOverview = () => {
     if (vendorId) {
       vendorService.getTrustMetrics(vendorId).then(setTrustMetrics).catch(() => {});
       pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
+      supabase
+        .from("vendors")
+        .select("pickup_state, verification_status, kyc_status")
+        .eq("id", vendorId)
+        .single()
+        .then(({ data }) => { if (data) setVendorLocality(data as any); });
     }
   }, [vendorId, fetchAll]);
 
@@ -150,7 +160,11 @@ const VendorOverview = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard Overview</h1>
-        <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <p className="text-muted-foreground">Welcome to your vendor dashboard</p>
+          {vendorLocality && isKashmirVendor(vendorLocality) && <FromKashmirBadge />}
+          {vendorLocality && isVerifiedLocalSeller(vendorLocality) && <VerifiedLocalSellerBadge />}
+        </div>
       </div>
 
       {vendorId && <VendorGettingStarted vendorId={vendorId} />}

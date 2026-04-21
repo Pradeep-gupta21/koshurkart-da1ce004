@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { compressImage } from '@/lib/imageCompression';
 import { maskAccountNumber } from '@/lib/validators/kycSchema';
+import { withRetry } from '@/lib/retry';
 
 export type KYCDocKind = 'pan' | 'address' | 'business';
 
@@ -105,11 +106,13 @@ export const vendorService = {
       ? await compressImage(file, { maxDim: 1800, quality: 0.82 })
       : file;
     const path = `${userId}/${kind}.${file.type.startsWith('image/') ? 'jpg' : 'pdf'}`;
-    const { error } = await supabase.storage
-      .from('vendor-kyc')
-      .upload(path, blob, { upsert: true, contentType: blob.type || 'application/octet-stream' });
-    if (error) throw error;
-    return path;
+    return withRetry(async () => {
+      const { error } = await supabase.storage
+        .from('vendor-kyc')
+        .upload(path, blob, { upsert: true, contentType: blob.type || 'application/octet-stream' });
+      if (error) throw error;
+      return path;
+    }, { scope: 'uploadKYCDocument' });
   },
 
   /** Submit KYC: persists business+bank fields, marks status pending. */
@@ -207,26 +210,30 @@ export const vendorService = {
   async uploadLogo(vendorId: string, file: File): Promise<string> {
     const blob = await compressImage(file, { maxDim: 600, quality: 0.85 });
     const path = `vendors/${vendorId}/logo-${Date.now()}.jpg`;
-    const { error } = await supabase.storage.from('product-images').upload(path, blob, {
-      upsert: true,
-      contentType: 'image/jpeg',
-    });
-    if (error) throw error;
-    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-    return data.publicUrl;
+    return withRetry(async () => {
+      const { error } = await supabase.storage.from('product-images').upload(path, blob, {
+        upsert: true,
+        contentType: 'image/jpeg',
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      return data.publicUrl;
+    }, { scope: 'uploadLogo' });
   },
 
   /** Upload vendor banner image. Wider crop, public bucket. */
   async uploadBanner(vendorId: string, file: File): Promise<string> {
     const blob = await compressImage(file, { maxDim: 1600, quality: 0.82 });
     const path = `vendors/${vendorId}/banner-${Date.now()}.jpg`;
-    const { error } = await supabase.storage.from('product-images').upload(path, blob, {
-      upsert: true,
-      contentType: 'image/jpeg',
-    });
-    if (error) throw error;
-    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-    return data.publicUrl;
+    return withRetry(async () => {
+      const { error } = await supabase.storage.from('product-images').upload(path, blob, {
+        upsert: true,
+        contentType: 'image/jpeg',
+      });
+      if (error) throw error;
+      const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+      return data.publicUrl;
+    }, { scope: 'uploadBanner' });
   },
 
   /** Lookup city/state from a serviceable pincode. Returns null if not found. */
