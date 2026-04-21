@@ -1,100 +1,73 @@
 
 ## Reality check
 
-This entire spec is already shipped — every single line. Calling out what exists vs what's missing before proposing anything new:
+In-app notifications already fire on vendor verification + KYC status change via DB triggers (`on_vendor_verified_notify`, `on_vendor_kyc_status_change`). The gap is **branded email notifications** to the vendor's inbox when an admin approves/rejects/suspends them.
 
-### Admin panel for vendor approval
+Email requires a verified sender domain — none is configured yet. **You need to set up an email domain first** (one-time DNS setup); after that, I'll build everything else end-to-end without further input from you.
 
-| Spec ask | Status | Evidence |
-|---|---|---|
-| List all vendor applications | ✅ | `AdminVendors.tsx` — filter tabs (all/pending/verified/rejected/suspended/kyc) |
-| Show business info / documents / store details | ✅ | `KYCReviewSheet.tsx` opens per vendor with all KYC fields, signed-URL doc previews, store details |
-| Approve vendor | ✅ | "Approve" button → `vendorService.updateVerificationStatus(id, 'verified')` |
-| Reject vendor with reason | ✅ | KYC reject flow captures `kyc_rejection_reason`. **Vendor-level rejection doesn't capture a reason** — see gaps |
-| Only admin access | ✅ | `RoleRoute` + RLS `has_role(auth.uid(), 'admin')` on `vendors` UPDATE |
-| Log all actions | ❌ | No audit table. No append-only history of who approved/rejected what, when, why |
+## Plan
 
-### Vendor dashboard post-approval
+### 1. Email domain setup (one-time, you do this)
 
-| Spec ask | Status | Evidence |
-|---|---|---|
-| Add products | ✅ | `VendorProducts.tsx` + `ProductForm.tsx` |
-| Manage inventory | ✅ | Same — stock + low_stock_threshold + reserved_stock |
-| View orders | ✅ | `VendorOrders.tsx` with status transitions |
-| Track earnings | ✅ | `VendorAnalytics.tsx` + `VendorPayments.tsx` (withdrawable_balance, payouts) |
-| Block access until approved | ✅ | `VendorStatusGate` — pending/rejected/suspended screens |
-| Notifications on approval/rejection | ✅ in-app | `on_vendor_verified_notify` + `on_vendor_kyc_status_change` triggers |
-| Email/SMS on approval/rejection | ❌ | In-app only. No email/SMS provider wired |
-| First-time setup / onboarding guide | ❌ | Vendor lands on `VendorOverview` with no checklist or guided "add first product" flow |
+Open the setup dialog and follow the prompts. DNS verification can take up to 72 hours but I can build and deploy everything before it finishes — emails just queue until DNS is live.
 
-**Verdict:** Three real gaps. Everything else duplicates what's live. No new tables/pages for the rest — would just shadow existing ones.
+### 2. Email infrastructure + 3 transactional templates (I build)
 
-## Plan — close the three real gaps
+Scaffold Lovable's email infrastructure, then create three branded React Email templates under `supabase/functions/_shared/transactional-email-templates/`:
 
-### 1. Audit log for admin actions on vendors
+- **`vendor-approved.tsx`** — "You're verified! Start selling on [Site]" with CTA → `/vendor` dashboard
+- **`vendor-rejected.tsx`** — "Update on your vendor application" with rejection reason + CTA → `/vendor/apply` to reapply
+- **`vendor-suspended.tsx`** — "Your vendor account has been suspended" with reason + support contact
 
-New table `vendor_audit_log`:
-- `id uuid pk`, `vendor_id uuid not null`, `actor_user_id uuid not null` (who did it), `action text not null` (`'verification_approved' | 'verification_rejected' | 'verification_suspended' | 'kyc_approved' | 'kyc_rejected' | 'bank_verified' | 'bank_unverified'`), `previous_status text`, `new_status text`, `reason text`, `metadata jsonb default '{}'`, `created_at timestamptz default now()`
-- Append-only RLS: admins can SELECT (read-all) and INSERT only via the vendor row update path. No UPDATE, no DELETE.
-- Auto-population via trigger `on_vendor_admin_change()` on `vendors` AFTER UPDATE: if `verification_status`, `kyc_status`, or `bank_verified` changed AND `auth.uid()` is admin, insert a row capturing old/new state, the actor, and any reason field present (`kyc_rejection_reason` for KYC; new `verification_rejection_reason` for top-level — see #2).
+All three styled to match the project's premium minimalist look (deep indigo primary, rounded cards, white email body per spec). `templateData` carries `storeName`, `reason` (for rejected/suspended), and the dashboard/apply URL.
 
-Add a vendor-facing read policy too: vendors see their own audit log (so they can see "rejected on Apr 18, reason: …") — gives full transparency.
+Register all three in `_shared/transactional-email-templates/registry.ts`.
 
-### 2. Capture reason on top-level vendor rejection/suspension
+### 3. Trigger emails from the existing DB-trigger flow
 
-Schema:
-- Add `verification_rejection_reason text` to `vendors` (separate from `kyc_rejection_reason` — different workflows)
+Two options for invoking `send-transactional-email`:
 
-UI:
-- `KYCReviewSheet`'s "Reject" button (vendor-level) gets the same reason-capture pattern already used for KYC rejection. Required textarea before the destructive update goes through. Same for "Suspend".
-- `vendorService.updateVerificationStatus(id, status, reason?)` accepts an optional reason and writes it on rejected/suspended transitions.
-- `on_vendor_verified_notify` extended to include the reason in the notification message when present.
-- `VendorStatusGate`'s rejected screen displays `verification_rejection_reason` when set (falls back to current generic copy).
+- **Option A (chosen):** Extend the existing `vendorService.updateVerificationStatus(vendorId, status, reason?)` to call `supabase.functions.invoke('send-transactional-email', ...)` after a successful update. Looks up vendor email from `profiles`, picks the right template based on the new status, passes `reason` for rejected/suspended. Idempotency key: `vendor-status-${vendor_id}-${status}`.
+- Skipped: DB-trigger → pg_net path. Adds infra, no benefit since admin actions always go through the service layer.
 
-### 3. First-time vendor onboarding guide on dashboard
+Same hook added to `setBankVerified` is **out of scope** — bank verification is internal admin bookkeeping, not a vendor-facing event.
 
-New component `src/components/vendor/VendorGettingStarted.tsx` rendered at the top of `VendorOverview` only when at least one of these is true:
-- 0 products in `products` for this vendor
-- `vendors.logo` is null OR `vendors.banner` is null
-- 0 orders received
+### 4. KYC status change emails
 
-Card with a 4-step checklist (each step has done/todo state + CTA button):
-1. **Complete your storefront** — set logo + banner → `/vendor/settings`
-2. **Add your first product** → `/vendor/products` (opens new product form)
-3. **Set shipping pincodes** → `/vendor/settings#serviceability` (uses existing `vendor_serviceability` table; just deep-link to the section)
-4. **Receive your first order** — passive, marked done when orders > 0
+KYC approve/reject is a separate admin action also routed through `vendorService` (`approveKYC`, `rejectKYC` if present, else direct table update in `KYCReviewSheet`). Adding two more templates would dilute the inbox; instead, **piggyback on the existing three**:
 
-Dismissible (stored in `localStorage` key `vendor_getting_started_dismissed_{vendor_id}` so it doesn't reappear once explicitly closed). Auto-hides when all 4 are complete.
+- KYC approved + verification still pending → no email (admin will approve verification next, which sends the approval email)
+- KYC rejected → reuse `vendor-rejected.tsx` template with the KYC rejection reason and a CTA pointing to `/vendor/apply/kyc` (resubmit flow)
 
-### 4. Email notification on approval/rejection (out of scope by default — flagged)
+This keeps the surface to 3 templates and matches what vendors actually need to act on.
 
-The spec asks for email/SMS. Doing this properly requires:
-- A configured email domain (currently none) → user has to go through Lovable's email domain setup dialog first
-- Then scaffold transactional emails + an `auth-email-hook` for vendor-status-change events
+### 5. Audit log captures emails sent
 
-I'm **not** including this in the build because it requires user action (DNS setup) before code can be written. If the user wants emails added, they'll go through the email domain setup flow and I'll wire `send-transactional-email` calls from `on_vendor_verified_notify` + `on_vendor_kyc_status_change` afterwards.
-
-In-app notifications already cover the core "vendor knows status changed" requirement.
+`vendor_audit_log` already records who/when/why. Add an optional `metadata.email_sent: true|false` field set by the service layer based on the `invoke` result so admins can confirm the vendor was notified.
 
 ## Out of scope (intentional)
 
-- **New admin dashboard / vendor dashboard pages** — `AdminVendors`, `KYCReviewSheet`, `VendorOverview`, `VendorProducts`, `VendorOrders`, `VendorAnalytics`, `VendorPayments`, `VendorSettings`, `VendorStatusGate` already cover every UI requirement. Building parallel screens duplicates without adding value.
-- **New backend APIs** — RLS-gated PostgREST + `vendor_apply()` RPC + edge functions already serve as the API layer. Express isn't on the stack.
-- **SMS notifications** — needs Twilio/MSG91 secret + per-message cost; documented as a separate workstream
-- **Re-apply flow rebuild** — already works: `VendorStatusGate` shows rejection screen + "Reapply" CTA pointing at `/vendor/apply` (the unified wizard).
-- **Activating vendor dashboard on approval** — already automatic via `VendorStatusGate` reading `vendorStatus`. No change needed.
+- **SMS notifications** — needs Twilio/MSG91 secret + per-message cost; flag separately if you want it
+- **Vendor-customizable email preferences** — not requested; unsubscribe footer auto-appended by Lovable email infra covers compliance
+- **Admin notification when a vendor reapplies** — different workstream (admin email digest); not in the spec
+- **Editing the existing in-app notification triggers** — they keep firing alongside the new emails (vendors see both)
 
 ## Files
 
-**Migration**
-- `supabase/migrations/<ts>_vendor_audit_log.sql` — `vendor_audit_log` table + RLS, `verification_rejection_reason` column on `vendors`, `on_vendor_admin_change` trigger, extended `on_vendor_verified_notify` to surface rejection reason in message
+**Create**
+- `supabase/functions/_shared/transactional-email-templates/vendor-approved.tsx`
+- `supabase/functions/_shared/transactional-email-templates/vendor-rejected.tsx`
+- `supabase/functions/_shared/transactional-email-templates/vendor-suspended.tsx`
+- (auto-created by scaffolding) `supabase/functions/send-transactional-email/`, `handle-email-unsubscribe/`, `handle-email-suppression/`, `_shared/transactional-email-templates/registry.ts`, plus the `/unsubscribe` page in the React app
 
 **Edit**
-- `src/services/vendorService.ts` — `updateVerificationStatus(id, status, reason?)` signature; new `getVendorAuditLog(vendorId)`
-- `src/components/vendor/KYCReviewSheet.tsx` — capture reason for vendor-level reject/suspend (textarea, required); render compact audit-log timeline at the bottom
-- `src/components/auth/VendorStatusGate.tsx` — show `verification_rejection_reason` on rejected screen when present
-- `src/integrations/supabase/types.ts` — auto-regenerated
+- `supabase/functions/_shared/transactional-email-templates/registry.ts` — register the 3 new templates
+- `src/services/vendorService.ts` — `updateVerificationStatus` and KYC reject helpers invoke `send-transactional-email` with the right template + idempotency key after a successful row update
 
-**Create**
-- `src/components/vendor/VendorGettingStarted.tsx` — first-time onboarding checklist card
-- `src/pages/vendor/VendorOverview.tsx` — render `<VendorGettingStarted />` at the top (small edit, but listed under Create since the section is new)
+## Next step
+
+Click below to set up your sender domain. Once that's done, I'll build everything in #2–#5 in one pass.
+
+<lov-actions>
+<lov-open-email-setup>Set up email domain</lov-open-email-setup>
+</lov-actions>
