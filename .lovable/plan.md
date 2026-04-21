@@ -1,73 +1,99 @@
 
 ## Reality check
 
-In-app notifications already fire on vendor verification + KYC status change via DB triggers (`on_vendor_verified_notify`, `on_vendor_kyc_status_change`). The gap is **branded email notifications** to the vendor's inbox when an admin approves/rejects/suspends them.
+Two combined asks: **J&K regionalization** and **production-readiness**. Honest gap analysis against what's already shipped:
 
-Email requires a verified sender domain — none is configured yet. **You need to set up an email domain first** (one-time DNS setup); after that, I'll build everything else end-to-end without further input from you.
+### J&K customization
+
+| Spec ask | Status | Evidence |
+|---|---|---|
+| Vendors select serviceable PIN codes | ✅ | `vendor_serviceability` table + `Vendor manages own serviceability` RLS; `useServiceability` hook + `ServiceabilityBadge` consume `check_serviceability()` RPC |
+| Vendor-defined delivery time | ✅ | `vendor_serviceability.delivery_days_override` already overrides `serviceable_pincodes.base_delivery_days` |
+| "From Kashmir" badge on products | ⚠️ Partial | `FromKashmirBadge.tsx` component **exists** but is not rendered anywhere. No data signal to drive it. |
+| "Verified Local Seller" trust badge | ❌ | No such badge component or vendor flag |
+| Boost local sellers in search | ❌ | `search_products` / `get_ranked_products` have no locality term |
+
+### Production-readiness
+
+| Spec ask | Status | Evidence |
+|---|---|---|
+| Input validation (client + server) | ✅ | Zod across forms + `validate_vendor_kyc_fields` trigger |
+| Secure file uploads | ✅ | Private `vendor-kyc` bucket with `{user_id}/` RLS; public `product-images` w/ same prefix; 5 MB cap + MIME via `imageCompression` |
+| Bank details "encryption" | ✅ via masking | `bank_account_number_masked` only — full PAN required by industry norm. Application-level KMS encryption is a separate workstream (not requested before, not building speculatively) |
+| Caching | ✅ | `cacheService` with TTLs; `useServiceability` already uses it |
+| API performance / scalability | ✅ structurally | PostgREST + RPCs + GIN search index + row-level pagination already scale to thousands |
+| Upload retry logic | ❌ | `uploadKYCDocument` / `uploadLogo` / `uploadBanner` fail-fast on transient network errors |
+| Environment variables / secret hygiene | ✅ | `.env` auto-managed; secrets in Supabase secrets vault; no hardcoded keys |
+| API tests | ⚠️ Partial | Edge function Deno tests exist (`location_test.ts`, `menu_test.ts`); no tests for `vendor_apply` / serviceability RPC |
+| Form validation tests | ⚠️ Partial | `ExpandableMenu`, `SidebarItem`, `CartContext`, `LocationContext` tested; vendor onboarding schemas untested |
+
+**Verdict:** 5 real gaps. Everything else duplicates what's live. No new auth/upload/validation infra — would shadow existing.
 
 ## Plan
 
-### 1. Email domain setup (one-time, you do this)
+### 1. Surface "From Kashmir" + "Verified Local Seller" badges (data + UI)
 
-Open the setup dialog and follow the prompts. DNS verification can take up to 72 hours but I can build and deploy everything before it finishes — emails just queue until DNS is live.
+Add a derived locality flag — no new column, computed from existing `pickup_state`:
+- Helper `isKashmirVendor(vendor)` → `vendor.pickup_state?.toLowerCase().includes('kashmir') || vendor.pickup_state?.toLowerCase().includes('jammu')`
+- New badge `VerifiedLocalSellerBadge.tsx` (shield + "Verified Local Seller", green) shown only when vendor is Kashmir AND `verification_status='approved'` AND `kyc_status='approved'`
+- Render `<FromKashmirBadge />` on `ProductCard` (top-left over image) and `VendorCard` (header) when `isKashmirVendor(vendor)` is true
+- Render `<VerifiedLocalSellerBadge />` on `VendorCard` and product detail page (`ProductDetailPage`) under the price block, plus on `VendorOverview` self-view as a positive signal
 
-### 2. Email infrastructure + 3 transactional templates (I build)
+Vendor data shape: `ProductCard` already receives `store_name` from joined vendor; extend the product-vendor join in `productService` (and `get_ranked_products` / `get_local_deals` RPCs) to also return `pickup_state`. Cheap (single column, already indexed by vendor join).
 
-Scaffold Lovable's email infrastructure, then create three branded React Email templates under `supabase/functions/_shared/transactional-email-templates/`:
+### 2. Boost local sellers in ranking (region-aware sort)
 
-- **`vendor-approved.tsx`** — "You're verified! Start selling on [Site]" with CTA → `/vendor` dashboard
-- **`vendor-rejected.tsx`** — "Update on your vendor application" with rejection reason + CTA → `/vendor/apply` to reapply
-- **`vendor-suspended.tsx`** — "Your vendor account has been suspended" with reason + support contact
+Extend `get_ranked_products` and `search_products` RPCs to accept an optional `p_user_state text` parameter. When set, add a 0.10 weight bump to `rank_score` for products whose vendor's `pickup_state` matches `p_user_state` (case-insensitive). Final formula stays additive — no breaking change for callers that don't pass it.
 
-All three styled to match the project's premium minimalist look (deep indigo primary, rounded cards, white email body per spec). `templateData` carries `storeName`, `reason` (for rejected/suspended), and the dashboard/apply URL.
+Wire-up: `useLocation` already exposes the user's pincode; resolve state from `serviceable_pincodes` (existing table has `state`) once on context init and cache. `searchService` and homepage rails pass `p_user_state` through.
 
-Register all three in `_shared/transactional-email-templates/registry.ts`.
+Out of scope: a hard "Kashmir-only" filter toggle. Spec says **boost**, not exclude. If user wants the toggle later, it's a 1-line `WHERE` extension.
 
-### 3. Trigger emails from the existing DB-trigger flow
+### 3. KYC bucket signed-URL refresh + retry on transient upload failures
 
-Two options for invoking `send-transactional-email`:
+Wrap upload helpers in `vendorService` with exponential-backoff retry (3 attempts: 0ms / 500ms / 1500ms) for transient errors (network errors, 5xx). Skip retries for 4xx/auth/quota errors — those are user-actionable.
 
-- **Option A (chosen):** Extend the existing `vendorService.updateVerificationStatus(vendorId, status, reason?)` to call `supabase.functions.invoke('send-transactional-email', ...)` after a successful update. Looks up vendor email from `profiles`, picks the right template based on the new status, passes `reason` for rejected/suspended. Idempotency key: `vendor-status-${vendor_id}-${status}`.
-- Skipped: DB-trigger → pg_net path. Adds infra, no benefit since admin actions always go through the service layer.
+Pattern: small `withRetry(fn, { retries, isTransient })` util in `src/lib/retry.ts`. Apply to `uploadKYCDocument`, `uploadLogo`, `uploadBanner`. Log attempts via existing `logger`. Toast only on final failure.
 
-Same hook added to `setBankVerified` is **out of scope** — bank verification is internal admin bookkeeping, not a vendor-facing event.
+### 4. Test coverage for the two real gaps
 
-### 4. KYC status change emails
+- **Schema test**: `src/lib/validators/__tests__/vendorOnboardingSchema.test.ts` — happy path + boundary cases (PAN regex, IFSC, pincode, slug, phone, tagline length) for all 5 step schemas. Fast Vitest; no DB.
+- **Edge-equivalent RPC test**: `supabase/functions/_tests/vendor_serviceability_test.ts` — Deno test that exercises `check_serviceability()` against a seeded test pincode + vendor, asserting deliverable + ETA + COD propagation. Mirrors existing `location_test.ts` pattern.
 
-KYC approve/reject is a separate admin action also routed through `vendorService` (`approveKYC`, `rejectKYC` if present, else direct table update in `KYCReviewSheet`). Adding two more templates would dilute the inbox; instead, **piggyback on the existing three**:
+Skipping E2E (Playwright) for vendor onboarding — the wizard is already partly covered by `vendor_apply()` rpc tests via `useVendor` flow; full E2E is a separate workstream.
 
-- KYC approved + verification still pending → no email (admin will approve verification next, which sends the approval email)
-- KYC rejected → reuse `vendor-rejected.tsx` template with the KYC rejection reason and a CTA pointing to `/vendor/apply/kyc` (resubmit flow)
+### 5. Documentation update
 
-This keeps the surface to 3 templates and matches what vendors actually need to act on.
-
-### 5. Audit log captures emails sent
-
-`vendor_audit_log` already records who/when/why. Add an optional `metadata.email_sent: true|false` field set by the service layer based on the `invoke` result so admins can confirm the vendor was notified.
+Append a "Region awareness" section to `docs/VENDOR_API.md` documenting the new `p_user_state` param, the locality derivation rule (`pickup_state` includes "kashmir"/"jammu"), and badge display rules. Keeps the API contract honest.
 
 ## Out of scope (intentional)
 
-- **SMS notifications** — needs Twilio/MSG91 secret + per-message cost; flag separately if you want it
-- **Vendor-customizable email preferences** — not requested; unsubscribe footer auto-appended by Lovable email infra covers compliance
-- **Admin notification when a vendor reapplies** — different workstream (admin email digest); not in the spec
-- **Editing the existing in-app notification triggers** — they keep firing alongside the new emails (vendors see both)
+- **Application-level encryption of PAN/bank fields** — Postgres at-rest encryption + masking is the current posture; KMS column encryption needs a separate decision (key rotation, query patterns). Not requested explicitly.
+- **New "is_local_kashmir" boolean column** — derivable from `pickup_state` with zero migration risk; adding a column invites drift.
+- **Hard Kashmir-only marketplace mode** — spec says boost, not gate. Will not add.
+- **SMS/email notification for vendor status** — already flagged separately; pending email-domain setup.
+- **Rate limiting on uploads** — `rateLimiter` already exists for login/clicks; storage uploads are gated by Supabase per-project limits.
 
 ## Files
 
+**Migration**
+- `supabase/migrations/<ts>_region_aware_ranking.sql` — extend `get_ranked_products(p_user_state text default null)` and `search_products(p_user_state text default null)` with locality boost; extend `get_local_deals` and `get_trending_products` returned columns to include `pickup_state` (joined from vendors)
+
 **Create**
-- `supabase/functions/_shared/transactional-email-templates/vendor-approved.tsx`
-- `supabase/functions/_shared/transactional-email-templates/vendor-rejected.tsx`
-- `supabase/functions/_shared/transactional-email-templates/vendor-suspended.tsx`
-- (auto-created by scaffolding) `supabase/functions/send-transactional-email/`, `handle-email-unsubscribe/`, `handle-email-suppression/`, `_shared/transactional-email-templates/registry.ts`, plus the `/unsubscribe` page in the React app
+- `src/components/product/VerifiedLocalSellerBadge.tsx` — shield + "Verified Local Seller" pill
+- `src/lib/regionUtils.ts` — `isKashmirVendor(v)` helper + `KASHMIR_STATE_KEYWORDS`
+- `src/lib/retry.ts` — generic `withRetry` util (transient-error classifier)
+- `src/lib/validators/__tests__/vendorOnboardingSchema.test.ts`
+- `supabase/functions/_tests/vendor_serviceability_test.ts`
 
 **Edit**
-- `supabase/functions/_shared/transactional-email-templates/registry.ts` — register the 3 new templates
-- `src/services/vendorService.ts` — `updateVerificationStatus` and KYC reject helpers invoke `send-transactional-email` with the right template + idempotency key after a successful row update
-
-## Next step
-
-Click below to set up your sender domain. Once that's done, I'll build everything in #2–#5 in one pass.
-
-<lov-actions>
-<lov-open-email-setup>Set up email domain</lov-open-email-setup>
-</lov-actions>
+- `src/components/product/ProductCard.tsx` — render `<FromKashmirBadge />` when vendor is local
+- `src/components/vendor/VendorCard.tsx` — render From-Kashmir + Verified-Local-Seller badges
+- `src/pages/ProductDetailPage.tsx` — render Verified-Local-Seller badge under price
+- `src/pages/vendor/VendorOverview.tsx` — show Verified-Local-Seller badge in header when applicable
+- `src/services/productService.ts` — pass `p_user_state` to ranking RPCs; include `pickup_state` in joins/selects
+- `src/services/searchService.ts` — pass `p_user_state` from `useLocation` state
+- `src/contexts/LocationContext.tsx` — resolve + expose `userState` from pincode lookup
+- `src/services/vendorService.ts` — wrap `uploadKYCDocument`, `uploadLogo`, `uploadBanner` with `withRetry`
+- `docs/VENDOR_API.md` — region-awareness section
+- `src/integrations/supabase/types.ts` — auto-regenerated
