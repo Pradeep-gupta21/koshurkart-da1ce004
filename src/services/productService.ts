@@ -8,6 +8,7 @@ export function mapDbProduct(row: any): Product {
     id: row.id,
     vendorId: row.vendor_id,
     vendorName: row.vendors?.store_name ?? row.store_name ?? '',
+    vendorPickupState: row.vendors?.pickup_state ?? row.pickup_state ?? null,
     title: row.title,
     slug: row.slug,
     description: row.description ?? '',
@@ -48,7 +49,7 @@ export const productService = {
     const cached = cacheService.get<Product[]>(cacheKey);
     if (cached) return cached;
 
-    let query = supabase.from('products').select('*, vendors(store_name)');
+    let query = supabase.from('products').select('*, vendors(store_name, pickup_state)');
 
     const status = options?.status ?? 'active';
     if (status !== 'all') query = query.eq('status', status);
@@ -90,7 +91,7 @@ export const productService = {
 
     const { data, error } = await supabase
       .from('products')
-      .select('*, vendors(store_name)')
+      .select('*, vendors(store_name, pickup_state)')
       .eq('slug', slug)
       .single();
     if (error) throw error;
@@ -102,7 +103,7 @@ export const productService = {
   async getByVendor(vendorId: string) {
     const { data, error } = await supabase
       .from('products')
-      .select('*, vendors(store_name)')
+      .select('*, vendors(store_name, pickup_state)')
       .eq('vendor_id', vendorId)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -137,7 +138,7 @@ export const productService = {
     images: string[];
     status?: string;
   }) {
-    const { data, error } = await supabase.from('products').insert(product).select('*, vendors(store_name)').single();
+    const { data, error } = await supabase.from('products').insert(product).select('*, vendors(store_name, pickup_state)').single();
     if (error) throw error;
     cacheService.invalidatePattern('products:');
     cacheService.invalidatePattern('search:');
@@ -146,7 +147,7 @@ export const productService = {
   },
 
   async update(id: string, updates: Record<string, unknown>) {
-    const { data, error } = await supabase.from('products').update(updates as never).eq('id', id).select('*, vendors(store_name)').single();
+    const { data, error } = await supabase.from('products').update(updates as never).eq('id', id).select('*, vendors(store_name, pickup_state)').single();
     if (error) throw error;
     cacheService.invalidatePattern('products:');
     cacheService.invalidatePattern('product:');
@@ -185,7 +186,7 @@ export const productService = {
     return data ?? [];
   },
 
-  async getRanked(options?: { category?: string; search?: string; limit?: number }) {
+  async getRanked(options?: { category?: string; search?: string; limit?: number; userState?: string | null }) {
     const cacheKey = `products:ranked:${JSON.stringify(options ?? {})}`;
     const cached = cacheService.get<Product[]>(cacheKey);
     if (cached) return cached;
@@ -194,9 +195,13 @@ export const productService = {
       p_limit: options?.limit ?? 20,
       p_category: options?.category ?? null,
       p_search: options?.search ?? null,
+      p_user_state: options?.userState ?? null,
     });
     if (error) throw error;
-    const result = (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    const result = (data ?? []).map((row: any) => mapDbProduct({
+      ...row,
+      vendors: { store_name: row.store_name, pickup_state: row.pickup_state },
+    }));
     cacheService.set(cacheKey, result, CACHE_TTL.HOMEPAGE);
     return result;
   },
@@ -208,7 +213,10 @@ export const productService = {
 
     const { data, error } = await supabase.rpc('get_trending_products', { p_limit: limit });
     if (error) throw error;
-    const result = (data ?? []).map((row: any) => mapDbProduct({ ...row, vendors: { store_name: row.store_name } }));
+    const result = (data ?? []).map((row: any) => mapDbProduct({
+      ...row,
+      vendors: { store_name: row.store_name, pickup_state: row.pickup_state },
+    }));
     cacheService.set(cacheKey, result, CACHE_TTL.TRENDING);
     return result;
   },

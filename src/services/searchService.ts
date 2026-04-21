@@ -20,9 +20,10 @@ export const searchService = {
     query: string,
     filters: SearchFilters = {},
     sort: SearchSortOption = 'relevance',
-    limit = 30
+    limit = 30,
+    userState?: string | null,
   ): Promise<Product[]> {
-    const cacheKey = `search:${query}:${JSON.stringify(filters)}:${sort}:${limit}`;
+    const cacheKey = `search:${query}:${JSON.stringify(filters)}:${sort}:${limit}:${userState ?? ''}`;
     const cached = cacheService.get<Product[]>(cacheKey);
     if (cached) return cached;
 
@@ -34,6 +35,7 @@ export const searchService = {
       p_min_rating: filters.minRating ?? null,
       p_sort: sort,
       p_limit: limit,
+      p_user_state: userState ?? null,
     });
 
     if (error) {
@@ -41,7 +43,9 @@ export const searchService = {
       return [];
     }
 
-    const result = (data ?? []).map((row: any) => mapDbProduct(row));
+    const result = (data ?? []).map((row: any) =>
+      mapDbProduct({ ...row, vendors: { store_name: row.store_name, pickup_state: row.pickup_state } }),
+    );
     cacheService.set(cacheKey, result, CACHE_TTL.SEARCH);
     return result;
   },
