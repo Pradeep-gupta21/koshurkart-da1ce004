@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { vendorService } from "@/services/vendorService";
-import { CheckCircle, ExternalLink, Loader2, XCircle } from "lucide-react";
+import { CheckCircle, ExternalLink, History, Loader2, Pause, ShieldCheck, XCircle } from "lucide-react";
+import { format, parseISO } from "date-fns";
 
 interface Props {
   vendorId: string | null;
@@ -21,18 +22,46 @@ const Field = ({ label, value }: { label: string; value?: string | null }) => (
   </div>
 );
 
+const actionLabel = (a: string) => {
+  const map: Record<string, string> = {
+    verification_approved: "Vendor approved",
+    verification_verified: "Vendor verified",
+    verification_rejected: "Vendor rejected",
+    verification_suspended: "Vendor suspended",
+    verification_pending: "Vendor set to pending",
+    kyc_approved: "KYC approved",
+    kyc_rejected: "KYC rejected",
+    kyc_pending: "KYC set to pending",
+    bank_verified: "Bank marked verified",
+    bank_unverified: "Bank marked unverified",
+  };
+  return map[a] || a;
+};
+
 const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
   const { toast } = useToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [docUrls, setDocUrls] = useState<Record<string, string>>({});
-  const [reason, setReason] = useState("");
+  const [kycReason, setKycReason] = useState("");
+  const [verificationReason, setVerificationReason] = useState("");
   const [acting, setActing] = useState(false);
+  const [auditLog, setAuditLog] = useState<any[]>([]);
+
+  const loadAudit = async (id: string) => {
+    try {
+      const log = await vendorService.getVendorAuditLog(id);
+      setAuditLog(log);
+    } catch {
+      setAuditLog([]);
+    }
+  };
 
   useEffect(() => {
     if (!open || !vendorId) return;
     setLoading(true);
-    setReason("");
+    setKycReason("");
+    setVerificationReason("");
     vendorService.getKYC(vendorId).then(async (v) => {
       setData(v);
       const urls: Record<string, string> = {};
@@ -44,33 +73,53 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
       setDocUrls(urls);
       setLoading(false);
     });
+    loadAudit(vendorId);
   }, [open, vendorId]);
 
-  const handleApprove = async () => {
+  const handleApproveKYC = async () => {
     if (!vendorId) return;
     setActing(true);
     try {
       await vendorService.approveKYC(vendorId);
       toast({ title: "KYC approved" });
       onChanged?.();
-      onOpenChange(false);
+      await loadAudit(vendorId);
     } catch (e: any) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally { setActing(false); }
   };
 
-  const handleReject = async () => {
+  const handleRejectKYC = async () => {
     if (!vendorId) return;
-    if (reason.trim().length < 5) {
+    if (kycReason.trim().length < 5) {
       toast({ title: "Reason required", description: "Please provide a brief reason.", variant: "destructive" });
       return;
     }
     setActing(true);
     try {
-      await vendorService.rejectKYC(vendorId, reason.trim());
+      await vendorService.rejectKYC(vendorId, kycReason.trim());
       toast({ title: "KYC rejected" });
       onChanged?.();
-      onOpenChange(false);
+      await loadAudit(vendorId);
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    } finally { setActing(false); }
+  };
+
+  const handleVerificationAction = async (status: "approved" | "rejected" | "suspended") => {
+    if (!vendorId) return;
+    if ((status === "rejected" || status === "suspended") && verificationReason.trim().length < 5) {
+      toast({ title: "Reason required", description: `Please provide a reason to ${status === "rejected" ? "reject" : "suspend"}.`, variant: "destructive" });
+      return;
+    }
+    setActing(true);
+    try {
+      await vendorService.updateVerificationStatus(vendorId, status, verificationReason.trim() || undefined);
+      toast({ title: status === "approved" ? "Vendor approved" : status === "rejected" ? "Vendor rejected" : "Vendor suspended" });
+      setData({ ...data, verification_status: status });
+      setVerificationReason("");
+      onChanged?.();
+      await loadAudit(vendorId);
     } catch (e: any) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally { setActing(false); }
@@ -80,16 +129,19 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>KYC Review</SheetTitle>
-          <SheetDescription>Inspect submitted details and uploaded documents.</SheetDescription>
+          <SheetTitle>Vendor Review</SheetTitle>
+          <SheetDescription>Inspect submitted details, documents, and take action.</SheetDescription>
         </SheetHeader>
         {loading || !data ? (
           <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
         ) : (
           <div className="space-y-5 mt-4">
-            <div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={data.verification_status === "approved" || data.verification_status === "verified" ? "default" : data.verification_status === "rejected" || data.verification_status === "suspended" ? "destructive" : "secondary"}>
+                Vendor: {data.verification_status}
+              </Badge>
               <Badge variant={data.kyc_status === "approved" ? "default" : data.kyc_status === "rejected" ? "destructive" : "secondary"}>
-                {data.kyc_status}
+                KYC: {data.kyc_status}
               </Badge>
             </div>
 
@@ -121,6 +173,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
                         setData({ ...data, bank_verified: !data.bank_verified });
                         toast({ title: data.bank_verified ? "Bank marked unverified" : "Bank marked verified" });
                         onChanged?.();
+                        await loadAudit(vendorId);
                       } catch (e: any) {
                         toast({ title: "Failed", description: e.message, variant: "destructive" });
                       } finally { setActing(false); }
@@ -155,25 +208,72 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
               </div>
             </section>
 
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Decision</h3>
+            <section className="space-y-2 border-t pt-4">
+              <h3 className="text-sm font-semibold">KYC Decision</h3>
               <Textarea
-                placeholder="Rejection reason (required to reject)"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={3}
+                placeholder="Rejection reason (required to reject KYC)"
+                value={kycReason}
+                onChange={(e) => setKycReason(e.target.value)}
+                rows={2}
               />
               <div className="flex gap-2">
-                <Button onClick={handleApprove} disabled={acting} className="flex-1">
+                <Button onClick={handleApproveKYC} disabled={acting} className="flex-1">
                   <CheckCircle className="h-4 w-4 mr-1" /> Approve KYC
                 </Button>
-                <Button onClick={handleReject} disabled={acting} variant="destructive" className="flex-1">
+                <Button onClick={handleRejectKYC} disabled={acting} variant="destructive" className="flex-1">
+                  <XCircle className="h-4 w-4 mr-1" /> Reject KYC
+                </Button>
+              </div>
+            </section>
+
+            <section className="space-y-2 border-t pt-4">
+              <h3 className="text-sm font-semibold">Vendor Verification</h3>
+              <Textarea
+                placeholder="Reason (required to reject or suspend the vendor)"
+                value={verificationReason}
+                onChange={(e) => setVerificationReason(e.target.value)}
+                rows={2}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => handleVerificationAction("approved")} disabled={acting} className="flex-1 min-w-[120px]">
+                  <ShieldCheck className="h-4 w-4 mr-1" /> Approve
+                </Button>
+                <Button onClick={() => handleVerificationAction("rejected")} disabled={acting} variant="destructive" className="flex-1 min-w-[120px]">
                   <XCircle className="h-4 w-4 mr-1" /> Reject
+                </Button>
+                <Button onClick={() => handleVerificationAction("suspended")} disabled={acting} variant="outline" className="flex-1 min-w-[120px]">
+                  <Pause className="h-4 w-4 mr-1" /> Suspend
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Note: approving KYC does not auto-approve the vendor. Use the verification tab afterwards.
+                Approving the vendor activates their dashboard. Reject/suspend require a reason — it's shown to the vendor and logged.
               </p>
+            </section>
+
+            <section className="border-t pt-4">
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                <History className="h-4 w-4" /> Activity Log
+              </h3>
+              {auditLog.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No actions recorded yet.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {auditLog.map((entry) => (
+                    <li key={entry.id} className="text-xs border-l-2 border-muted pl-3 py-1">
+                      <div className="font-medium text-foreground">{actionLabel(entry.action)}</div>
+                      <div className="text-muted-foreground">
+                        {format(parseISO(entry.created_at), "MMM dd, yyyy 'at' HH:mm")}
+                        {entry.previous_status && entry.new_status && (
+                          <> · {entry.previous_status} → {entry.new_status}</>
+                        )}
+                      </div>
+                      {entry.reason && (
+                        <div className="text-muted-foreground italic mt-0.5">"{entry.reason}"</div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </section>
           </div>
         )}
