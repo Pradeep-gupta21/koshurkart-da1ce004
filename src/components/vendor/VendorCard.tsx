@@ -1,6 +1,9 @@
 import { Star, ShieldCheck } from "lucide-react";
 import { Vendor } from "@/types";
 import { cn } from "@/lib/utils";
+import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
+import { isKashmirVendor, isVerifiedLocalSeller } from "@/lib/regionUtils";
 
 interface VendorCardProps {
   vendor: Vendor;
@@ -9,6 +12,9 @@ interface VendorCardProps {
 }
 
 const VendorCard = ({ vendor, className, onClick }: VendorCardProps) => {
+  const local = isKashmirVendor(vendor);
+  const verifiedLocal = isVerifiedLocalSeller(vendor);
+
   return (
     <div
       className={cn(
@@ -34,6 +40,12 @@ const VendorCard = ({ vendor, className, onClick }: VendorCardProps) => {
         <Star className="h-3 w-3 fill-accent text-accent" />
         <span className="text-xs tabular-nums">{vendor.rating}</span>
       </div>
+      {(local || verifiedLocal) && (
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
+          {local && <FromKashmirBadge />}
+          {verifiedLocal && <VerifiedLocalSellerBadge compact />}
+        </div>
+      )}
       {vendor.trustScore > 0 && (
         <span className={`inline-block text-[10px] font-semibold mt-1.5 px-1.5 py-0.5 rounded-full ${
           vendor.trustScore >= 80 ? "text-success bg-success/10" :
