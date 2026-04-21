@@ -1205,6 +1205,7 @@ export type Database = {
           images: string[]
           is_sponsored: boolean
           low_stock_threshold: number
+          pickup_state: string
           price: number
           rating: number
           reserved_stock: number
@@ -1221,7 +1222,12 @@ export type Database = {
         }[]
       }
       get_ranked_products: {
-        Args: { p_category?: string; p_limit?: number; p_search?: string }
+        Args: {
+          p_category?: string
+          p_limit?: number
+          p_search?: string
+          p_user_state?: string
+        }
         Returns: {
           category: string
           created_at: string
@@ -1231,6 +1237,7 @@ export type Database = {
           images: string[]
           is_sponsored: boolean
           low_stock_threshold: number
+          pickup_state: string
           price: number
           rank_score: number
           rating: number
@@ -1265,6 +1272,7 @@ export type Database = {
           images: string[]
           is_sponsored: boolean
           low_stock_threshold: number
+          pickup_state: string
           price: number
           rating: number
           reserved_stock: number
@@ -1330,6 +1338,7 @@ export type Database = {
           p_min_rating?: number
           p_query?: string
           p_sort?: string
+          p_user_state?: string
         }
         Returns: {
           category: string
@@ -1340,6 +1349,7 @@ export type Database = {
           images: string[]
           is_sponsored: boolean
           low_stock_threshold: number
+          pickup_state: string
           price: number
           rating: number
           relevance_score: number
