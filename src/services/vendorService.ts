@@ -159,6 +159,37 @@ export const vendorService = {
     if (error) throw error;
   },
 
+  /** Admin: update top-level vendor verification status. Reason required for rejected/suspended. */
+  async updateVerificationStatus(
+    vendorId: string,
+    status: 'pending' | 'approved' | 'verified' | 'rejected' | 'suspended',
+    reason?: string,
+  ) {
+    const updates: Record<string, any> = { verification_status: status };
+    if (status === 'rejected' || status === 'suspended') {
+      updates.verification_rejection_reason = reason ?? null;
+    } else {
+      updates.verification_rejection_reason = null;
+    }
+    if (status === 'approved' || status === 'verified') {
+      updates.is_verified = true;
+    }
+    const { error } = await supabase.from('vendors').update(updates).eq('id', vendorId);
+    if (error) throw error;
+  },
+
+  /** Audit log entries for a vendor (admin or vendor-self via RLS). */
+  async getVendorAuditLog(vendorId: string) {
+    const { data, error } = await supabase
+      .from('vendor_audit_log')
+      .select('id, action, previous_status, new_status, reason, actor_user_id, created_at')
+      .eq('vendor_id', vendorId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return data ?? [];
+  },
+
   /** Admin: mark a vendor's bank details as verified (or unverified). */
   async setBankVerified(vendorId: string, verified: boolean) {
     const { error } = await supabase
