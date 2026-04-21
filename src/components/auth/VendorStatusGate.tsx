@@ -23,13 +23,15 @@ const VendorStatusGate = ({ children }: Props) => {
 
   // Pull rejection reason if needed (separate query — small payload)
   useEffect(() => {
-    if (!vendorId || vendorStatus !== "rejected") return;
+    if (!vendorId || (vendorStatus !== "rejected" && vendorStatus !== "suspended")) return;
     supabase
       .from("vendors")
-      .select("kyc_rejection_reason")
+      .select("verification_rejection_reason, kyc_rejection_reason")
       .eq("id", vendorId)
       .single()
-      .then(({ data }) => setRejectionReason(data?.kyc_rejection_reason ?? null));
+      .then(({ data }) =>
+        setRejectionReason(data?.verification_rejection_reason ?? data?.kyc_rejection_reason ?? null),
+      );
   }, [vendorId, vendorStatus]);
 
   if (loading) {
@@ -70,7 +72,9 @@ const VendorStatusGate = ({ children }: Props) => {
             <Pause className="h-12 w-12 text-destructive mb-2" />
             <CardTitle>Account Suspended</CardTitle>
             <CardDescription>
-              Your vendor account has been suspended. Please contact support to resolve this.
+              {rejectionReason
+                ? `Reason: ${rejectionReason}`
+                : "Your vendor account has been suspended. Please contact support to resolve this."}
             </CardDescription>
           </CardHeader>
           <CardContent>

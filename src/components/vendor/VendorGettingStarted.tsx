@@ -143,7 +143,7 @@ const VendorGettingStarted = ({ vendorId }: Props) => {
               >
                 <div className="shrink-0 mt-0.5">
                   {item.done ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CheckCircle2 className="h-5 w-5 text-success" />
                   ) : (
                     <Circle className="h-5 w-5 text-muted-foreground" />
                   )}
