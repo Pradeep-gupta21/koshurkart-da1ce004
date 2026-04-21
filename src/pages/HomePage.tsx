@@ -9,6 +9,7 @@ import { productService } from "@/services/productService";
 import { adService } from "@/services/adService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 import heroBanner from "@/assets/hero-banner.jpg";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
@@ -44,6 +45,7 @@ const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => 
 
 const HomePage = () => {
   const { user } = useAuth();
+  const { userState } = useUserLocation();
 
   const { data: sponsoredCampaigns = [] } = useQuery({
     queryKey: ['ads', 'homepage'],
@@ -68,8 +70,8 @@ const HomePage = () => {
   });
 
   const { data: allProducts = [], isLoading: loadingAll } = useQuery({
-    queryKey: ['products', 'ranked'],
-    queryFn: () => productService.getRanked({ limit: 16 }),
+    queryKey: ['products', 'ranked', userState ?? ''],
+    queryFn: () => productService.getRanked({ limit: 16, userState }),
   });
 
   const { data: vendors = [] } = useQuery({
