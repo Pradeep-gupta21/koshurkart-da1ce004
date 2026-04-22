@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.location]
 verify_jwt = false
+
+[functions.verify-upi-payment]
+verify_jwt = false

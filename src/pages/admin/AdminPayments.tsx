@@ -52,12 +52,17 @@ const AdminPayments = () => {
   const handleApprove = async (p: Payment) => {
     setActionLoading(p.id);
     try {
-      await paymentService.updatePaymentStatus(p.id, "success");
-      await orderService.updateOrderStatus(p.order_id, { payment_status: "paid", order_status: "confirmed" });
+      if (p.payment_method === "upi") {
+        await paymentService.verifyUpiPayment(p.id, p.order_id, "approve");
+      } else {
+        await paymentService.updatePaymentStatus(p.id, "success");
+        await orderService.updateOrderStatus(p.order_id, { payment_status: "paid", order_status: "confirmed" });
+      }
       toast({ title: "Payment approved", description: `Payment for order ${p.order_id.slice(0, 8)} marked as success.` });
       fetchPayments();
-    } catch {
-      toast({ title: "Error", description: "Failed to approve payment.", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to approve payment.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
     setActionLoading(null);
   };
@@ -65,12 +70,17 @@ const AdminPayments = () => {
   const handleReject = async (p: Payment) => {
     setActionLoading(p.id);
     try {
-      await paymentService.updatePaymentStatus(p.id, "failed");
-      await orderService.updateOrderStatus(p.order_id, { payment_status: "failed" });
+      if (p.payment_method === "upi") {
+        await paymentService.verifyUpiPayment(p.id, p.order_id, "reject");
+      } else {
+        await paymentService.updatePaymentStatus(p.id, "failed");
+        await orderService.updateOrderStatus(p.order_id, { payment_status: "failed" });
+      }
       toast({ title: "Payment rejected", description: `Payment for order ${p.order_id.slice(0, 8)} marked as failed.` });
       fetchPayments();
-    } catch {
-      toast({ title: "Error", description: "Failed to reject payment.", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reject payment.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
     setActionLoading(null);
   };

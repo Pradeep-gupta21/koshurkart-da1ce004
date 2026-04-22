@@ -44,8 +44,16 @@ const VendorPayments = () => {
   const requestPayout = async () => {
     if (withdrawableBalance <= 0) { toast({ title: "No balance available" }); return; }
     const { error } = await supabase.from("payouts").insert({ vendor_id: vendorId, amount: withdrawableBalance });
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "Payout requested" });
+    if (error) {
+      // Surface backend trigger errors (KYC not approved, bank not verified, insufficient balance, etc.)
+      toast({
+        title: "Payout request rejected",
+        description: error.message ?? "Could not submit payout request.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Payout requested", description: "Your payout request is being processed." });
     const { data } = await supabase.from("payouts").select("*").eq("vendor_id", vendorId).order("requested_at", { ascending: false });
     setPayouts(data ?? []);
   };
