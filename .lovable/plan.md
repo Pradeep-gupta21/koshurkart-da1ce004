@@ -1,99 +1,81 @@
 
 ## Reality check
 
-Two combined asks: **J&K regionalization** and **production-readiness**. Honest gap analysis against what's already shipped:
+Five distinct fixes against confirmed gaps in the live schema. No invention — each maps to an existing trigger/RPC/table pattern.
 
-### J&K customization
-
-| Spec ask | Status | Evidence |
-|---|---|---|
-| Vendors select serviceable PIN codes | ✅ | `vendor_serviceability` table + `Vendor manages own serviceability` RLS; `useServiceability` hook + `ServiceabilityBadge` consume `check_serviceability()` RPC |
-| Vendor-defined delivery time | ✅ | `vendor_serviceability.delivery_days_override` already overrides `serviceable_pincodes.base_delivery_days` |
-| "From Kashmir" badge on products | ⚠️ Partial | `FromKashmirBadge.tsx` component **exists** but is not rendered anywhere. No data signal to drive it. |
-| "Verified Local Seller" trust badge | ❌ | No such badge component or vendor flag |
-| Boost local sellers in search | ❌ | `search_products` / `get_ranked_products` have no locality term |
-
-### Production-readiness
-
-| Spec ask | Status | Evidence |
-|---|---|---|
-| Input validation (client + server) | ✅ | Zod across forms + `validate_vendor_kyc_fields` trigger |
-| Secure file uploads | ✅ | Private `vendor-kyc` bucket with `{user_id}/` RLS; public `product-images` w/ same prefix; 5 MB cap + MIME via `imageCompression` |
-| Bank details "encryption" | ✅ via masking | `bank_account_number_masked` only — full PAN required by industry norm. Application-level KMS encryption is a separate workstream (not requested before, not building speculatively) |
-| Caching | ✅ | `cacheService` with TTLs; `useServiceability` already uses it |
-| API performance / scalability | ✅ structurally | PostgREST + RPCs + GIN search index + row-level pagination already scale to thousands |
-| Upload retry logic | ❌ | `uploadKYCDocument` / `uploadLogo` / `uploadBanner` fail-fast on transient network errors |
-| Environment variables / secret hygiene | ✅ | `.env` auto-managed; secrets in Supabase secrets vault; no hardcoded keys |
-| API tests | ⚠️ Partial | Edge function Deno tests exist (`location_test.ts`, `menu_test.ts`); no tests for `vendor_apply` / serviceability RPC |
-| Form validation tests | ⚠️ Partial | `ExpandableMenu`, `SidebarItem`, `CartContext`, `LocationContext` tested; vendor onboarding schemas untested |
-
-**Verdict:** 5 real gaps. Everything else duplicates what's live. No new auth/upload/validation infra — would shadow existing.
+| Fix | Confirmed gap |
+|---|---|
+| 1. COD auto-credit on delivery | `on_shipping_status_change` syncs `order_status` only; `payments.payment_status` stays `pending` for COD → `on_payment_success` never fires |
+| 2. UPI server-side verification | `confirmUpiPayment` flips status client-side; admin manually approves in `AdminPayments.tsx` — no edge function gate |
+| 3. Payout validation | `payouts` INSERT policy only checks ownership; no balance/bank check. `requestPayout` in `VendorPayments.tsx` allows any amount |
+| 4. Earnings reversal on cancel/return | `on_order_status_change` recalcs trust score but never debits `vendors.total_earnings` / `withdrawable_balance` |
+| 5. Stale order sweeper | No cron; abandoned `pending` orders hold `reserved_stock` forever |
 
 ## Plan
 
-### 1. Surface "From Kashmir" + "Verified Local Seller" badges (data + UI)
+### 1. COD: auto-credit on delivery (DB-only, atomic)
 
-Add a derived locality flag — no new column, computed from existing `pickup_state`:
-- Helper `isKashmirVendor(vendor)` → `vendor.pickup_state?.toLowerCase().includes('kashmir') || vendor.pickup_state?.toLowerCase().includes('jammu')`
-- New badge `VerifiedLocalSellerBadge.tsx` (shield + "Verified Local Seller", green) shown only when vendor is Kashmir AND `verification_status='approved'` AND `kyc_status='approved'`
-- Render `<FromKashmirBadge />` on `ProductCard` (top-left over image) and `VendorCard` (header) when `isKashmirVendor(vendor)` is true
-- Render `<VerifiedLocalSellerBadge />` on `VendorCard` and product detail page (`ProductDetailPage`) under the price block, plus on `VendorOverview` self-view as a positive signal
+New trigger `on_cod_delivered_credit` on `orders` AFTER UPDATE. When `shipping_status` transitions to `delivered` and the linked payment is COD with `payment_status != 'success'`, update `payments.payment_status = 'success'` for that order. The existing `on_payment_success` BEFORE-UPDATE trigger on `payments` then runs the per-vendor split + sets `credited_at` — no duplication.
 
-Vendor data shape: `ProductCard` already receives `store_name` from joined vendor; extend the product-vendor join in `productService` (and `get_ranked_products` / `get_local_deals` RPCs) to also return `pickup_state`. Cheap (single column, already indexed by vendor join).
+Idempotent: guarded by `credited_at IS NULL` check already in `on_payment_success`.
 
-### 2. Boost local sellers in ranking (region-aware sort)
+### 2. UPI verification edge function
 
-Extend `get_ranked_products` and `search_products` RPCs to accept an optional `p_user_state text` parameter. When set, add a 0.10 weight bump to `rank_score` for products whose vendor's `pickup_state` matches `p_user_state` (case-insensitive). Final formula stays additive — no breaking change for callers that don't pass it.
+New `supabase/functions/verify-upi-payment/index.ts`. Auth: JWT-validated admin only (`has_role(uid,'admin')` via service-role lookup). Body: `{ paymentId, orderId, action: 'approve'|'reject', transactionId?, note? }`.
 
-Wire-up: `useLocation` already exposes the user's pincode; resolve state from `serviceable_pincodes` (existing table has `state`) once on context init and cache. `searchService` and homepage rails pass `p_user_state` through.
+- On `approve`: set `payments.payment_status='success'`, `transaction_id`, `credited_at` left to trigger; set `orders.payment_status='paid'`, `order_status='confirmed'`. Trigger handles vendor credit.
+- On `reject`: set `payments.payment_status='failed'`, `orders.payment_status='failed'`, release reserved stock for each line item via `release_stock` RPC.
 
-Out of scope: a hard "Kashmir-only" filter toggle. Spec says **boost**, not exclude. If user wants the toggle later, it's a 1-line `WHERE` extension.
+Wire `AdminPayments.tsx` `handleApprove`/`handleReject` to call this function instead of direct table writes. Removes RLS-bypass surface from the client; keeps the existing UI.
 
-### 3. KYC bucket signed-URL refresh + retry on transient upload failures
+Out of scope: automatic UPI gateway verification (no PSP webhook configured) — admin-mediated flow stays, but is now backend-enforced.
 
-Wrap upload helpers in `vendorService` with exponential-backoff retry (3 attempts: 0ms / 500ms / 1500ms) for transient errors (network errors, 5xx). Skip retries for 4xx/auth/quota errors — those are user-actionable.
+### 3. Payout rules: balance + bank verification gate
 
-Pattern: small `withRetry(fn, { retries, isTransient })` util in `src/lib/retry.ts`. Apply to `uploadKYCDocument`, `uploadLogo`, `uploadBanner`. Log attempts via existing `logger`. Toast only on final failure.
+New trigger `validate_payout_request` BEFORE INSERT on `payouts`:
+- Reject if `amount <= 0`
+- Reject if `amount > vendors.withdrawable_balance`
+- Reject if `vendors.bank_verified = false`
+- Reject if `vendors.kyc_status != 'approved'`
 
-### 4. Test coverage for the two real gaps
+Same trigger AFTER UPDATE on `payouts` (when `status` becomes `'completed'`): debit `vendors.withdrawable_balance` by `amount`. Idempotent via a new `payouts.debited_at timestamptz` column.
 
-- **Schema test**: `src/lib/validators/__tests__/vendorOnboardingSchema.test.ts` — happy path + boundary cases (PAN regex, IFSC, pincode, slug, phone, tagline length) for all 5 step schemas. Fast Vitest; no DB.
-- **Edge-equivalent RPC test**: `supabase/functions/_tests/vendor_serviceability_test.ts` — Deno test that exercises `check_serviceability()` against a seeded test pincode + vendor, asserting deliverable + ETA + COD propagation. Mirrors existing `location_test.ts` pattern.
+Update `VendorPayments.tsx` `requestPayout` to surface the trigger's error message via toast (no client logic changes besides better error rendering).
 
-Skipping E2E (Playwright) for vendor onboarding — the wizard is already partly covered by `vendor_apply()` rpc tests via `useVendor` flow; full E2E is a separate workstream.
+### 4. Earnings reversal on cancel/return
 
-### 5. Documentation update
+New trigger `on_order_refund_reverse_earnings` on `orders` AFTER UPDATE. When `order_status` transitions to `cancelled` or `returned` AND the linked payment has `credited_at IS NOT NULL`:
 
-Append a "Region awareness" section to `docs/VENDOR_API.md` documenting the new `p_user_state` param, the locality derivation rule (`pickup_state` includes "kashmir"/"jammu"), and badge display rules. Keeps the API contract honest.
+For each `order_items` row by vendor, recompute the same per-vendor share formula used in `on_payment_success`, then:
+- Decrement `vendors.total_earnings` and `vendors.withdrawable_balance` by that share (clamp `withdrawable_balance` at 0)
+- Decrement `vendors.total_sales` by 1
+- Set `payments.credited_at = NULL` AND a new `payments.reversed_at = now()` to mark reversal (prevents double-reversal; allows re-credit if order is reinstated, though that flow isn't supported today)
 
-## Out of scope (intentional)
+Also release reserved stock + decrement `products.sales_count` if the order had reached `delivered` before the reversal.
 
-- **Application-level encryption of PAN/bank fields** — Postgres at-rest encryption + masking is the current posture; KMS column encryption needs a separate decision (key rotation, query patterns). Not requested explicitly.
-- **New "is_local_kashmir" boolean column** — derivable from `pickup_state` with zero migration risk; adding a column invites drift.
-- **Hard Kashmir-only marketplace mode** — spec says boost, not gate. Will not add.
-- **SMS/email notification for vendor status** — already flagged separately; pending email-domain setup.
-- **Rate limiting on uploads** — `rateLimiter` already exists for login/clicks; storage uploads are gated by Supabase per-project limits.
+### 5. Scheduled stale-order sweeper
+
+Enable `pg_cron` + `pg_net` (idempotent). New SECURITY DEFINER function `sweep_stale_orders()`:
+- Find `orders` where `order_status='processing'` AND `payment_status='pending'` AND `created_at < now() - interval '30 minutes'` AND payment method is not COD
+- For each: mark `payment_status='failed'`, `order_status='cancelled'`, call `release_stock(product_id, quantity)` for every line item
+
+Schedule via `cron.schedule('sweep-stale-orders', '*/10 * * * *', $$select sweep_stale_orders()$$)`. Uses internal SQL only — no edge function HTTP overhead. Logged via existing `vendor_audit_log` pattern (new `system_audit_log` is overkill; use `analytics_events` with `event_type='order_auto_cancelled'`).
 
 ## Files
 
-**Migration**
-- `supabase/migrations/<ts>_region_aware_ranking.sql` — extend `get_ranked_products(p_user_state text default null)` and `search_products(p_user_state text default null)` with locality boost; extend `get_local_deals` and `get_trending_products` returned columns to include `pickup_state` (joined from vendors)
+**Migrations** (`supabase/migrations/<ts>_*.sql`)
+- `cod_auto_credit.sql` — `on_cod_delivered_credit` trigger
+- `payout_validation.sql` — `payouts.debited_at` column, `validate_payout_request` BEFORE INSERT trigger, `debit_balance_on_payout_complete` AFTER UPDATE trigger
+- `earnings_reversal.sql` — `payments.reversed_at` column, `on_order_refund_reverse_earnings` trigger
+- `stale_order_sweeper.sql` — enable `pg_cron`/`pg_net`, `sweep_stale_orders()` function, cron schedule
 
 **Create**
-- `src/components/product/VerifiedLocalSellerBadge.tsx` — shield + "Verified Local Seller" pill
-- `src/lib/regionUtils.ts` — `isKashmirVendor(v)` helper + `KASHMIR_STATE_KEYWORDS`
-- `src/lib/retry.ts` — generic `withRetry` util (transient-error classifier)
-- `src/lib/validators/__tests__/vendorOnboardingSchema.test.ts`
-- `supabase/functions/_tests/vendor_serviceability_test.ts`
+- `supabase/functions/verify-upi-payment/index.ts` — admin-gated UPI approve/reject
+- `supabase/functions/_tests/verify_upi_payment_test.ts` — Deno test for auth + admin gate
 
 **Edit**
-- `src/components/product/ProductCard.tsx` — render `<FromKashmirBadge />` when vendor is local
-- `src/components/vendor/VendorCard.tsx` — render From-Kashmir + Verified-Local-Seller badges
-- `src/pages/ProductDetailPage.tsx` — render Verified-Local-Seller badge under price
-- `src/pages/vendor/VendorOverview.tsx` — show Verified-Local-Seller badge in header when applicable
-- `src/services/productService.ts` — pass `p_user_state` to ranking RPCs; include `pickup_state` in joins/selects
-- `src/services/searchService.ts` — pass `p_user_state` from `useLocation` state
-- `src/contexts/LocationContext.tsx` — resolve + expose `userState` from pincode lookup
-- `src/services/vendorService.ts` — wrap `uploadKYCDocument`, `uploadLogo`, `uploadBanner` with `withRetry`
-- `docs/VENDOR_API.md` — region-awareness section
+- `src/pages/admin/AdminPayments.tsx` — call `verify-upi-payment` function instead of direct writes
+- `src/services/paymentService.ts` — add `verifyUpiPayment(paymentId, orderId, action, ...)` wrapper
+- `src/pages/vendor/VendorPayments.tsx` — show trigger error in toast on payout request rejection
 - `src/integrations/supabase/types.ts` — auto-regenerated
+- `supabase/config.toml` — register `verify-upi-payment` (default `verify_jwt = false`; we validate inside)
