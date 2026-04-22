@@ -346,6 +346,7 @@ export type Database = {
           razorpay_order_id: string | null
           razorpay_payment_id: string | null
           razorpay_signature: string | null
+          reversed_at: string | null
           transaction_id: string | null
           upi_id: string | null
           user_id: string
@@ -367,6 +368,7 @@ export type Database = {
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
           razorpay_signature?: string | null
+          reversed_at?: string | null
           transaction_id?: string | null
           upi_id?: string | null
           user_id: string
@@ -388,6 +390,7 @@ export type Database = {
           razorpay_order_id?: string | null
           razorpay_payment_id?: string | null
           razorpay_signature?: string | null
+          reversed_at?: string | null
           transaction_id?: string | null
           upi_id?: string | null
           user_id?: string
@@ -406,6 +409,7 @@ export type Database = {
       payouts: {
         Row: {
           amount: number
+          debited_at: string | null
           id: string
           processed_at: string | null
           requested_at: string
@@ -414,6 +418,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          debited_at?: string | null
           id?: string
           processed_at?: string | null
           requested_at?: string
@@ -422,6 +427,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          debited_at?: string | null
           id?: string
           processed_at?: string | null
           requested_at?: string
@@ -1367,6 +1373,7 @@ export type Database = {
           view_count: number
         }[]
       }
+      sweep_stale_orders: { Args: never; Returns: number }
       track_ad_event: {
         Args: { _campaign_id: string; _event_type: string }
         Returns: undefined
