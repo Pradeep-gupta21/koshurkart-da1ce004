@@ -304,6 +304,25 @@ export const paymentService = {
     return data;
   },
 
+  /**
+   * Admin-only: approve or reject a UPI payment via secure edge function.
+   * The backend validates the JWT, checks the admin role, updates payment + order
+   * statuses, and (on reject) releases reserved stock.
+   */
+  async verifyUpiPayment(
+    paymentId: string,
+    orderId: string,
+    action: 'approve' | 'reject',
+    options?: { transactionId?: string; note?: string }
+  ) {
+    const { data, error } = await supabase.functions.invoke('verify-upi-payment', {
+      body: { paymentId, orderId, action, ...options },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
+
   async getPayoutSummary(vendorId: string) {
     const [payoutsRes, vendorRes, campaignsRes] = await Promise.all([
       supabase.from('payouts').select('*').eq('vendor_id', vendorId),
