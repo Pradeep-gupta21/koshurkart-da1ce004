@@ -46,31 +46,6 @@ export const paymentService = {
   },
 
   /**
-   * Simulates payment gateway verification.
-   * Replace this with real gateway integration (Stripe, Razorpay, etc.) in production.
-   */
-  async verifyPayment(
-    _paymentId: string,
-    method: string
-  ): Promise<{ success: boolean; transactionId: string | null }> {
-    // COD doesn't need verification — stays pending until delivery
-    if (method === 'cod') {
-      return { success: true, transactionId: null };
-    }
-
-    // Simulate gateway processing delay (500-1500ms)
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-
-    // Simulate ~95% success rate
-    const success = Math.random() > 0.05;
-    const transactionId = success
-      ? `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-      : null;
-
-    return { success, transactionId };
-  },
-
-  /**
    * Full payment orchestrator:
    * 1. Creates payment with pending status
    * 2. Verifies via gateway (or returns UPI QR for manual flow)
