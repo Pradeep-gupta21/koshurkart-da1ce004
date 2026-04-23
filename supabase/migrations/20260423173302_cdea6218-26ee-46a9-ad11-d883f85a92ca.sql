@@ -1,0 +1,1 @@
+UPDATE public.products SET price = 100 WHERE price < 1;
