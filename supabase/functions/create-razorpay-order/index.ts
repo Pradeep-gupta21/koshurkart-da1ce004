@@ -82,6 +82,17 @@ Deno.serve(async (req) => {
       });
     }
 
+    const amountPaise = Math.round(amount * 100);
+    if (amountPaise < 100) {
+      return new Response(JSON.stringify({ error: "Amount must be at least ₹1" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Razorpay receipt: max 40 chars. UUID is 36 — safe, but truncate defensively.
+    const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
+
     const razorpayRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
@@ -89,18 +100,24 @@ Deno.serve(async (req) => {
         Authorization: "Basic " + btoa(`${keyId}:${keySecret}`),
       },
       body: JSON.stringify({
-        amount: Math.round(amount * 100),
+        amount: amountPaise,
         currency: "INR",
-        receipt: orderId,
+        receipt,
       }),
     });
 
     if (!razorpayRes.ok) {
-      console.error("Razorpay API error:", razorpayRes.status);
-      return new Response(JSON.stringify({ error: "Failed to create Razorpay order" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const errorBody = await razorpayRes.text();
+      console.error("Razorpay API error:", razorpayRes.status, errorBody);
+      let parsedError = "Failed to create Razorpay order";
+      try {
+        const parsed = JSON.parse(errorBody);
+        parsedError = parsed?.error?.description || parsedError;
+      } catch { /* keep default */ }
+      return new Response(
+        JSON.stringify({ error: parsedError, status: razorpayRes.status }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const razorpayOrder = await razorpayRes.json();
