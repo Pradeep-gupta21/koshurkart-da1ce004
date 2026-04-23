@@ -46,31 +46,6 @@ export const paymentService = {
   },
 
   /**
-   * Simulates payment gateway verification.
-   * Replace this with real gateway integration (Stripe, Razorpay, etc.) in production.
-   */
-  async verifyPayment(
-    _paymentId: string,
-    method: string
-  ): Promise<{ success: boolean; transactionId: string | null }> {
-    // COD doesn't need verification — stays pending until delivery
-    if (method === 'cod') {
-      return { success: true, transactionId: null };
-    }
-
-    // Simulate gateway processing delay (500-1500ms)
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-
-    // Simulate ~95% success rate
-    const success = Math.random() > 0.05;
-    const transactionId = success
-      ? `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
-      : null;
-
-    return { success, transactionId };
-  },
-
-  /**
    * Full payment orchestrator:
    * 1. Creates payment with pending status
    * 2. Verifies via gateway (or returns UPI QR for manual flow)
@@ -93,9 +68,20 @@ export const paymentService = {
     razorpayOrderId?: string;
     razorpayKeyId?: string;
   }> {
-    // Step 1: Create pending payment
+    // Idempotency: if a pending payment already exists for this user+order,
+    // reuse it instead of creating a duplicate row (prevents double-click double-charge).
+    const { data: existing } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('order_id', orderId)
+      .in('payment_status', ['pending', 'pending_verification'])
+      .maybeSingle();
+
     const provider = method === 'razorpay' ? 'razorpay' : undefined;
-    const payment = await this.createPayment(userId, orderId, amount, method, provider, upiId);
+    const payment = existing
+      ? existing
+      : await this.createPayment(userId, orderId, amount, method, provider, upiId);
 
     // Fetch payment method settings for merchant details
     const pmSettings = await fetchPaymentMethodSettings();
@@ -210,43 +196,41 @@ export const paymentService = {
   },
 
   /**
-   * Confirm UPI payment — user clicks "I Have Paid"
+   * Confirm UPI payment — user clicks "I Have Paid".
+   * Routes through the `confirm-upi-payment` edge function so the status update
+   * is server-side validated (RLS does not allow user UPDATE on payments).
    */
   async confirmUpiPayment(paymentId: string, orderId: string, proofUrl?: string) {
-    const updates: Record<string, unknown> = { payment_status: 'pending_verification' };
-    if (proofUrl) updates.payment_proof = proofUrl;
-
-    const { data, error } = await supabase
-      .from('payments')
-      .update(updates as any)
-      .eq('id', paymentId)
-      .select()
-      .single();
-    if (error) throw error;
-
-    // Update order to reflect pending verification
-    await orderService.updateOrderStatus(orderId, {
-      payment_status: 'pending',
-      order_status: 'processing',
+    const { data, error } = await supabase.functions.invoke('confirm-upi-payment', {
+      body: { paymentId, orderId, proofUrl },
     });
-
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
     return data;
   },
 
   /**
-   * Upload payment proof screenshot
+   * Upload payment proof screenshot to the PRIVATE `payment-proofs` bucket.
+   * Returns a short-lived signed URL (1 hour). The path is namespaced under
+   * the user's id so RLS storage policies grant access to owner + admins only.
    */
   async uploadPaymentProof(file: File): Promise<string> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     const ext = file.name.split('.').pop() ?? 'png';
-    const path = `payment-proofs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const { error } = await supabase.storage
-      .from('product-images')
+    const { error: upErr } = await supabase.storage
+      .from('payment-proofs')
       .upload(path, file, { cacheControl: '3600', upsert: false });
-    if (error) throw error;
+    if (upErr) throw upErr;
 
-    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-    return data.publicUrl;
+    const { data, error: signErr } = await supabase.storage
+      .from('payment-proofs')
+      .createSignedUrl(path, 60 * 60);
+    if (signErr || !data?.signedUrl) throw signErr ?? new Error('Failed to sign URL');
+    return data.signedUrl;
   },
 
   async getPaymentByOrder(orderId: string) {

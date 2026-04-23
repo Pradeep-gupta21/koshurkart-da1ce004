@@ -329,6 +329,39 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_audit_log: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          new_status: string | null
+          old_status: string | null
+          payment_id: string
+          source: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          old_status?: string | null
+          payment_id: string
+          source?: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          new_status?: string | null
+          old_status?: string | null
+          payment_id?: string
+          source?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -1126,6 +1159,30 @@ export type Database = {
           verification_rejection_reason?: string | null
           verification_status?: string
           withdrawable_balance?: number | null
+        }
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          event_type: string | null
+          payload: Json | null
+          processed_at: string
+          provider: string
+          provider_event_id: string
+        }
+        Insert: {
+          event_type?: string | null
+          payload?: Json | null
+          processed_at?: string
+          provider: string
+          provider_event_id: string
+        }
+        Update: {
+          event_type?: string | null
+          payload?: Json | null
+          processed_at?: string
+          provider?: string
+          provider_event_id?: string
         }
         Relationships: []
       }
