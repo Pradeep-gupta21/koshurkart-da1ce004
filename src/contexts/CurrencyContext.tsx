@@ -1,53 +1,32 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { currencyService, CurrencyCode, CURRENCIES } from "@/services/currencyService";
-
-const CURRENCY_STORAGE_KEY = "preferred_currency";
+import React, { createContext, useContext, useCallback } from "react";
+import { currencyService, CurrencyCode } from "@/services/currencyService";
 
 interface CurrencyContextType {
   currency: CurrencyCode;
   country: string;
   isLoading: boolean;
   setCurrency: (code: CurrencyCode) => void;
-  convertPrice: (amountUsd: number) => number;
-  formatPrice: (amountUsd: number) => string;
+  convertPrice: (amount: number) => number;
+  formatPrice: (amount: number) => string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
-    const saved = localStorage.getItem(CURRENCY_STORAGE_KEY);
-    return (saved && saved in CURRENCIES) ? saved as CurrencyCode : 'USD';
-  });
-  const [country, setCountry] = useState('US');
-  const [isLoading, setIsLoading] = useState(true);
+  // INR is the only supported currency. Prices are stored in rupees end-to-end.
+  const currency: CurrencyCode = 'INR';
+  const country = 'IN';
+  const isLoading = false;
 
-  useEffect(() => {
-    const saved = localStorage.getItem(CURRENCY_STORAGE_KEY);
-    if (saved && saved in CURRENCIES) {
-      setIsLoading(false);
-      return;
-    }
-    currencyService.detectUserCurrency().then(({ country: c, currency: cur }) => {
-      setCountry(c);
-      setCurrencyState(cur);
-      localStorage.setItem(CURRENCY_STORAGE_KEY, cur);
-    }).finally(() => setIsLoading(false));
+  const setCurrency = useCallback((_code: CurrencyCode) => {
+    // No-op: INR is the only supported currency.
   }, []);
 
-  const setCurrency = useCallback((code: CurrencyCode) => {
-    setCurrencyState(code);
-    localStorage.setItem(CURRENCY_STORAGE_KEY, code);
+  const convertPrice = useCallback((amount: number) => amount, []);
+
+  const formatPrice = useCallback((amount: number) => {
+    return currencyService.formatPrice(amount, 'INR');
   }, []);
-
-  const convertPrice = useCallback((amountUsd: number) => {
-    return currencyService.convertPrice(amountUsd, 'USD', currency);
-  }, [currency]);
-
-  const formatPrice = useCallback((amountUsd: number) => {
-    const converted = currencyService.convertPrice(amountUsd, 'USD', currency);
-    return currencyService.formatPrice(converted, currency);
-  }, [currency]);
 
   return (
     <CurrencyContext.Provider value={{ currency, country, isLoading, setCurrency, convertPrice, formatPrice }}>
