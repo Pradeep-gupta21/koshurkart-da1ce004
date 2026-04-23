@@ -68,9 +68,20 @@ export const paymentService = {
     razorpayOrderId?: string;
     razorpayKeyId?: string;
   }> {
-    // Step 1: Create pending payment
+    // Idempotency: if a pending payment already exists for this user+order,
+    // reuse it instead of creating a duplicate row (prevents double-click double-charge).
+    const { data: existing } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('order_id', orderId)
+      .in('payment_status', ['pending', 'pending_verification'])
+      .maybeSingle();
+
     const provider = method === 'razorpay' ? 'razorpay' : undefined;
-    const payment = await this.createPayment(userId, orderId, amount, method, provider, upiId);
+    const payment = existing
+      ? existing
+      : await this.createPayment(userId, orderId, amount, method, provider, upiId);
 
     // Fetch payment method settings for merchant details
     const pmSettings = await fetchPaymentMethodSettings();
