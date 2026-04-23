@@ -2,9 +2,14 @@ import { supabase } from '@/integrations/supabase/client';
 
 export const orderService = {
   async create(userId: string, totalAmount: number) {
+    // Guard: payment gateways reject sub-rupee amounts. All prices are INR.
+    if (!Number.isFinite(totalAmount) || totalAmount < 1) {
+      throw new Error('Order total must be at least ₹1');
+    }
+    const rounded = Math.round(totalAmount * 100) / 100;
     const { data, error } = await supabase
       .from('orders')
-      .insert({ user_id: userId, total_amount: totalAmount })
+      .insert({ user_id: userId, total_amount: rounded })
       .select()
       .single();
     if (error) throw error;

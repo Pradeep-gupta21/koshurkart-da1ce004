@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD CONSTRAINT products_price_min_inr CHECK (price >= 1);
