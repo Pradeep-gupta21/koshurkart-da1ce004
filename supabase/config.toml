@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.verify-upi-payment]
 verify_jwt = false
+
+[functions.confirm-upi-payment]
+verify_jwt = false
