@@ -1,179 +1,115 @@
-## Reality check — current trust gap
+## Reality check
 
-Today's checkout still trusts the client in three places, even after recent hardening:
+Most of this is already done in the previous turns:
 
-| Layer | Current behavior | Risk |
-|---|---|---|
-| `orderService.create(userId, totalPrice)` | Client passes `totalPrice` from `CartContext` (sum of `product.discountPrice ?? product.price` held in React state) | Client could mutate state and create a ₹1 order for a ₹50,000 cart |
-| `orderService.addItems(...)` | Client passes `price`, `quantity`, `vendor_id`, `image` per row | Same — line prices are client-supplied |
-| `processPayment(userId, orderId, amount, method)` → `createPayment` insert | `payments.amount` = client `amount` | Even though `verify-razorpay-payment` now cross-checks against `payments.amount`, that row was seeded from the client. The whole chain (`payments.amount → Razorpay order amount → verification`) anchors on a number the user controlled. |
-| `paymentService.processPayment` UPI branch | `amount` used to build `upi://...&am=${amount}` deeplink/QR | QR amount = client amount, not DB |
-| `openRazorpayCheckout` | `amount: Math.round(totalPrice * 100)` passed to `Razorpay()` modal | Cosmetic (gateway uses `order_id` for the actual charge) but inconsistent |
+- **`create-checkout` edge function** is the single source of truth — it re-prices from DB, reserves stock, computes totals in INR, creates `orders`/`order_items`/`payments`, then mints the Razorpay order or UPI QR using the **server total**. Client never sends prices.
+- **`verify-razorpay-payment`** fetches the Razorpay order back, checks `rpOrder.amount === payments.amount * 100` and `currency === "INR"`, logs mismatches to `analytics_events`, has signature HMAC-SHA256 with constant-time compare, and is idempotent via the `one_success_per_order` unique index plus `razorpay_payment_id` uniqueness.
+- **`razorpay-webhook`** independently confirms the same payment.
+- **Frontend `paymentService.startCheckout`** calls the edge function with only `{product_id, quantity}`.
 
-`create-razorpay-order` is already correct (re-fetches `orders.total_amount` server-side). The fix below makes the **upstream** writes (`orders`, `order_items`, `payments`) equally trusted.
+Two gaps remain that match what the user is asking for:
 
-## Decision: a single backend endpoint owns the entire checkout
+1. **The UI still shows a client-computed cart total** (`CartContext.totalPrice` from localStorage `product.price`). If the DB price changes between adding-to-cart and checkout, the user sees ₹X on cart, but the server quotes ₹Y on checkout — same family of "UI doesn't match payment" the user is describing. There is no explicit "Final amount: ₹XXX (server-quoted)" step before paying.
+2. **`create-checkout` has no rate limiting** and only ad-hoc `console.error` logs — no structured price-tampering audit trail.
 
-Replace the client-driven sequence (`reserveStock` → `orderService.create` → `addItems` → `processPayment`) with **one** edge function `create-checkout` that does the whole thing atomically with the service-role key. The client sends only:
-
-```json
-{
-  "items": [{ "product_id": "...", "quantity": 2 }, ...],
-  "payment_method": "razorpay" | "upi" | "cod",
-  "shipping_pincode": "110001"
-}
-```
-
-Server returns `{ orderId, paymentId, total, razorpayOrderId?, qrCodeUrl?, keyId? }`.
-
-This collapses the trust surface to a single endpoint and makes "the price you pay = the DB price" structurally guaranteed.
+Plan addresses exactly those.
 
 ## Plan
 
-### 1. New edge function: `create-checkout`
+### 1. New edge function `quote-checkout` (read-only price quote)
 
-`supabase/functions/create-checkout/index.ts`
-
-Logic, all under service-role:
-
-1. Validate JWT → `user.id`.
-2. Validate body with Zod: `items[]` (1–50 items, each `{ product_id: uuid, quantity: int 1–99 }`), `payment_method ∈ {razorpay, upi, cod}`, `shipping_pincode` (6 digits).
-3. **Fetch every product row** from DB by `id IN (...)`:
-   - Reject if any product missing, `status != 'active'`, or insufficient `stock - reserved_stock`.
-   - Compute server-side `unit_price = COALESCE(discount_price, dynamic_price, price)` per product. Never use client price.
-4. **Reserve stock** atomically per item via existing `reserve_stock(product_id, quantity)` RPC. If any fails, release everything reserved so far and return 409.
-5. Compute `total = SUM(unit_price * quantity)`. Reject if `total < 1` (Razorpay floor) or `total > 1_000_000` (sanity ceiling).
-6. **Insert `orders`** with `total_amount = total`, `user_id`, `payment_status='pending'`, `order_status='processing'`.
-7. **Insert `order_items`** rows with server-computed `price`, `vendor_id` (looked up from products table, not client), `title`, `image`.
-8. **Idempotent payment row**: re-use any existing pending `payments` row for `(user_id, order_id)`; otherwise insert fresh with `amount = total`, commission fields from `platform_settings`.
-9. Branch by `payment_method`:
-   - **cod**: payment stays `pending`, order → `confirmed`, return `{ orderId, paymentId, total }`.
-   - **upi**: build UPI deeplink with `am=${total}` (DB total, not client), generate QR URL, store on payment, return `{ orderId, paymentId, total, qrCodeUrl, merchantUpiId }`.
-   - **razorpay**: call Razorpay `POST /v1/orders` with `amount = Math.round(total * 100)`, `currency: 'INR'`, store `razorpay_order_id` on payment, return `{ orderId, paymentId, total, razorpayOrderId, keyId }`.
-10. On any failure mid-flow, release reserved stock and return structured error.
-
-Register in `supabase/config.toml` with `verify_jwt = false` (we validate inside).
-
-### 2. Deprecate the client-driven path
-
-**`src/services/orderService.ts`** — keep read methods (`getUserOrders`, `getVendorOrderItems`, etc.) unchanged. Mark `create()` and `addItems()` deprecated; remove their callers (currently only `CheckoutPage.handlePlaceOrder` and the retry handler). RLS already prevents non-owner inserts, but we want one canonical write path.
-
-**`src/services/paymentService.ts`** — add a thin wrapper:
+Same input shape as `create-checkout` but **no writes, no stock reservation, no gateway call**. Returns the server-priced line items + total.
 
 ```ts
-async startCheckout(items, paymentMethod, pincode) {
-  const { data, error } = await supabase.functions.invoke('create-checkout', {
-    body: { items, payment_method: paymentMethod, shipping_pincode: pincode }
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data; // { orderId, paymentId, total, razorpayOrderId?, qrCodeUrl?, keyId? }
-}
+// POST { items: [{product_id, quantity}] }
+// → { lines: [{product_id, title, image, quantity, unit_price, line_total}],
+//     subtotal, currency: "INR", quote_id, expires_at }
 ```
 
-Keep `processPayment` for the rare retry path on an existing order (it already re-fetches server-side via `create-razorpay-order`). Remove the client `amount` parameter from its signature in a follow-up; for now, retry calls it with the **server-returned** `total`, never the cart total.
+Used by:
+- Cart page — to show "Server total: ₹XXX" alongside the local estimate when they differ.
+- Checkout page — to show **"Final amount: ₹XXX"** (locked) before "Place Order" is enabled.
 
-### 3. Refactor `CheckoutPage.handlePlaceOrder`
+`quote_id` is `crypto.randomUUID()`; `expires_at = now + 5 min`. We don't persist quotes (stateless); the quote is purely informational. The actual price binding happens server-side at `create-checkout` time anyway, so `quote_id` is just a UX artifact ("the price you saw is the price we'll charge, refresh if older than 5 min").
 
-Replace lines 170-254 with:
+### 2. Frontend — surface server total
 
-```ts
-const itemsPayload = items.map(({ product, quantity }) => ({
-  product_id: product.id,
-  quantity,
-}));
+**`src/hooks/useCheckoutQuote.ts`** (new) — React Query hook:
+- `queryKey: ['checkout-quote', sortedItems]`, `staleTime: 60s`, `refetchInterval: 4 min`.
+- Returns `{ data: quote, isLoading, error, refetch }`.
 
-const result = await paymentService.startCheckout(
-  itemsPayload,
-  paymentMethod,
-  shipping.zip
-);
+**`src/pages/CheckoutPage.tsx`**
+- Fetch quote on mount (and on cart change).
+- Replace the "Order Summary" `formatPrice(totalPrice)` with `formatPrice(quote.subtotal)`.
+- Add a prominent block:
+  ```
+  Final amount: ₹XXX
+  This is the exact amount you will be charged.
+  ```
+- Show `Loader2` skeleton while `isLoading`.
+- On error, show retry button and disable "Place Order".
+- Detect drift: if `quote.subtotal !== client totalPrice`, show a small notice "Prices updated since you added to cart" and update display to server value.
+- Disable "Place Order" while quote is stale/loading/erroring.
 
-setOrderId(result.orderId);
-setPendingOrderId(result.orderId);
+**`src/pages/CartPage.tsx`**
+- Same hook, smaller treatment: show server subtotal under the local estimate when they differ; "Proceed to Checkout" remains enabled (real binding is at checkout).
 
-// Branch on what the server returned:
-if (result.qrCodeUrl) {
-  setQrCodeUrl(result.qrCodeUrl);
-  setUpiPaymentId(result.paymentId);
-  setFlowState('upi_pending');
-  return;
-}
-if (result.razorpayOrderId) {
-  await openRazorpayCheckout(
-    result.razorpayOrderId,
-    result.keyId,
-    { id: result.paymentId },
-    result.orderId,
-    /* reserved tracking now lives server-side; pass [] */ []
-  );
-  return;
-}
-// COD
-clearCart();
-setFlowState('success');
+### 3. `create-checkout` hardening
+
+**Rate limiting** — sliding window via DB function:
+
+```sql
+create or replace function public.checkout_rate_limit(_user_id uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare cnt int;
+begin
+  select count(*) into cnt
+  from analytics_events
+  where user_id = _user_id
+    and event_type = 'checkout_attempt'
+    and created_at > now() - interval '1 minute';
+  return cnt < 10;  -- max 10 checkouts/min/user
+end $$;
 ```
 
-`openRazorpayCheckout` change: `amount: Math.round(result.total * 100)` instead of `totalPrice * 100`. This is cosmetic (gateway charges by `order_id`) but removes the last `totalPrice` reference from the payment flow.
+In `create-checkout` after auth, call the RPC; on `false` return `429 { error: "Too many checkout attempts" }`. Log every attempt as `analytics_events` with `event_type='checkout_attempt'`.
 
-Inventory reservation moves entirely server-side (no more `inventoryService.reserveStock` loop on the client). Confirm-stock-on-success and release-on-failure also move server-side, fired by the existing `on_payment_success` trigger path + the existing `sweep_stale_orders` cron for abandoned sessions.
+**Structured logging** — in addition to existing `console.error`, write to `analytics_events`:
+- `checkout_attempt` — user_id, item count, payment_method
+- `checkout_succeeded` — order_id, total, method
+- `checkout_failed` — reason (`stock`, `inactive_product`, `min_amount`, `gateway_error`, `rate_limited`)
 
-### 4. UPI confirm/QR — already aligned after step 1
+**Quote-vs-actual drift logging** — accept optional `client_quoted_total` in the request. If it differs from server total by more than ₹0.01, write `event_type='checkout_quote_mismatch'` (don't reject — server total wins, but we want the audit). The frontend will pass the quote it just fetched. This catches stale clients and any tampering attempt.
 
-`confirm-upi-payment` doesn't need changes; it reads `payments.amount` (server-set in step 1.8) and updates status. The QR URL the user scans now mathematically equals `payments.amount` because both came from the same server-computed `total` in step 1.5–1.9.
+### 4. `quote-checkout` hardening
 
-### 5. Validation rollups
+Same auth + rate limit (`event_type='quote_attempt'`, 30/min/user — quotes are cheaper and may be re-fetched).
 
-- Server-side: Zod on input, DB checks on stock + product status, `total >= 1` floor, `total <= 1_000_000` ceiling, currency hardcoded `INR`.
-- DB-level: existing `products_price_min_inr CHECK (price >= 1)` constraint already in place; `payments_one_success_per_order` partial unique index prevents double-credit; `webhook_events` PK prevents replay.
-- Razorpay verify (already correct): signature HMAC + `rpOrder.amount === Math.round(payments.amount * 100)` + `rpOrder.currency === 'INR'`.
-- Webhook (already correct): same amount check + dedupe via `webhook_events.provider_event_id`.
+### 5. Files
 
-### 6. Tests
+**Migration**
+- `<ts>_checkout_rate_limit.sql` — `checkout_rate_limit(uuid)` and `quote_rate_limit(uuid)` SECURITY DEFINER functions.
 
-- `supabase/functions/create-checkout/checkout_test.ts` — Deno tests for: happy path, client-supplied price ignored, out-of-stock rejection, sub-₹1 rejection, idempotent re-call returning the same `paymentId`.
-
-## Files
-
-**Create**
-- `supabase/functions/create-checkout/index.ts` — single source of truth for orders + payments
-- `supabase/functions/create-checkout/checkout_test.ts` — Deno unit tests
+**New**
+- `supabase/functions/quote-checkout/index.ts`
+- `src/hooks/useCheckoutQuote.ts`
 
 **Edit**
-- `supabase/config.toml` — register `create-checkout` (`verify_jwt = false`)
-- `src/services/paymentService.ts` — add `startCheckout()`; remove unused client `amount` reliance in retry
-- `src/pages/CheckoutPage.tsx` — replace `handlePlaceOrder` + `handleRetryPayment` to use `startCheckout`; drop client-side `inventoryService.reserveStock` loops; pass `result.total` to Razorpay modal
-- `src/services/orderService.ts` — JSDoc-deprecate `create()` and `addItems()` (keep until next refactor; no callers after the page change)
+- `supabase/functions/create-checkout/index.ts` — rate limit, structured logging, accept `client_quoted_total`, log drift.
+- `src/services/paymentService.ts` — add `quoteCheckout(items)`; `startCheckout` accepts optional `clientQuotedTotal`.
+- `src/pages/CheckoutPage.tsx` — show server-quoted "Final amount", loading/error states, gate "Place Order" on a fresh successful quote.
+- `src/pages/CartPage.tsx` — show server subtotal with drift hint.
+- `supabase/config.toml` — register `quote-checkout`.
 
-**No change**
-- `supabase/functions/create-razorpay-order/index.ts` — still correct (re-fetches `orders.total_amount`); used as fallback by retry path
-- `supabase/functions/verify-razorpay-payment/index.ts` — already cross-checks amount + currency
-- `supabase/functions/razorpay-webhook/index.ts` — already deduped + amount-checked
-- `supabase/functions/confirm-upi-payment/index.ts` — already user-authed + server-validated
-- All trigger functions (`on_payment_success`, `on_order_refund_reverse_earnings`, `sweep_stale_orders`) — already wired to the right state transitions
+### 6. Out of scope (intentional)
 
-## Out of scope (intentional)
+- Persisting quotes server-side / signed quote tokens — overkill given `create-checkout` already re-prices from DB at bind time. The quote is purely a UX preview.
+- Gateway-level rate limiting — Supabase platform already throttles per-IP; user-scoped DB limit is the meaningful guard.
+- IP-based limits — Edge runtime doesn't expose a stable client IP through the proxy; `user_id` scoped is the correct unit.
 
-- Multi-currency — INR-only is locked from the previous plan
-- Quote/lock-price flow (Amazon-style price guarantee for X minutes) — current dynamic pricing recomputes via cron, not on each checkout call, so cart→checkout drift is small. Add later if needed.
-- Address validation against `serviceable_pincodes` inside `create-checkout` — already enforced upstream by `useServiceability`; can be hardened later
+### Expected end state
 
-## Expected outcome
-
-```text
-Client → POST create-checkout { items: [{product_id, qty}], method, pincode }
-                ↓
-Backend: validate → re-price from DB → reserve stock → insert order
-       → insert order_items (server prices) → insert payment (amount=DB total)
-       → branch on method, build Razorpay order / UPI QR with DB total
-                ↓
-Client receives { orderId, paymentId, total, razorpayOrderId | qrCodeUrl, keyId }
-                ↓
-Razorpay modal opens against razorpayOrderId (gateway charges by order, not by client amount)
-                ↓
-verify-razorpay-payment: HMAC OK + rpOrder.amount === payments.amount*100 → success
-                ↓
-on_payment_success trigger: credits vendor earnings, marks confirm_stock
-```
-
-The client never sees, computes, or transmits a price after this change. UI display of `formatPrice(totalPrice)` remains, but it's purely cosmetic — the server has the only number that matters.
+- Cart page: shows server-priced subtotal with a "prices updated" notice if it drifted from local cache.
+- Checkout page: prominent "Final amount: ₹XXX — this is what you will be charged", loaded from `quote-checkout`, with loading/error states, and "Place Order" disabled until the quote is fresh.
+- Razorpay/UPI charge always equals that displayed final amount (already true after the previous turn's work).
+- Server rejects checkout abuse (429) and logs every attempt + price mismatch to `analytics_events` for the admin to inspect.
