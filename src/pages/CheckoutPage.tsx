@@ -39,6 +39,7 @@ const CheckoutPage = () => {
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [failureError, setFailureError] = useState<string | null>(null);
   const [pmSettings, setPmSettings] = useState<PaymentMethodSettings | null>(null);
+  const [paymentMode, setPaymentMode] = useState<'test' | 'live' | null>(null);
 
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
