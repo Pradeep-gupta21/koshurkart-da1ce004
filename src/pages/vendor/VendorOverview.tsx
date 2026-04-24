@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle,
+  IndianRupee, Package, ShoppingCart, TrendingUp, AlertTriangle,
   ShieldCheck, Lightbulb, BarChart3, Wallet, Info, CreditCard,
 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import VendorGettingStarted from "@/components/vendor/VendorGettingStarted";
 import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
@@ -144,8 +145,8 @@ const VendorOverview = () => {
 
   const statCards = [
     { title: "Total Sales", value: stats.totalSales, icon: ShoppingCart, gradient: "from-primary/10 to-primary/5" },
-    { title: "Total Earnings", value: `$${stats.totalEarnings.toFixed(2)}`, icon: DollarSign, gradient: "from-green-500/10 to-green-500/5" },
-    { title: "Withdrawable", value: `$${stats.withdrawableBalance.toFixed(2)}`, icon: Wallet, gradient: "from-accent/10 to-accent/5" },
+    { title: "Total Earnings", value: formatPrice(stats.totalEarnings), icon: IndianRupee, gradient: "from-green-500/10 to-green-500/5" },
+    { title: "Withdrawable", value: formatPrice(stats.withdrawableBalance), icon: Wallet, gradient: "from-accent/10 to-accent/5" },
     { title: "Active Products", value: stats.products, icon: Package, gradient: "from-secondary/10 to-secondary/5" },
   ];
 
@@ -218,7 +219,7 @@ const VendorOverview = () => {
                   <Tooltip
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
                     labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, "Earnings"]}
+                    formatter={(value: number) => [formatPrice(value), "Earnings"]}
                   />
                   <Area type="monotone" dataKey="amount" stroke="hsl(var(--primary))" fill="url(#earningsGrad)" strokeWidth={2} />
                 </AreaChart>

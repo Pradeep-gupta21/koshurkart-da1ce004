@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Package, DollarSign, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
+import { BarChart3, TrendingUp, Package, IndianRupee, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { productService } from "@/services/productService";
 import { analyticsService } from "@/services/analyticsService";
 import { TimeRangeSelector, type TimeRange } from "@/components/analytics/TimeRangeSelector";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell,
@@ -23,6 +24,7 @@ const COLORS = [
 const VendorAnalytics = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const [range, setRange] = useState<TimeRange>("monthly");
+  const { formatPrice } = useCurrency();
 
   const { data: products = [] } = useQuery({
     queryKey: ['vendor-products', vendorId],
@@ -57,7 +59,7 @@ const VendorAnalytics = () => {
   const activeProducts = products.filter(p => (p.status || 'active') === 'active').length;
 
   const statsCards = [
-    { label: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign },
+    { label: "Total Revenue", value: formatPrice(totalRevenue), icon: IndianRupee },
     { label: "Units Sold", value: totalUnitsSold.toString(), icon: TrendingUp },
     { label: "Active Products", value: activeProducts.toString(), icon: Package },
     { label: "Total Stock", value: totalStock.toString(), icon: BarChart3 },
@@ -236,7 +238,7 @@ const VendorAnalytics = () => {
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+                  <Tooltip formatter={(v: number) => formatPrice(v)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
