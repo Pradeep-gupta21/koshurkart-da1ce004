@@ -2,6 +2,10 @@
 // The client sends only product_ids + quantities. Server re-prices from DB,
 // reserves stock, creates order/items/payment, and (for razorpay/upi) creates
 // the gateway artifact — all using DB-derived amounts in INR.
+//
+// Idempotency: clients SHOULD send a stable `idempotency_key` (UUID) per
+// checkout attempt. Retries with the same key (e.g. due to network drops)
+// return the same order/payment instead of creating duplicates.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
 
@@ -32,7 +36,14 @@ const BodySchema = z.object({
   // Optional — what the client *thought* the total was. Used only for
   // tampering/drift telemetry; the server total is always authoritative.
   client_quoted_total: z.number().nonnegative().optional(),
+  // Optional but RECOMMENDED. Stable per checkout attempt — retries with the
+  // same key are idempotent (no duplicate orders, no duplicate gateway calls).
+  idempotency_key: z.string().min(16).max(64).optional(),
 });
+
+function modeFromKey(keyId: string | undefined): "test" | "live" {
+  return keyId?.startsWith("rzp_live_") ? "live" : "test";
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -60,12 +71,77 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { items, payment_method, client_quoted_total } = parsed.data;
+  const { items, payment_method, client_quoted_total, idempotency_key } = parsed.data;
 
   const service = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // Razorpay mode signal — surfaced to the client so the UI can show TEST banners.
+  const keyId = Deno.env.get("RAZORPAY_KEY_ID");
+  const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
+  const mode = modeFromKey(keyId);
+
+  // Production sanity check: warn loudly if running on test keys in prod.
+  if (Deno.env.get("ENV") === "production" && mode === "test") {
+    console.warn("[create-checkout] WARNING: running with TEST Razorpay keys in production");
+    await service.from("analytics_events").insert({
+      event_type: "payment_config_warning",
+      user_id: user.id,
+      metadata: { reason: "test_keys_in_production" },
+    });
+  }
+
+  // ---- Idempotency short-circuit ----
+  // If we've already created an order for (user, idempotency_key), return it
+  // verbatim. No new stock reservation, no new gateway call.
+  if (idempotency_key) {
+    const { data: existingOrder } = await service
+      .from("orders")
+      .select("id, total_amount")
+      .eq("user_id", user.id)
+      .eq("idempotency_key", idempotency_key)
+      .maybeSingle();
+
+    if (existingOrder) {
+      const { data: existingPayment } = await service
+        .from("payments")
+        .select("id, payment_method, razorpay_order_id, qr_code_url, upi_id, amount, payment_status")
+        .eq("order_id", existingOrder.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existingPayment) {
+        const total = Number(existingOrder.total_amount);
+        const base = {
+          orderId: existingOrder.id,
+          paymentId: existingPayment.id,
+          total,
+          method: existingPayment.payment_method,
+          idempotent: true,
+        };
+        if (existingPayment.payment_method === "razorpay" && existingPayment.razorpay_order_id) {
+          return json({
+            ...base,
+            razorpayOrderId: existingPayment.razorpay_order_id,
+            keyId,
+            mode,
+            amountPaise: Math.round(total * 100),
+            currency: "INR",
+          });
+        }
+        if (existingPayment.payment_method === "upi") {
+          return json({
+            ...base,
+            qrCodeUrl: existingPayment.qr_code_url,
+            merchantUpiId: existingPayment.upi_id,
+          });
+        }
+        return json(base);
+      }
+    }
+  }
 
   // ---- Rate limit (per-user sliding window) ----
   const { data: allowed } = await service.rpc("checkout_rate_limit", { _user_id: user.id });
@@ -82,7 +158,7 @@ Deno.serve(async (req) => {
   await service.from("analytics_events").insert({
     event_type: "checkout_attempt",
     user_id: user.id,
-    metadata: { item_count: items.length, payment_method },
+    metadata: { item_count: items.length, payment_method, mode },
   });
 
   // ---- 1. Re-price from DB (server is the only source of truth) ----
@@ -194,17 +270,52 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ---- 4. Insert order ----
-  const { data: order, error: orderErr } = await service
+  // ---- 4. Insert order (with idempotency_key if supplied) ----
+  const orderInsert: Record<string, unknown> = {
+    user_id: user.id,
+    total_amount: total,
+    payment_status: "pending",
+    order_status: "processing",
+  };
+  if (idempotency_key) orderInsert.idempotency_key = idempotency_key;
+
+  let { data: order, error: orderErr } = await service
     .from("orders")
-    .insert({
-      user_id: user.id,
-      total_amount: total,
-      payment_status: "pending",
-      order_status: "processing",
-    })
+    .insert(orderInsert)
     .select("id")
     .single();
+
+  // Race: another concurrent request with the same idempotency_key won.
+  // Re-fetch and return that order's payload.
+  if (orderErr && (orderErr as { code?: string }).code === "23505" && idempotency_key) {
+    await releaseReserved();
+    const { data: dup } = await service
+      .from("orders")
+      .select("id, total_amount")
+      .eq("user_id", user.id)
+      .eq("idempotency_key", idempotency_key)
+      .maybeSingle();
+    if (dup) {
+      const { data: dupPay } = await service
+        .from("payments")
+        .select("id, payment_method, razorpay_order_id, qr_code_url, upi_id")
+        .eq("order_id", dup.id)
+        .maybeSingle();
+      return json({
+        orderId: dup.id,
+        paymentId: dupPay?.id ?? null,
+        total: Number(dup.total_amount),
+        method: dupPay?.payment_method ?? payment_method,
+        idempotent: true,
+        ...(dupPay?.razorpay_order_id
+          ? { razorpayOrderId: dupPay.razorpay_order_id, keyId, mode, amountPaise: Math.round(Number(dup.total_amount) * 100), currency: "INR" }
+          : {}),
+        ...(dupPay?.qr_code_url ? { qrCodeUrl: dupPay.qr_code_url, merchantUpiId: dupPay.upi_id } : {}),
+      });
+    }
+    return json({ error: "Duplicate request" }, 409);
+  }
+
   if (orderErr || !order) {
     await releaseReserved();
     console.error("order insert failed", orderErr);
@@ -291,13 +402,13 @@ Deno.serve(async (req) => {
     service.from("analytics_events").insert({
       event_type: "checkout_succeeded",
       user_id: user.id,
-      metadata: { order_id: orderId, total, method, ...extra },
+      metadata: { order_id: orderId, total, method, mode, ...extra },
     });
 
   if (payment_method === "cod") {
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
     await logSuccess("cod");
-    return json({ orderId, paymentId: payment.id, total, method: "cod" });
+    return json({ orderId, paymentId: payment.id, total, method: "cod", mode });
   }
 
   if (payment_method === "upi") {
@@ -305,12 +416,10 @@ Deno.serve(async (req) => {
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
     await service.from("payments").update({ qr_code_url: qrCodeUrl, upi_id: merchantUpiId }).eq("id", payment.id);
     await logSuccess("upi");
-    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId });
+    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId, mode });
   }
 
   // razorpay
-  const keyId = Deno.env.get("RAZORPAY_KEY_ID");
-  const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
   if (!keyId || !keySecret) {
     await service.from("analytics_events").insert({
       event_type: "checkout_failed",
@@ -355,6 +464,7 @@ Deno.serve(async (req) => {
     method: "razorpay",
     razorpayOrderId: rpOrder.id,
     keyId,
+    mode,
     amountPaise,
     currency: "INR",
   });
