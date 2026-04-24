@@ -8,6 +8,9 @@
 // return the same order/payment instead of creating duplicates.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
+import { calculateOrderAmount, assertAmountConsistency } from "../_shared/pricing.ts";
+
+const DEBUG_PRICING = Deno.env.get("DEBUG_PRICING") === "true";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -229,9 +232,35 @@ Deno.serve(async (req) => {
     reserved.push({ product_id: ln.product_id, quantity: ln.quantity });
   }
 
-  // ---- 3. Compute total (rounded to 2 dp INR) ----
-  const totalRaw = lines.reduce((s, l) => s + l.unit_price * l.quantity, 0);
-  const total = Math.round(totalRaw * 100) / 100;
+  // ---- 3. Compute total via shared helper (rupees + paise locked together) ----
+  const pricing = calculateOrderAmount(
+    lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price })),
+  );
+  const total = pricing.subtotal_inr;
+  const amountPaise = pricing.amount_paise;
+
+  // Hard equality check — rupee total must round-trip exactly to the paise sent
+  // to the gateway. Catches any future rounding/currency-conversion regression
+  // BEFORE we charge the user.
+  const drift = assertAmountConsistency(total, amountPaise);
+  if (drift) {
+    await releaseReserved();
+    await service.from("analytics_events").insert({
+      event_type: "amount_assertion_failed",
+      user_id: user.id,
+      metadata: {
+        subtotal_inr: total,
+        amount_paise: amountPaise,
+        ...drift,
+        payment_method,
+      },
+    });
+    return json(
+      { error: "Amount mismatch detected. Order not created.", code: "AMOUNT_MISMATCH" },
+      422,
+    );
+  }
+
   if (total < 1) {
     await releaseReserved();
     await service.from("analytics_events").insert({
