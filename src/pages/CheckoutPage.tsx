@@ -183,6 +183,7 @@ const CheckoutPage = () => {
       );
 
       setOrderId(result.orderId);
+      setCheckoutResult(result);
       setPendingOrderId(result.orderId);
       if (result.mode) setPaymentMode(result.mode);
       if (result.method === 'upi') {
@@ -214,7 +215,10 @@ const CheckoutPage = () => {
       clearCart();
       setFlowState("success");
     } catch (err: any) {
-      const msg = err?.message ?? "Something went wrong.";
+      const isMismatch = err?.message?.includes('Amount mismatch') || err?.code === 'AMOUNT_MISMATCH';
+      const msg = isMismatch
+        ? 'Pricing mismatch detected. Please refresh the page and try again.'
+        : (err?.message ?? "Something went wrong.");
       toast({ title: "Order failed", description: msg, variant: "destructive" });
       setFailureError(msg);
       setFlowState("form");
@@ -274,6 +278,7 @@ const CheckoutPage = () => {
       );
 
       setOrderId(result.orderId);
+      setCheckoutResult(result);
       setPendingOrderId(result.orderId);
       if (result.mode) setPaymentMode(result.mode);
 
