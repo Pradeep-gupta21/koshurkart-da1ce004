@@ -1,108 +1,179 @@
+## Reality check — current trust gap
 
+Today's checkout still trusts the client in three places, even after recent hardening:
 
-## Reality check — root cause
-
-The mismatch isn't a Razorpay bug; it's a **currency unit mismatch** baked into the app:
-
-| Layer | Unit today | Problem |
+| Layer | Current behavior | Risk |
 |---|---|---|
-| `products.price` (DB) | **USD** (e.g. `0.053`, `4.99`) | Stored as USD per `currencyService` exchange table |
-| `PriceDisplay` UI | Converts USD → user's currency for display via `formatPrice` (×83.1 for INR) | UI shows ₹4.40 for a product whose DB price is `0.053` |
-| `CartContext.totalPrice` | **USD** (raw `product.price` sum) | Never converted |
-| `orders.total_amount` | **USD** | Saved as USD |
-| `create-razorpay-order` edge fn | Reads `orders.total_amount`, multiplies ×100, sends as **INR paise** | Sends `5 paise` (≈₹0.05) for a product the user saw as ₹4.40 → fails Razorpay min ₹1 |
-| UPI deeplink `am=${amount}` | USD value passed verbatim, currency hardcoded `INR` | User sees ₹4.40 on UI, UPI app shows ₹0.05 |
+| `orderService.create(userId, totalPrice)` | Client passes `totalPrice` from `CartContext` (sum of `product.discountPrice ?? product.price` held in React state) | Client could mutate state and create a ₹1 order for a ₹50,000 cart |
+| `orderService.addItems(...)` | Client passes `price`, `quantity`, `vendor_id`, `image` per row | Same — line prices are client-supplied |
+| `processPayment(userId, orderId, amount, method)` → `createPayment` insert | `payments.amount` = client `amount` | Even though `verify-razorpay-payment` now cross-checks against `payments.amount`, that row was seeded from the client. The whole chain (`payments.amount → Razorpay order amount → verification`) anchors on a number the user controlled. |
+| `paymentService.processPayment` UPI branch | `amount` used to build `upi://...&am=${amount}` deeplink/QR | QR amount = client amount, not DB |
+| `openRazorpayCheckout` | `amount: Math.round(totalPrice * 100)` passed to `Razorpay()` modal | Cosmetic (gateway uses `order_id` for the actual charge) but inconsistent |
 
-So the headline bug "UI ₹X but Razorpay charges ₹Y" is a **direct consequence of dual-unit storage**. There is no actual conversion at checkout — the USD number is reinterpreted as INR by the gateway.
+`create-razorpay-order` is already correct (re-fetches `orders.total_amount` server-side). The fix below makes the **upstream** writes (`orders`, `order_items`, `payments`) equally trusted.
 
-## Decision: rupees as single source of truth
+## Decision: a single backend endpoint owns the entire checkout
 
-We will **not** introduce paise as the storage unit. Reasons:
-- Every `numeric` price column already tolerates decimals; switching to integer paise means migrating ~10 columns across `products`, `orders`, `payments`, `payouts`, `vendors.total_earnings`, `vendors.withdrawable_balance`, `ad_campaigns.budget`, `pricing_rules` thresholds, etc., plus every trigger that reads them. High blast radius for zero functional gain — `numeric(12,2)` has no float precision issue.
-- Razorpay needs paise only at the API boundary; `Math.round(amount * 100)` is the only place paise should appear, and it already exists in the edge function.
+Replace the client-driven sequence (`reserveStock` → `orderService.create` → `addItems` → `processPayment`) with **one** edge function `create-checkout` that does the whole thing atomically with the service-role key. The client sends only:
 
-We **will** convert all stored values from USD to INR (one-shot multiply by 83.1, rounded to 2 dp) and lock the app to INR end-to-end. After this, "the price you see is the price you pay" is structurally true.
+```json
+{
+  "items": [{ "product_id": "...", "quantity": 2 }, ...],
+  "payment_method": "razorpay" | "upi" | "cod",
+  "shipping_pincode": "110001"
+}
+```
+
+Server returns `{ orderId, paymentId, total, razorpayOrderId?, qrCodeUrl?, keyId? }`.
+
+This collapses the trust surface to a single endpoint and makes "the price you pay = the DB price" structurally guaranteed.
 
 ## Plan
 
-### 1. Database — convert existing data USD → INR (one-shot)
+### 1. New edge function: `create-checkout`
 
-Migration (data update only, no schema changes):
+`supabase/functions/create-checkout/index.ts`
 
-```sql
--- Products
-UPDATE public.products
-SET price          = ROUND(price * 83.1, 2),
-    discount_price = CASE WHEN discount_price IS NOT NULL THEN ROUND(discount_price * 83.1, 2) END,
-    base_price     = CASE WHEN base_price     IS NOT NULL THEN ROUND(base_price     * 83.1, 2) END,
-    dynamic_price  = CASE WHEN dynamic_price  IS NOT NULL THEN ROUND(dynamic_price  * 83.1, 2) END
-WHERE price < 100;  -- guard: don't double-convert rows already in INR (e.g. the ₹100 floor we set earlier)
+Logic, all under service-role:
 
--- Future-proof: enforce a minimum price of ₹1 so Razorpay never rejects
-ALTER TABLE public.products ADD CONSTRAINT products_price_min_inr CHECK (price >= 1);
+1. Validate JWT → `user.id`.
+2. Validate body with Zod: `items[]` (1–50 items, each `{ product_id: uuid, quantity: int 1–99 }`), `payment_method ∈ {razorpay, upi, cod}`, `shipping_pincode` (6 digits).
+3. **Fetch every product row** from DB by `id IN (...)`:
+   - Reject if any product missing, `status != 'active'`, or insufficient `stock - reserved_stock`.
+   - Compute server-side `unit_price = COALESCE(discount_price, dynamic_price, price)` per product. Never use client price.
+4. **Reserve stock** atomically per item via existing `reserve_stock(product_id, quantity)` RPC. If any fails, release everything reserved so far and return 409.
+5. Compute `total = SUM(unit_price * quantity)`. Reject if `total < 1` (Razorpay floor) or `total > 1_000_000` (sanity ceiling).
+6. **Insert `orders`** with `total_amount = total`, `user_id`, `payment_status='pending'`, `order_status='processing'`.
+7. **Insert `order_items`** rows with server-computed `price`, `vendor_id` (looked up from products table, not client), `title`, `image`.
+8. **Idempotent payment row**: re-use any existing pending `payments` row for `(user_id, order_id)`; otherwise insert fresh with `amount = total`, commission fields from `platform_settings`.
+9. Branch by `payment_method`:
+   - **cod**: payment stays `pending`, order → `confirmed`, return `{ orderId, paymentId, total }`.
+   - **upi**: build UPI deeplink with `am=${total}` (DB total, not client), generate QR URL, store on payment, return `{ orderId, paymentId, total, qrCodeUrl, merchantUpiId }`.
+   - **razorpay**: call Razorpay `POST /v1/orders` with `amount = Math.round(total * 100)`, `currency: 'INR'`, store `razorpay_order_id` on payment, return `{ orderId, paymentId, total, razorpayOrderId, keyId }`.
+10. On any failure mid-flow, release reserved stock and return structured error.
+
+Register in `supabase/config.toml` with `verify_jwt = false` (we validate inside).
+
+### 2. Deprecate the client-driven path
+
+**`src/services/orderService.ts`** — keep read methods (`getUserOrders`, `getVendorOrderItems`, etc.) unchanged. Mark `create()` and `addItems()` deprecated; remove their callers (currently only `CheckoutPage.handlePlaceOrder` and the retry handler). RLS already prevents non-owner inserts, but we want one canonical write path.
+
+**`src/services/paymentService.ts`** — add a thin wrapper:
+
+```ts
+async startCheckout(items, paymentMethod, pincode) {
+  const { data, error } = await supabase.functions.invoke('create-checkout', {
+    body: { items, payment_method: paymentMethod, shipping_pincode: pincode }
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data; // { orderId, paymentId, total, razorpayOrderId?, qrCodeUrl?, keyId? }
+}
 ```
 
-Orders / payments / vendor balances are left alone — historical records stay in their original unit; only forward-going writes will be INR (since UI now sends INR).
+Keep `processPayment` for the rare retry path on an existing order (it already re-fetches server-side via `create-razorpay-order`). Remove the client `amount` parameter from its signature in a follow-up; for now, retry calls it with the **server-returned** `total`, never the cart total.
 
-### 2. Frontend — INR everywhere, no conversion
+### 3. Refactor `CheckoutPage.handlePlaceOrder`
 
-**`src/services/currencyService.ts`**
-- Reduce `CURRENCIES` to **INR only**.
-- Remove `EXCHANGE_RATES` and `convertPrice` (or make it a no-op identity that asserts `from === to === 'INR'`).
-- `detectUserCurrency` always returns `{ country: 'IN', currency: 'INR' }`.
-- `formatPrice` becomes a thin wrapper around `Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 })`.
+Replace lines 170-254 with:
 
-**`src/contexts/CurrencyContext.tsx`**
-- Hard-default to `'INR'`. Remove the localStorage read (or keep as a cosmetic no-op).
-- `convertPrice` returns the input unchanged.
-- `formatPrice` delegates to `currencyService.formatPrice(amount, 'INR')`.
+```ts
+const itemsPayload = items.map(({ product, quantity }) => ({
+  product_id: product.id,
+  quantity,
+}));
 
-**`src/components/product/PriceDisplay.tsx`**
-- No code change needed — it already calls `formatPrice(price)`. After the context change, it will format the raw INR price as `₹X.XX` with no conversion.
+const result = await paymentService.startCheckout(
+  itemsPayload,
+  paymentMethod,
+  shipping.zip
+);
 
-**Removals of stray currency references**
-- Delete the currency switcher UI if any (search for `setCurrency` callers; remove dropdowns).
-- `paymentService.processPayment` already hard-codes `currency: 'INR'` for Razorpay — leaves as is.
-- UPI deeplink `am=${amount}` is now a real INR rupee value — correct.
+setOrderId(result.orderId);
+setPendingOrderId(result.orderId);
 
-### 3. Backend — already correct, just one guard
+// Branch on what the server returned:
+if (result.qrCodeUrl) {
+  setQrCodeUrl(result.qrCodeUrl);
+  setUpiPaymentId(result.paymentId);
+  setFlowState('upi_pending');
+  return;
+}
+if (result.razorpayOrderId) {
+  await openRazorpayCheckout(
+    result.razorpayOrderId,
+    result.keyId,
+    { id: result.paymentId },
+    result.orderId,
+    /* reserved tracking now lives server-side; pass [] */ []
+  );
+  return;
+}
+// COD
+clearCart();
+setFlowState('success');
+```
 
-`create-razorpay-order/index.ts` already:
-- Re-fetches `orders.total_amount` server-side (no client trust).
-- Multiplies ×100 to get paise.
-- Hard-codes currency `INR`.
-- Has the `< 100 paise` (₹1) minimum check.
+`openRazorpayCheckout` change: `amount: Math.round(result.total * 100)` instead of `totalPrice * 100`. This is cosmetic (gateway charges by `order_id`) but removes the last `totalPrice` reference from the payment flow.
 
-After the migration above, `orders.total_amount` written by future checkouts will be in INR (because `CartContext.totalPrice` will now be INR). No edge function changes needed.
+Inventory reservation moves entirely server-side (no more `inventoryService.reserveStock` loop on the client). Confirm-stock-on-success and release-on-failure also move server-side, fired by the existing `on_payment_success` trigger path + the existing `sweep_stale_orders` cron for abandoned sessions.
 
-`verify-razorpay-payment` and `razorpay-webhook` already cross-check the gateway amount against `payments.amount` (also a future-INR value) — works correctly post-migration.
+### 4. UPI confirm/QR — already aligned after step 1
 
-### 4. Validation safeguards
+`confirm-upi-payment` doesn't need changes; it reads `payments.amount` (server-set in step 1.8) and updates status. The QR URL the user scans now mathematically equals `payments.amount` because both came from the same server-computed `total` in step 1.5–1.9.
 
-- DB CHECK constraint `products.price >= 1` (above) prevents the ₹0.05 class of bug from ever recurring.
-- Add a server-side floor in `orderService.create`: if `total_amount < 1`, reject. Belt-and-suspenders against an empty cart bug.
+### 5. Validation rollups
 
-## Out of scope (intentional)
+- Server-side: Zod on input, DB checks on stock + product status, `total >= 1` floor, `total <= 1_000_000` ceiling, currency hardcoded `INR`.
+- DB-level: existing `products_price_min_inr CHECK (price >= 1)` constraint already in place; `payments_one_success_per_order` partial unique index prevents double-credit; `webhook_events` PK prevents replay.
+- Razorpay verify (already correct): signature HMAC + `rpOrder.amount === Math.round(payments.amount * 100)` + `rpOrder.currency === 'INR'`.
+- Webhook (already correct): same amount check + dedupe via `webhook_events.provider_event_id`.
 
-- **Multi-currency / international buyers** — current product memory is "Kashmir-focused India marketplace"; INR-only matches the business. If multi-currency comes back later, the right architecture is: store base-INR, convert at display time only, always charge INR (or add a true multi-PSP layer). Not building speculatively.
-- **Paise-as-integer storage** — no precision benefit at this scale; large blast radius. Skipped.
-- **Historical USD orders/payments rewriting** — left alone; analytics dashboards for old data may show small numbers, but no live flow reads them for payment.
+### 6. Tests
+
+- `supabase/functions/create-checkout/checkout_test.ts` — Deno tests for: happy path, client-supplied price ignored, out-of-stock rejection, sub-₹1 rejection, idempotent re-call returning the same `paymentId`.
 
 ## Files
 
-**Migration**
-- `<ts>_inr_currency_normalization.sql` — convert product prices USD→INR (guarded), add `products_price_min_inr` CHECK
+**Create**
+- `supabase/functions/create-checkout/index.ts` — single source of truth for orders + payments
+- `supabase/functions/create-checkout/checkout_test.ts` — Deno unit tests
 
 **Edit**
-- `src/services/currencyService.ts` — INR-only, remove exchange logic
-- `src/contexts/CurrencyContext.tsx` — hard-default INR, identity convert
-- `src/services/orderService.ts` — reject `total_amount < 1` in `create`
+- `supabase/config.toml` — register `create-checkout` (`verify_jwt = false`)
+- `src/services/paymentService.ts` — add `startCheckout()`; remove unused client `amount` reliance in retry
+- `src/pages/CheckoutPage.tsx` — replace `handlePlaceOrder` + `handleRetryPayment` to use `startCheckout`; drop client-side `inventoryService.reserveStock` loops; pass `result.total` to Razorpay modal
+- `src/services/orderService.ts` — JSDoc-deprecate `create()` and `addItems()` (keep until next refactor; no callers after the page change)
 
-**No change needed**
-- `src/components/product/PriceDisplay.tsx`, `src/contexts/CartContext.tsx`, `supabase/functions/create-razorpay-order/index.ts`, `verify-razorpay-payment`, `razorpay-webhook`
+**No change**
+- `supabase/functions/create-razorpay-order/index.ts` — still correct (re-fetches `orders.total_amount`); used as fallback by retry path
+- `supabase/functions/verify-razorpay-payment/index.ts` — already cross-checks amount + currency
+- `supabase/functions/razorpay-webhook/index.ts` — already deduped + amount-checked
+- `supabase/functions/confirm-upi-payment/index.ts` — already user-authed + server-validated
+- All trigger functions (`on_payment_success`, `on_order_refund_reverse_earnings`, `sweep_stale_orders`) — already wired to the right state transitions
+
+## Out of scope (intentional)
+
+- Multi-currency — INR-only is locked from the previous plan
+- Quote/lock-price flow (Amazon-style price guarantee for X minutes) — current dynamic pricing recomputes via cron, not on each checkout call, so cart→checkout drift is small. Add later if needed.
+- Address validation against `serviceable_pincodes` inside `create-checkout` — already enforced upstream by `useServiceability`; can be hardened later
 
 ## Expected outcome
 
-- Product DB price `4.99` → UI shows `₹4.99` → cart total `₹4.99` → `orders.total_amount = 4.99` → edge function sends `499 paise` → Razorpay charges `₹4.99` → webhook verifies `499 paise == 4.99 × 100` → success.
-- One number, one unit, end-to-end. No more UI/payment mismatch.
+```text
+Client → POST create-checkout { items: [{product_id, qty}], method, pincode }
+                ↓
+Backend: validate → re-price from DB → reserve stock → insert order
+       → insert order_items (server prices) → insert payment (amount=DB total)
+       → branch on method, build Razorpay order / UPI QR with DB total
+                ↓
+Client receives { orderId, paymentId, total, razorpayOrderId | qrCodeUrl, keyId }
+                ↓
+Razorpay modal opens against razorpayOrderId (gateway charges by order, not by client amount)
+                ↓
+verify-razorpay-payment: HMAC OK + rpOrder.amount === payments.amount*100 → success
+                ↓
+on_payment_success trigger: credits vendor earnings, marks confirm_stock
+```
 
+The client never sees, computes, or transmits a price after this change. UI display of `formatPrice(totalPrice)` remains, but it's purely cosmetic — the server has the only number that matters.
