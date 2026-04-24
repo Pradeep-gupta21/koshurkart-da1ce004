@@ -1207,6 +1207,7 @@ export type Database = {
           surcharge_pct: number
         }[]
       }
+      checkout_rate_limit: { Args: { _user_id: string }; Returns: boolean }
       confirm_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
@@ -1367,6 +1368,7 @@ export type Database = {
         Returns: boolean
       }
       promote_to_admin: { Args: { _email: string }; Returns: undefined }
+      quote_rate_limit: { Args: { _user_id: string }; Returns: boolean }
       recalculate_ad_quality_score: {
         Args: { p_campaign_id: string }
         Returns: undefined

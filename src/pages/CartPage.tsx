@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, MapPin } from "lucide-react";
+import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, MapPin, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLocation } from "@/contexts/LocationContext";
+import { useCheckoutQuote } from "@/hooks/useCheckoutQuote";
 import EmptyState from "@/components/ui/EmptyState";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 
@@ -12,6 +13,11 @@ const CartPage = () => {
   const { items, removeFromCart, updateQuantity, totalPrice, clearCart, shippingTotal, grandTotal, hasUnserviceableItem } = useCart();
   const { formatPrice } = useCurrency();
   const { location } = useLocation();
+  const { data: quote } = useCheckoutQuote();
+  const serverSubtotal = quote?.subtotal;
+  const drift = serverSubtotal !== undefined && Math.abs(serverSubtotal - totalPrice) > 0.01;
+  const displaySubtotal = serverSubtotal ?? totalPrice;
+  const displayTotal = displaySubtotal + shippingTotal;
 
   if (items.length === 0) {
     return (
@@ -89,7 +95,7 @@ const CartPage = () => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+              <span className="tabular-nums">{formatPrice(displaySubtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">
@@ -104,8 +110,14 @@ const CartPage = () => {
             <Separator />
             <div className="flex justify-between font-semibold text-base">
               <span>Total</span>
-              <span className="tabular-nums">{formatPrice(grandTotal)}</span>
+              <span className="tabular-nums">{formatPrice(displayTotal)}</span>
             </div>
+            {drift && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1.5 mt-1">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                Prices updated. Final amount confirmed at checkout.
+              </p>
+            )}
           </div>
           {hasUnserviceableItem && (
             <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">

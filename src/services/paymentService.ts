@@ -35,10 +35,16 @@ export const paymentService = {
   async startCheckout(
     items: CheckoutItemInput[],
     paymentMethod: 'cod' | 'upi' | 'razorpay',
-    pincode?: string
+    pincode?: string,
+    clientQuotedTotal?: number,
   ): Promise<CheckoutResult> {
     const { data, error } = await supabase.functions.invoke('create-checkout', {
-      body: { items, payment_method: paymentMethod, shipping_pincode: pincode },
+      body: {
+        items,
+        payment_method: paymentMethod,
+        shipping_pincode: pincode,
+        client_quoted_total: clientQuotedTotal,
+      },
     });
     if (error) throw new Error(error.message ?? 'Checkout failed');
     if (data?.error) throw new Error(data.error);

@@ -29,6 +29,9 @@ const BodySchema = z.object({
     .max(50),
   payment_method: z.enum(["razorpay", "upi", "cod"]),
   shipping_pincode: z.string().regex(/^\d{6}$/).optional(),
+  // Optional — what the client *thought* the total was. Used only for
+  // tampering/drift telemetry; the server total is always authoritative.
+  client_quoted_total: z.number().nonnegative().optional(),
 });
 
 Deno.serve(async (req) => {
@@ -57,12 +60,30 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { items, payment_method } = parsed.data;
+  const { items, payment_method, client_quoted_total } = parsed.data;
 
   const service = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // ---- Rate limit (per-user sliding window) ----
+  const { data: allowed } = await service.rpc("checkout_rate_limit", { _user_id: user.id });
+  if (allowed === false) {
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "rate_limited" },
+    });
+    return json({ error: "Too many checkout attempts. Please wait a minute." }, 429);
+  }
+
+  // Log every attempt for audit + rate-limit accounting.
+  await service.from("analytics_events").insert({
+    event_type: "checkout_attempt",
+    user_id: user.id,
+    metadata: { item_count: items.length, payment_method },
+  });
 
   // ---- 1. Re-price from DB (server is the only source of truth) ----
   const productIds = [...new Set(items.map((i) => i.product_id))];
@@ -137,11 +158,40 @@ Deno.serve(async (req) => {
   const total = Math.round(totalRaw * 100) / 100;
   if (total < 1) {
     await releaseReserved();
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "min_amount", total },
+    });
     return json({ error: "Order total must be at least ₹1" }, 400);
   }
   if (total > 1_000_000) {
     await releaseReserved();
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "max_amount", total },
+    });
     return json({ error: "Order total exceeds maximum allowed" }, 400);
+  }
+
+  // Drift / tampering audit — log if client's quoted total disagrees with server.
+  // We never reject on this (server total wins), but we want a paper trail.
+  if (
+    typeof client_quoted_total === "number" &&
+    Math.abs(client_quoted_total - total) > 0.01
+  ) {
+    console.warn("checkout quote drift", { user: user.id, client: client_quoted_total, server: total });
+    await service.from("analytics_events").insert({
+      event_type: "checkout_quote_mismatch",
+      user_id: user.id,
+      metadata: {
+        client_quoted_total,
+        server_total: total,
+        delta: Math.round((client_quoted_total - total) * 100) / 100,
+        payment_method,
+      },
+    });
   }
 
   // ---- 4. Insert order ----
@@ -237,8 +287,16 @@ Deno.serve(async (req) => {
   }
 
   // ---- 8. Branch by payment method ----
+  const logSuccess = (method: string, extra: Record<string, unknown> = {}) =>
+    service.from("analytics_events").insert({
+      event_type: "checkout_succeeded",
+      user_id: user.id,
+      metadata: { order_id: orderId, total, method, ...extra },
+    });
+
   if (payment_method === "cod") {
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
+    await logSuccess("cod");
     return json({ orderId, paymentId: payment.id, total, method: "cod" });
   }
 
@@ -246,13 +304,21 @@ Deno.serve(async (req) => {
     const upiLink = `upi://pay?pa=${encodeURIComponent(merchantUpiId)}&pn=${encodeURIComponent(merchantName)}&am=${total}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
     await service.from("payments").update({ qr_code_url: qrCodeUrl, upi_id: merchantUpiId }).eq("id", payment.id);
+    await logSuccess("upi");
     return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId });
   }
 
   // razorpay
   const keyId = Deno.env.get("RAZORPAY_KEY_ID");
   const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
-  if (!keyId || !keySecret) return json({ error: "Razorpay not configured" }, 500);
+  if (!keyId || !keySecret) {
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "razorpay_not_configured", order_id: orderId },
+    });
+    return json({ error: "Razorpay not configured" }, 500);
+  }
 
   const amountPaise = Math.round(total * 100);
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
@@ -268,6 +334,11 @@ Deno.serve(async (req) => {
   if (!rpRes.ok) {
     const errBody = await rpRes.text();
     console.error("razorpay order create failed", rpRes.status, errBody);
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId },
+    });
     return json({ error: "Failed to create Razorpay order" }, 502);
   }
   const rpOrder = await rpRes.json();
@@ -275,6 +346,7 @@ Deno.serve(async (req) => {
     .from("payments")
     .update({ razorpay_order_id: rpOrder.id })
     .eq("id", payment.id);
+  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise });
 
   return json({
     orderId,
