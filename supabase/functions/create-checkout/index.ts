@@ -29,6 +29,9 @@ const BodySchema = z.object({
     .max(50),
   payment_method: z.enum(["razorpay", "upi", "cod"]),
   shipping_pincode: z.string().regex(/^\d{6}$/).optional(),
+  // Optional — what the client *thought* the total was. Used only for
+  // tampering/drift telemetry; the server total is always authoritative.
+  client_quoted_total: z.number().nonnegative().optional(),
 });
 
 Deno.serve(async (req) => {
