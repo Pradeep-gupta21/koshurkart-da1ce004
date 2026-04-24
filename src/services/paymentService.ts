@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
+import { withRetry } from '@/lib/retry';
 
 declare global {
   interface Window {
@@ -24,6 +25,35 @@ export interface CheckoutResult {
   keyId?: string;
   amountPaise?: number;
   currency?: string;
+  /** "test" or "live" — derived server-side from RAZORPAY_KEY_ID prefix. */
+  mode?: 'test' | 'live';
+  /** True when the same idempotency_key returned a previously-created order. */
+  idempotent?: boolean;
+}
+
+/** Stable per-attempt idempotency key, persisted in sessionStorage so that
+ *  a user double-click or in-flight retry reuses the same key. */
+function getOrCreateIdempotencyKey(items: CheckoutItemInput[], paymentMethod: string): string {
+  if (typeof window === 'undefined') return crypto.randomUUID();
+  // Cart hash makes the key change when the cart changes — preventing a stale
+  // key from being reused after the user edits their cart and re-checks out.
+  const hash = items
+    .map((i) => `${i.product_id}:${i.quantity}`)
+    .sort()
+    .join('|') + `|${paymentMethod}`;
+  const storeKey = `checkout_idem:${hash}`;
+  const existing = sessionStorage.getItem(storeKey);
+  if (existing) return existing;
+  const k = (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/-/g, '');
+  sessionStorage.setItem(storeKey, k);
+  return k;
+}
+
+/** Clear the cached key (call after a terminal success/failure). */
+function clearIdempotencyKey(items: CheckoutItemInput[], paymentMethod: string) {
+  if (typeof window === 'undefined') return;
+  const hash = items.map((i) => `${i.product_id}:${i.quantity}`).sort().join('|') + `|${paymentMethod}`;
+  sessionStorage.removeItem(`checkout_idem:${hash}`);
 }
 
 export const paymentService = {
