@@ -95,7 +95,7 @@ const CartPage = () => {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">{formatPrice(totalPrice)}</span>
+              <span className="tabular-nums">{formatPrice(displaySubtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">
@@ -110,8 +110,14 @@ const CartPage = () => {
             <Separator />
             <div className="flex justify-between font-semibold text-base">
               <span>Total</span>
-              <span className="tabular-nums">{formatPrice(grandTotal)}</span>
+              <span className="tabular-nums">{formatPrice(displayTotal)}</span>
             </div>
+            {drift && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1.5 mt-1">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                Prices updated. Final amount confirmed at checkout.
+              </p>
+            )}
           </div>
           {hasUnserviceableItem && (
             <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">
