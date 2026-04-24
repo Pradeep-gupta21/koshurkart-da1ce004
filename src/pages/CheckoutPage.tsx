@@ -182,7 +182,7 @@ const CheckoutPage = () => {
 
       setOrderId(result.orderId);
       setPendingOrderId(result.orderId);
-
+      if (result.mode) setPaymentMode(result.mode);
       if (result.method === 'upi') {
         setQrCodeUrl(result.qrCodeUrl ?? null);
         setUpiPaymentId(result.paymentId);
