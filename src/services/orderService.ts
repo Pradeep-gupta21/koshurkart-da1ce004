@@ -1,8 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export const orderService = {
+  /**
+   * @deprecated Do NOT call from the client. Orders are now created server-side
+   * by the `create-checkout` edge function, which re-prices items from the DB.
+   * This method is kept only for tests/admin scripts.
+   */
   async create(userId: string, totalAmount: number) {
-    // Guard: payment gateways reject sub-rupee amounts. All prices are INR.
     if (!Number.isFinite(totalAmount) || totalAmount < 1) {
       throw new Error('Order total must be at least ₹1');
     }
@@ -16,11 +20,16 @@ export const orderService = {
     return data;
   },
 
+  /**
+   * @deprecated Do NOT call from the client. Order items are now inserted
+   * server-side by `create-checkout` with DB-derived prices.
+   */
   async addItems(orderId: string, items: { title: string; price: number; quantity: number; product_id?: string; vendor_id?: string; image?: string }[]) {
     const rows = items.map(item => ({ order_id: orderId, ...item }));
     const { error } = await supabase.from('order_items').insert(rows);
     if (error) throw error;
   },
+
 
   async getUserOrders(userId: string) {
     const { data, error } = await supabase

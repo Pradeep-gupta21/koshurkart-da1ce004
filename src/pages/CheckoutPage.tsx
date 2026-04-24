@@ -8,10 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
-import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
-import { inventoryService } from "@/services/inventoryService";
+
 import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check } from "lucide-react";
@@ -72,12 +71,9 @@ const CheckoutPage = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Razorpay state
-  const [razorpayPaymentRecord, setRazorpayPaymentRecord] = useState<any>(null);
-
-  // Track reserved items for cleanup on failure
-  const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  // Tracked only to keep Razorpay handler closure stable; not read directly in render.
+  const [, setRazorpayPaymentRecord] = useState<{ id: string } | null>(null);
+  const [, setPendingOrderId] = useState<string | null>(null);
 
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
@@ -86,9 +82,9 @@ const CheckoutPage = () => {
   const openRazorpayCheckout = async (
     razorpayOrderId: string,
     razorpayKeyId: string,
-    payment: any,
+    payment: { id: string },
     currentOrderId: string,
-    reserved: { productId: string; quantity: number }[]
+    serverTotal: number
   ) => {
     const scriptLoaded = await paymentService.loadRazorpayScript();
     if (!scriptLoaded) {
@@ -100,9 +96,10 @@ const CheckoutPage = () => {
 
     const options = {
       key: razorpayKeyId,
-      amount: Math.round(totalPrice * 100),
+      // Display amount only — actual charge is determined by razorpay order_id on Razorpay's side.
+      amount: Math.round(serverTotal * 100),
       currency: "INR",
-      name: "Marketplace",
+      name: pmSettings?.merchantName ?? "Marketplace",
       description: `Order #${currentOrderId.slice(0, 8)}`,
       order_id: razorpayOrderId,
       handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
@@ -116,9 +113,6 @@ const CheckoutPage = () => {
             response.razorpay_signature
           );
 
-          for (const { productId, quantity } of reserved) {
-            await inventoryService.confirmStock(productId, quantity);
-          }
           for (const { product, quantity } of items) {
             analyticsService.trackEvent('purchase', product.id, undefined, {
               quantity,
@@ -136,10 +130,7 @@ const CheckoutPage = () => {
       },
       modal: {
         ondismiss: async () => {
-          // User closed modal without paying — release stock
-          for (const { productId, quantity } of reserved) {
-            try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
-          }
+          // Server-side stale-order sweep will release the reservation if not paid.
           await paymentService.updatePaymentStatus(payment.id, 'failed');
           setFailureError("Payment was cancelled.");
           setFlowState("failed");
@@ -169,84 +160,56 @@ const CheckoutPage = () => {
 
     setSubmitting(true);
     setFailureError(null);
-    const reserved: { productId: string; quantity: number }[] = [];
 
     try {
-      // Step 1: Reserve inventory
-      for (const { product, quantity } of items) {
-        await inventoryService.reserveStock(product.id, quantity);
-        reserved.push({ productId: product.id, quantity });
-      }
-      setReservedItems(reserved);
+      // Single backend call — server re-prices, reserves stock, creates order + payment.
+      const itemsPayload = items.map(({ product, quantity }) => ({
+        product_id: product.id,
+        quantity,
+      }));
 
-      // Step 2: Create order with pending payment status
-      const order = await orderService.create(user.id, totalPrice);
-      setOrderId(order.id);
-      setPendingOrderId(order.id);
-
-      await orderService.addItems(
-        order.id,
-        items.map(({ product, quantity }) => ({
-          title: product.title,
-          price: product.discountPrice ?? product.price,
-          quantity,
-          product_id: product.id,
-          vendor_id: product.vendorId,
-          image: product.images?.[0] ?? "",
-        }))
+      setFlowState("processing");
+      const result = await paymentService.startCheckout(
+        itemsPayload,
+        paymentMethod as 'cod' | 'upi' | 'razorpay',
+        shipping.zip
       );
 
-      // Step 3: Process payment
-      setFlowState("processing");
+      setOrderId(result.orderId);
+      setPendingOrderId(result.orderId);
 
-      const result = await paymentService.processPayment(user.id, order.id, totalPrice, paymentMethod);
-
-      if (result.awaitingUpi) {
-        // UPI flow — show QR code
+      if (result.method === 'upi') {
         setQrCodeUrl(result.qrCodeUrl ?? null);
-        setUpiPaymentId(result.payment?.id ?? null);
+        setUpiPaymentId(result.paymentId);
         setFlowState("upi_pending");
-        setSubmitting(false);
         return;
       }
 
-      if (result.awaitingRazorpay) {
-        // Razorpay flow — open checkout modal
-        setRazorpayPaymentRecord(result.payment);
-        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, order.id, reserved);
-        setSubmitting(false);
+      if (result.method === 'razorpay') {
+        setRazorpayPaymentRecord({ id: result.paymentId });
+        await openRazorpayCheckout(
+          result.razorpayOrderId!,
+          result.keyId!,
+          { id: result.paymentId },
+          result.orderId,
+          result.total
+        );
         return;
       }
 
-      if (result.success) {
-        // Payment success — confirm stock + track analytics
-        for (const { productId, quantity } of reserved) {
-          await inventoryService.confirmStock(productId, quantity);
-        }
-        for (const { product, quantity } of items) {
-          analyticsService.trackEvent('purchase', product.id, undefined, {
-            quantity,
-            price: product.discountPrice ?? product.price,
-          });
-        }
-
-        setTransactionId(result.transactionId);
-        clearCart();
-        setFlowState("success");
-      } else {
-        // Payment failed — release inventory
-        for (const { productId, quantity } of reserved) {
-          try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
-        }
-        setFailureError(result.error ?? "Payment failed. Please try again.");
-        setFlowState("failed");
+      // COD success
+      for (const { product, quantity } of items) {
+        analyticsService.trackEvent('purchase', product.id, undefined, {
+          quantity,
+          price: product.discountPrice ?? product.price,
+        });
       }
+      clearCart();
+      setFlowState("success");
     } catch (err: any) {
-      for (const { productId, quantity } of reserved) {
-        try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
-      }
-      const msg = err.message?.includes('Insufficient stock') ? err.message : err.message ?? "Something went wrong.";
+      const msg = err?.message ?? "Something went wrong.";
       toast({ title: "Order failed", description: msg, variant: "destructive" });
+      setFailureError(msg);
       setFlowState("form");
     } finally {
       setSubmitting(false);
@@ -265,10 +228,6 @@ const CheckoutPage = () => {
 
       await paymentService.confirmUpiPayment(upiPaymentId, orderId, proofUrl);
 
-      // Confirm stock + track analytics
-      for (const { productId, quantity } of reservedItems) {
-        await inventoryService.confirmStock(productId, quantity);
-      }
       for (const { product, quantity } of items) {
         analyticsService.trackEvent('purchase', product.id, undefined, {
           quantity,
@@ -287,57 +246,47 @@ const CheckoutPage = () => {
   };
 
   const handleRetryPayment = async () => {
-    if (!user || !pendingOrderId) return;
+    if (!user) return;
     setSubmitting(true);
     setFailureError(null);
 
     try {
-      const reserved: { productId: string; quantity: number }[] = [];
-      for (const { product, quantity } of items) {
-        await inventoryService.reserveStock(product.id, quantity);
-        reserved.push({ productId: product.id, quantity });
-      }
-      setReservedItems(reserved);
+      // Retry = brand-new server checkout. The previous order's stale reservation
+      // is released by sweep_stale_orders cron.
+      const itemsPayload = items.map(({ product, quantity }) => ({
+        product_id: product.id,
+        quantity,
+      }));
 
       setFlowState("processing");
+      const result = await paymentService.startCheckout(
+        itemsPayload,
+        paymentMethod as 'cod' | 'upi' | 'razorpay',
+        shipping.zip
+      );
 
-      const result = await paymentService.processPayment(user.id, pendingOrderId, totalPrice, paymentMethod);
+      setOrderId(result.orderId);
+      setPendingOrderId(result.orderId);
 
-      if (result.awaitingUpi) {
+      if (result.method === 'upi') {
         setQrCodeUrl(result.qrCodeUrl ?? null);
-        setUpiPaymentId(result.payment?.id ?? null);
+        setUpiPaymentId(result.paymentId);
         setFlowState("upi_pending");
-        setSubmitting(false);
         return;
       }
-
-      if (result.awaitingRazorpay) {
-        setRazorpayPaymentRecord(result.payment);
-        await openRazorpayCheckout(result.razorpayOrderId!, result.razorpayKeyId!, result.payment, pendingOrderId, reserved);
-        setSubmitting(false);
+      if (result.method === 'razorpay') {
+        setRazorpayPaymentRecord({ id: result.paymentId });
+        await openRazorpayCheckout(
+          result.razorpayOrderId!,
+          result.keyId!,
+          { id: result.paymentId },
+          result.orderId,
+          result.total
+        );
         return;
       }
-
-      if (result.success) {
-        for (const { productId, quantity } of reserved) {
-          await inventoryService.confirmStock(productId, quantity);
-        }
-        for (const { product, quantity } of items) {
-          analyticsService.trackEvent('purchase', product.id, undefined, {
-            quantity,
-            price: product.discountPrice ?? product.price,
-          });
-        }
-        setTransactionId(result.transactionId);
-        clearCart();
-        setFlowState("success");
-      } else {
-        for (const { productId, quantity } of reserved) {
-          try { await inventoryService.releaseStock(productId, quantity); } catch (_) {}
-        }
-        setFailureError(result.error ?? "Payment failed. Please try again.");
-        setFlowState("failed");
-      }
+      clearCart();
+      setFlowState("success");
     } catch (err: any) {
       toast({ title: "Retry failed", description: err.message ?? "Something went wrong.", variant: "destructive" });
       setFlowState("failed");
@@ -346,7 +295,6 @@ const CheckoutPage = () => {
     }
   };
 
-  // Processing state
   if (flowState === "processing") {
     return (
       <div className="container mx-auto px-4 py-20 text-center max-w-md">

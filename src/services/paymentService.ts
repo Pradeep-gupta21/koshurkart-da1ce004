@@ -8,7 +8,43 @@ declare global {
   }
 }
 
+export interface CheckoutItemInput {
+  product_id: string;
+  quantity: number;
+}
+
+export interface CheckoutResult {
+  orderId: string;
+  paymentId: string;
+  total: number;
+  method: 'cod' | 'upi' | 'razorpay';
+  qrCodeUrl?: string;
+  merchantUpiId?: string;
+  razorpayOrderId?: string;
+  keyId?: string;
+  amountPaise?: number;
+  currency?: string;
+}
+
 export const paymentService = {
+  /**
+   * SOURCE OF TRUTH: server re-prices items from DB, reserves stock,
+   * creates the order/items/payment and (for razorpay/upi) the gateway artifact.
+   * The client never sends prices.
+   */
+  async startCheckout(
+    items: CheckoutItemInput[],
+    paymentMethod: 'cod' | 'upi' | 'razorpay',
+    pincode?: string
+  ): Promise<CheckoutResult> {
+    const { data, error } = await supabase.functions.invoke('create-checkout', {
+      body: { items, payment_method: paymentMethod, shipping_pincode: pincode },
+    });
+    if (error) throw new Error(error.message ?? 'Checkout failed');
+    if (data?.error) throw new Error(data.error);
+    return data as CheckoutResult;
+  },
+
   // ---- Payment record methods ----
 
   async createPayment(
