@@ -8,8 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
-import { paymentService } from "@/services/paymentService";
+import { paymentService, type CheckoutResult } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
+import { PricingDebugBox } from "@/components/checkout/PricingDebugBox";
 
 import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ const CheckoutPage = () => {
   const [failureError, setFailureError] = useState<string | null>(null);
   const [pmSettings, setPmSettings] = useState<PaymentMethodSettings | null>(null);
   const [paymentMode, setPaymentMode] = useState<'test' | 'live' | null>(null);
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
 
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
