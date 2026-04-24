@@ -550,6 +550,8 @@ const CheckoutPage = () => {
           <div className="bg-card rounded-xl marketplace-shadow p-6 sticky top-24">
             <h2 className="font-semibold mb-4">Order Summary</h2>
 
+            <PricingDebugBox debug={checkoutResult?.debug ?? quote?.debug ?? null} />
+
             {/* Line items: prefer server-priced lines for accuracy */}
             <div className="space-y-3 text-sm">
               {quote
