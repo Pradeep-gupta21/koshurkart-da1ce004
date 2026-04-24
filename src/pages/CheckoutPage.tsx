@@ -8,10 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
-import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
-import { inventoryService } from "@/services/inventoryService";
+
 import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check } from "lucide-react";
@@ -73,11 +72,10 @@ const CheckoutPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Razorpay state
-  const [razorpayPaymentRecord, setRazorpayPaymentRecord] = useState<any>(null);
+  const [, setRazorpayPaymentRecord] = useState<{ id: string } | null>(null);
 
-  // Track reserved items for cleanup on failure
-  const [reservedItems, setReservedItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+
 
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
