@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  DollarSign, Package, ShoppingCart, TrendingUp, AlertTriangle,
+  IndianRupee, Package, ShoppingCart, TrendingUp, AlertTriangle,
   ShieldCheck, Lightbulb, BarChart3, Wallet, Info, CreditCard,
 } from "lucide-react";
 import { vendorService } from "@/services/vendorService";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import VendorGettingStarted from "@/components/vendor/VendorGettingStarted";
 import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
@@ -39,6 +40,7 @@ const statusColor = (status: string) => {
 const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [stats, setStats] = useState({ products: 0, totalSales: 0, totalEarnings: 0, withdrawableBalance: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
@@ -144,8 +146,8 @@ const VendorOverview = () => {
 
   const statCards = [
     { title: "Total Sales", value: stats.totalSales, icon: ShoppingCart, gradient: "from-primary/10 to-primary/5" },
-    { title: "Total Earnings", value: `$${stats.totalEarnings.toFixed(2)}`, icon: DollarSign, gradient: "from-green-500/10 to-green-500/5" },
-    { title: "Withdrawable", value: `$${stats.withdrawableBalance.toFixed(2)}`, icon: Wallet, gradient: "from-accent/10 to-accent/5" },
+    { title: "Total Earnings", value: formatPrice(stats.totalEarnings), icon: IndianRupee, gradient: "from-green-500/10 to-green-500/5" },
+    { title: "Withdrawable", value: formatPrice(stats.withdrawableBalance), icon: Wallet, gradient: "from-accent/10 to-accent/5" },
     { title: "Active Products", value: stats.products, icon: Package, gradient: "from-secondary/10 to-secondary/5" },
   ];
 
@@ -218,7 +220,7 @@ const VendorOverview = () => {
                   <Tooltip
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
                     labelStyle={{ color: "hsl(var(--foreground))" }}
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, "Earnings"]}
+                    formatter={(value: number) => [formatPrice(value), "Earnings"]}
                   />
                   <Area type="monotone" dataKey="amount" stroke="hsl(var(--primary))" fill="url(#earningsGrad)" strokeWidth={2} />
                 </AreaChart>
@@ -270,7 +272,7 @@ const VendorOverview = () => {
                 {recentPayments.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div className="space-y-0.5">
-                      <p className="font-medium text-sm">${Number(p.amount).toFixed(2)}</p>
+                      <p className="font-medium text-sm">{formatPrice(Number(p.amount))}</p>
                       <p className="text-xs text-muted-foreground capitalize">{p.payment_method} • {format(parseISO(p.created_at), "MMM dd, yyyy")}</p>
                     </div>
                     <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${statusColor(p.payment_status)}`}>
@@ -304,7 +306,7 @@ const VendorOverview = () => {
                       <p className="font-medium text-sm truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
-                    <p className="font-semibold text-sm shrink-0">${(item.price * item.quantity).toFixed(2)}</p>
+                    <p className="font-semibold text-sm shrink-0">{formatPrice(Number(item.price) * item.quantity)}</p>
                   </div>
                 ))}
               </div>

@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Megaphone, Plus, Eye, MousePointer, TrendingUp, Target, DollarSign } from "lucide-react";
+import { Megaphone, Plus, Eye, MousePointer, TrendingUp, Target, IndianRupee } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 const VendorCampaigns = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
@@ -17,6 +18,7 @@ const VendorCampaigns = () => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ productId: "", placement: "search", budget: "", dailyLimit: "", bidAmount: "0.10", startDate: "", endDate: "" });
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
 
   const fetchData = async () => {
     const [campRes, prodRes] = await Promise.all([
@@ -74,7 +76,7 @@ const VendorCampaigns = () => {
         <Card className="marketplace-shadow">
           <CardContent className="py-4">
             <p className="text-sm text-muted-foreground">Total Budget</p>
-            <p className="text-2xl font-bold">${totalBudget.toFixed(2)}</p>
+            <p className="text-2xl font-bold">{formatPrice(totalBudget)}</p>
           </CardContent>
         </Card>
         <Card className="marketplace-shadow">
@@ -198,8 +200,8 @@ const VendorCampaigns = () => {
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span className="capitalize">{c.placement}</span>
-                    <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />Bid: ${Number(c.bid_amount ?? 0).toFixed(2)}</span>
-                    <span>Budget: ${c.budget}</span>
+                    <span className="flex items-center gap-1"><IndianRupee className="h-3 w-3" />Bid: {formatPrice(Number(c.bid_amount ?? 0))}</span>
+                    <span>Budget: {formatPrice(Number(c.budget ?? 0))}</span>
                     <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
                     <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
                     <span className="flex items-center gap-1"><Target className="h-3 w-3" />{c.conversions ?? 0} conv.</span>

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, ShieldAlert, Megaphone, Wallet, LayoutGrid,
-  MessageSquare, DollarSign, CreditCard, Settings, Package, BarChart3,
+  MessageSquare, IndianRupee, CreditCard, Settings, Package, BarChart3,
   ShoppingBag, Bell, Home, Tag, Sparkles, ShoppingCart, User as UserIcon,
   Star, Store, HelpCircle, LogIn, FileText, Heart,
 } from "lucide-react";
@@ -96,7 +96,7 @@ export const adminNav: NavSection[] = [
       { id: "a-placements", label: "Ad Pricing", to: "/admin/placements", icon: LayoutGrid },
       { id: "a-payouts", label: "Payouts", to: "/admin/payouts", icon: Wallet },
       { id: "a-reviews", label: "Reviews", to: "/admin/reviews", icon: MessageSquare, badgeKey: "suspiciousReviews" },
-      { id: "a-pricing", label: "Dynamic Pricing", to: "/admin/pricing", icon: DollarSign },
+      { id: "a-pricing", label: "Dynamic Pricing", to: "/admin/pricing", icon: IndianRupee },
       { id: "a-payments", label: "Payments", to: "/admin/payments", icon: CreditCard, badgeKey: "pendingPayments" },
       { id: "a-menu", label: "Menu", to: "/admin/menu", icon: LayoutGrid },
       { id: "a-security", label: "Security", to: "/admin/security", icon: ShieldAlert },

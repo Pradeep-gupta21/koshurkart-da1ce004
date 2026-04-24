@@ -15,6 +15,7 @@ import { searchService, type SearchSortOption, type SearchFilters } from "@/serv
 import { adService } from "@/services/adService";
 import { useServiceability } from "@/hooks/useServiceability";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
@@ -49,6 +50,7 @@ const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const initialCategory = searchParams.get("category") || "All";
+  const { formatPrice } = useCurrency();
 
   const [query, setQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
@@ -209,7 +211,7 @@ const SearchPage = () => {
           {/* Price Range */}
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">
-              Price Range: ${priceRange[0]} — {priceRange[1] >= 10000 ? "Any" : `$${priceRange[1]}`}
+              Price Range: {formatPrice(priceRange[0])} — {priceRange[1] >= 10000 ? "Any" : formatPrice(priceRange[1])}
             </p>
             <Slider
               min={0}

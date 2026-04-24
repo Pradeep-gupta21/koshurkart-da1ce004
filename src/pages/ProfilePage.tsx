@@ -15,6 +15,7 @@ import type { AppNotification } from "@/types/notification";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
 import SavedAddresses from "@/components/location/SavedAddresses";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -134,6 +135,7 @@ const typeIcon: Record<string, string> = {
 const ProfilePage = () => {
   const { user, loading, isVendor, signOut } = useAuth();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -270,7 +272,7 @@ const ProfilePage = () => {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <p className="font-semibold tabular-nums">${Number(o.total_amount).toFixed(2)}</p>
+                        <p className="font-semibold tabular-nums">{formatPrice(Number(o.total_amount))}</p>
                         <div className="flex gap-1.5 mt-0.5 justify-end">
                           <Badge variant="outline" className={`text-[10px] ${statusColor[o.shipping_status] ?? statusColor[o.order_status] ?? ""}`}>
                             {statusLabel[o.shipping_status] ?? o.order_status}
@@ -335,7 +337,7 @@ const ProfilePage = () => {
                             <p className="text-sm font-medium truncate">{item.title}</p>
                             <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                           </div>
-                          <p className="text-sm font-semibold tabular-nums">${(Number(item.price) * item.quantity).toFixed(2)}</p>
+                          <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
                         </div>
                       ))}
 

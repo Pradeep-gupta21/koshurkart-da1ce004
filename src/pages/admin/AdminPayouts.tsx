@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle, XCircle } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 interface Payout {
   id: string;
@@ -20,6 +21,7 @@ const AdminPayouts = () => {
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
 
   const fetchPayouts = async () => {
     setLoading(true);
@@ -70,7 +72,7 @@ const AdminPayouts = () => {
           <div key={p.id} className="flex items-center justify-between py-3 border-b last:border-0">
             <div className="space-y-1">
               <p className="font-medium text-sm">{p.store_name}</p>
-              <p className="text-lg font-bold">${Number(p.amount).toFixed(2)}</p>
+              <p className="text-lg font-bold">{formatPrice(Number(p.amount))}</p>
               <p className="text-xs text-muted-foreground">
                 Requested: {new Date(p.requested_at).toLocaleDateString()}
                 {p.processed_at && ` • Processed: ${new Date(p.processed_at).toLocaleDateString()}`}

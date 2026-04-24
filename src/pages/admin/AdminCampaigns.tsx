@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, MousePointer, CheckCircle, XCircle, TrendingUp, Target, DollarSign } from "lucide-react";
+import { Eye, MousePointer, CheckCircle, XCircle, TrendingUp, Target, IndianRupee } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 const AdminCampaigns = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("pending");
+  const { formatPrice } = useCurrency();
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["admin-campaigns"],
@@ -92,12 +94,12 @@ const AdminCampaigns = () => {
                         <p className="text-sm text-muted-foreground">
                           Vendor: <span className="font-medium text-foreground">{c.vendors?.store_name ?? "—"}</span>
                           {" · "}Placement: <span className="capitalize">{c.placement}</span>
-                          {" · "}Budget: <span className="font-medium">${c.budget}</span>
-                          {c.daily_limit > 0 && <> · Daily: ${c.daily_limit}</>}
+                          {" · "}Budget: <span className="font-medium">{formatPrice(Number(c.budget ?? 0))}</span>
+                          {c.daily_limit > 0 && <> · Daily: {formatPrice(Number(c.daily_limit))}</>}
                         </p>
                         <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
                           <span>{c.start_date} → {c.end_date || "Ongoing"}</span>
-                          <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />Bid: ${Number(c.bid_amount ?? 0).toFixed(2)}</span>
+                          <span className="flex items-center gap-1"><IndianRupee className="h-3 w-3" />Bid: {formatPrice(Number(c.bid_amount ?? 0))}</span>
                           <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.impressions ?? 0}</span>
                           <span className="flex items-center gap-1"><MousePointer className="h-3 w-3" />{c.clicks ?? 0}</span>
                           <span className="flex items-center gap-1"><Target className="h-3 w-3" />{c.conversions ?? 0} conv.</span>

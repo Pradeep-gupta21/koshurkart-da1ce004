@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 interface VendorOrderItem {
   id: string;
@@ -72,6 +73,7 @@ const nextShippingStatus: Record<string, ShippingStatus> = {
 const VendorOrders = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [items, setItems] = useState<VendorOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
@@ -237,7 +239,7 @@ const VendorOrders = () => {
                       <p className="text-sm font-medium truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
-                    <p className="text-sm font-semibold tabular-nums">${(Number(item.price) * item.quantity).toFixed(2)}</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
                   </div>
                 ))}
               </div>

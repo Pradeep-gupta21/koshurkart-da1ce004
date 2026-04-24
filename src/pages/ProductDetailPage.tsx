@@ -15,6 +15,7 @@ import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { useState, useEffect, useRef } from "react";
 import { analyticsService } from "@/services/analyticsService";
 import ReviewSection from "@/components/reviews/ReviewSection";
@@ -92,6 +93,7 @@ const DetailSkeleton = () => (
 const ProductDetailPage = () => {
   const { slug } = useParams();
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -237,11 +239,11 @@ const ProductDetailPage = () => {
 
           <div className="mt-4 flex items-baseline gap-3">
             <span className="text-3xl font-bold text-primary tabular-nums">
-              ${(product.discountPrice ?? product.price).toFixed(2)}
+              {formatPrice(product.discountPrice ?? product.price)}
             </span>
             {product.discountPrice && (
               <>
-                <span className="text-lg text-muted-foreground line-through tabular-nums">${product.price.toFixed(2)}</span>
+                <span className="text-lg text-muted-foreground line-through tabular-nums">{formatPrice(product.price)}</span>
                 <span className="text-sm font-semibold text-success">
                   Save {Math.round((1 - product.discountPrice / product.price) * 100)}%
                 </span>
