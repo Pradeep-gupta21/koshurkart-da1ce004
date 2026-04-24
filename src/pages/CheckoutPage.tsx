@@ -8,8 +8,9 @@ import { Separator } from "@/components/ui/separator";
 import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
-import { paymentService } from "@/services/paymentService";
+import { paymentService, type CheckoutResult } from "@/services/paymentService";
 import { analyticsService } from "@/services/analyticsService";
+import { PricingDebugBox } from "@/components/checkout/PricingDebugBox";
 
 import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ const CheckoutPage = () => {
   const [failureError, setFailureError] = useState<string | null>(null);
   const [pmSettings, setPmSettings] = useState<PaymentMethodSettings | null>(null);
   const [paymentMode, setPaymentMode] = useState<'test' | 'live' | null>(null);
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
 
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
@@ -181,6 +183,7 @@ const CheckoutPage = () => {
       );
 
       setOrderId(result.orderId);
+      setCheckoutResult(result);
       setPendingOrderId(result.orderId);
       if (result.mode) setPaymentMode(result.mode);
       if (result.method === 'upi') {
@@ -212,7 +215,10 @@ const CheckoutPage = () => {
       clearCart();
       setFlowState("success");
     } catch (err: any) {
-      const msg = err?.message ?? "Something went wrong.";
+      const isMismatch = err?.message?.includes('Amount mismatch') || err?.code === 'AMOUNT_MISMATCH';
+      const msg = isMismatch
+        ? 'Pricing mismatch detected. Please refresh the page and try again.'
+        : (err?.message ?? "Something went wrong.");
       toast({ title: "Order failed", description: msg, variant: "destructive" });
       setFailureError(msg);
       setFlowState("form");
@@ -272,6 +278,7 @@ const CheckoutPage = () => {
       );
 
       setOrderId(result.orderId);
+      setCheckoutResult(result);
       setPendingOrderId(result.orderId);
       if (result.mode) setPaymentMode(result.mode);
 
@@ -542,6 +549,8 @@ const CheckoutPage = () => {
         <div className="md:col-span-2">
           <div className="bg-card rounded-xl marketplace-shadow p-6 sticky top-24">
             <h2 className="font-semibold mb-4">Order Summary</h2>
+
+            <PricingDebugBox debug={checkoutResult?.debug ?? quote?.debug ?? null} />
 
             {/* Line items: prefer server-priced lines for accuracy */}
             <div className="space-y-3 text-sm">

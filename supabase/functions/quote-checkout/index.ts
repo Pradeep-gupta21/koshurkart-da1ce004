@@ -3,6 +3,9 @@
 // No writes, no stock reservation, no gateway calls.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
+import { calculateOrderAmount } from "../_shared/pricing.ts";
+
+const DEBUG_PRICING = Deno.env.get("DEBUG_PRICING") === "true";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,7 +88,7 @@ Deno.serve(async (req) => {
 
   const byId = new Map(products.map((p: any) => [p.id, p]));
   const lines = [];
-  let subtotal = 0;
+  const pricingInput: { product_id: string; quantity: number; unit_price: number }[] = [];
 
   for (const it of items) {
     const p: any = byId.get(it.product_id);
@@ -95,29 +98,38 @@ Deno.serve(async (req) => {
     if (!Number.isFinite(unit) || unit <= 0) {
       return json({ error: `Invalid price for "${p.title}"` }, 500);
     }
-    const lineTotal = Math.round(unit * it.quantity * 100) / 100;
-    subtotal += lineTotal;
+    pricingInput.push({ product_id: p.id, quantity: it.quantity, unit_price: unit });
     lines.push({
       product_id: p.id,
       title: p.title,
       image: Array.isArray(p.images) && p.images.length ? p.images[0] : "",
       quantity: it.quantity,
       unit_price: unit,
-      line_total: lineTotal,
+      line_total: Math.round(unit * it.quantity * 100) / 100,
       in_stock: available >= it.quantity,
       available,
       status: p.status,
     });
   }
 
-  subtotal = Math.round(subtotal * 100) / 100;
+  const pricing = calculateOrderAmount(pricingInput);
   const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
 
-  return json({
+  const response: Record<string, unknown> = {
     quote_id: crypto.randomUUID(),
     currency: "INR",
     lines,
-    subtotal,
+    subtotal: pricing.subtotal_inr,
     expires_at: expiresAt,
-  });
+  };
+
+  if (DEBUG_PRICING) {
+    response.debug = {
+      lines: pricing.line_breakdown,
+      calculatedAmountInr: pricing.subtotal_inr,
+      razorpayAmountPaise: pricing.amount_paise,
+    };
+  }
+
+  return json(response);
 });

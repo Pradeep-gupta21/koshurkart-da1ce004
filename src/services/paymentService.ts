@@ -29,6 +29,8 @@ export interface CheckoutResult {
   mode?: 'test' | 'live';
   /** True when the same idempotency_key returned a previously-created order. */
   idempotent?: boolean;
+  /** Present only when DEBUG_PRICING=true on the edge function. */
+  debug?: import('@/components/checkout/PricingDebugBox').PricingDebug;
 }
 
 /** Stable per-attempt idempotency key, persisted in sessionStorage so that
