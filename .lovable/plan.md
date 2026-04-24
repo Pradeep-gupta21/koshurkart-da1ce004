@@ -1,115 +1,137 @@
-## Reality check
+## Reality check — what's already done vs what's missing
 
-Most of this is already done in the previous turns:
+The payment pipeline is already structurally sound. Most of what this request asks for already exists:
 
-- **`create-checkout` edge function** is the single source of truth — it re-prices from DB, reserves stock, computes totals in INR, creates `orders`/`order_items`/`payments`, then mints the Razorpay order or UPI QR using the **server total**. Client never sends prices.
-- **`verify-razorpay-payment`** fetches the Razorpay order back, checks `rpOrder.amount === payments.amount * 100` and `currency === "INR"`, logs mismatches to `analytics_events`, has signature HMAC-SHA256 with constant-time compare, and is idempotent via the `one_success_per_order` unique index plus `razorpay_payment_id` uniqueness.
-- **`razorpay-webhook`** independently confirms the same payment.
-- **Frontend `paymentService.startCheckout`** calls the edge function with only `{product_id, quantity}`.
+| Requirement | Status today | Where |
+|---|---|---|
+| Server-side amount as source of truth | ✅ | `create-checkout` re-prices from DB; `verify-razorpay-payment` re-fetches Razorpay order and compares paise |
+| Wrong amount rejection | ✅ | Both `verify-razorpay-payment` (client flow) and `razorpay-webhook` (gateway push) reject + log `payment_amount_mismatch` |
+| Duplicate payment prevention | ✅ | Reuses pending payment row in `create-checkout`; idempotent on `payment_status='success'`; `webhook_events.provider_event_id` PK dedupe; unique index on `razorpay_payment_id` |
+| Signature verification | ✅ | Constant-time HMAC compare in both client-verify and webhook |
+| Webhook backup | ✅ | `razorpay-webhook` flips status independent of client confirmation |
+| Transaction logging | ✅ | `analytics_events` rows: `checkout_attempt`, `checkout_succeeded`, `checkout_failed`, `checkout_quote_mismatch`, `payment_amount_mismatch` |
+| Rate limiting | ✅ | `checkout_rate_limit` / `quote_rate_limit` RPCs |
+| Env vars for keys | ✅ | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` already secrets — never in code |
 
-Two gaps remain that match what the user is asking for:
+What's actually missing for production-readiness:
 
-1. **The UI still shows a client-computed cart total** (`CartContext.totalPrice` from localStorage `product.price`). If the DB price changes between adding-to-cart and checkout, the user sees ₹X on cart, but the server quotes ₹Y on checkout — same family of "UI doesn't match payment" the user is describing. There is no explicit "Final amount: ₹XXX (server-quoted)" step before paying.
-2. **`create-checkout` has no rate limiting** and only ad-hoc `console.error` logs — no structured price-tampering audit trail.
+1. **No automated tests** for `create-checkout`, `verify-razorpay-payment`, or `razorpay-webhook`. Without these, regressions in pricing/signature/idempotency logic are invisible.
+2. **Client retry hazard.** `paymentService.startCheckout` is called directly from the Place Order button — a flaky network or a 502 surfaces as an error, but if the request actually succeeded server-side and only the response was lost, the user retries and creates a **second order + second payment row** (the idempotency dedupe in `create-checkout` only triggers if the *prior* order/payment is still findable; it keys off `(user_id, order_id)`, not the cart). Need a client-supplied **idempotency key** so retries collapse onto the same order.
+3. **Webhook is mounted with default `verify_jwt = true`** in `supabase/config.toml` — Razorpay won't send a JWT, so the webhook is currently silently rejected before it even runs the signature check. This must be `verify_jwt = false`.
+4. **No test/live mode switch.** `RAZORPAY_KEY_ID` is a single value. Need a documented convention: keys prefixed `rzp_test_*` vs `rzp_live_*`, plus a server-emitted `mode` field so the UI can show a "TEST MODE" banner to prevent operators charging real money during QA.
+5. **Stale-pending payments** (browser killed before redirect) sit in `pending` forever. Need a sweeper to expire them after, say, 30 min, releasing reserved stock.
+6. **No structured "alert"-grade metric** for amount mismatches. Today they just hit `analytics_events`; nothing surfaces them. Add a `payment_alerts` view + an admin notification on insert of `payment_amount_mismatch`.
 
-Plan addresses exactly those.
+This plan addresses 1–6. Nothing else.
 
 ## Plan
 
-### 1. New edge function `quote-checkout` (read-only price quote)
+### 1. Idempotency key on checkout (prevent duplicate orders on retry)
 
-Same input shape as `create-checkout` but **no writes, no stock reservation, no gateway call**. Returns the server-priced line items + total.
+**Schema change (migration):**
+- Add `orders.idempotency_key text` and a partial unique index `(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`.
 
-```ts
-// POST { items: [{product_id, quantity}] }
-// → { lines: [{product_id, title, image, quantity, unit_price, line_total}],
-//     subtotal, currency: "INR", quote_id, expires_at }
-```
+**`create-checkout/index.ts`:**
+- Accept optional `idempotency_key: z.string().min(16).max(64)` in the request body.
+- Before reserving stock, look up `orders` by `(user_id, idempotency_key)`. If found:
+  - Refetch the existing payment row, return the same `{orderId, paymentId, …}` payload (re-issue the gateway artifact only if the payment is still `pending` and `razorpay_order_id` is missing — otherwise return cached values). No new stock reservation, no new order, no new gateway call.
+- On insert, persist `idempotency_key`. If the unique index throws `23505`, fall through to the lookup branch above (handles concurrent retries).
 
-Used by:
-- Cart page — to show "Server total: ₹XXX" alongside the local estimate when they differ.
-- Checkout page — to show **"Final amount: ₹XXX"** (locked) before "Place Order" is enabled.
+**`paymentService.startCheckout`:**
+- Generate a UUID v4 once per checkout attempt and pass it as `idempotency_key`. Store it in `sessionStorage` keyed on the cart hash so an in-flight retry from React Query / user double-click reuses the same key.
 
-`quote_id` is `crypto.randomUUID()`; `expires_at = now + 5 min`. We don't persist quotes (stateless); the quote is purely informational. The actual price binding happens server-side at `create-checkout` time anyway, so `quote_id` is just a UX artifact ("the price you saw is the price we'll charge, refresh if older than 5 min").
+### 2. Webhook auth fix + config
 
-### 2. Frontend — surface server total
+**`supabase/config.toml`:**
+- Add a function block for `razorpay-webhook` with `verify_jwt = false` so Razorpay's unauthenticated POST actually reaches our handler. The HMAC signature in the body is the auth.
 
-**`src/hooks/useCheckoutQuote.ts`** (new) — React Query hook:
-- `queryKey: ['checkout-quote', sortedItems]`, `staleTime: 60s`, `refetchInterval: 4 min`.
-- Returns `{ data: quote, isLoading, error, refetch }`.
+### 3. Test/live mode switch
 
-**`src/pages/CheckoutPage.tsx`**
-- Fetch quote on mount (and on cart change).
-- Replace the "Order Summary" `formatPrice(totalPrice)` with `formatPrice(quote.subtotal)`.
-- Add a prominent block:
-  ```
-  Final amount: ₹XXX
-  This is the exact amount you will be charged.
-  ```
-- Show `Loader2` skeleton while `isLoading`.
-- On error, show retry button and disable "Place Order".
-- Detect drift: if `quote.subtotal !== client totalPrice`, show a small notice "Prices updated since you added to cart" and update display to server value.
-- Disable "Place Order" while quote is stale/loading/erroring.
+**Convention (no schema change):** the Razorpay key prefix decides the mode. `rzp_test_*` → test, `rzp_live_*` → live.
 
-**`src/pages/CartPage.tsx`**
-- Same hook, smaller treatment: show server subtotal under the local estimate when they differ; "Proceed to Checkout" remains enabled (real binding is at checkout).
+**`create-checkout/index.ts`:**
+- Compute `const mode = keyId.startsWith("rzp_live_") ? "live" : "test"` and include `mode` in the response payload alongside `keyId`.
+- On boot, if `Deno.env.get("ENV") === "production"` and key starts with `rzp_test_`, log a loud warning and emit an `analytics_events` row `payment_config_warning`.
 
-### 3. `create-checkout` hardening
+**`CheckoutPage.tsx` (UI):**
+- When `result.method === "razorpay"` and `result.mode === "test"`, show an amber banner: "TEST MODE — no real money will be charged". Persist nothing; just render from the response.
 
-**Rate limiting** — sliding window via DB function:
+**Documentation:** README section "Switching Razorpay between test and live" — update the `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` secrets via Lovable Cloud. No code redeploy needed.
 
-```sql
-create or replace function public.checkout_rate_limit(_user_id uuid)
-returns boolean language plpgsql security definer set search_path = public as $$
-declare cnt int;
-begin
-  select count(*) into cnt
-  from analytics_events
-  where user_id = _user_id
-    and event_type = 'checkout_attempt'
-    and created_at > now() - interval '1 minute';
-  return cnt < 10;  -- max 10 checkouts/min/user
-end $$;
-```
+### 4. Stale-pending sweeper
 
-In `create-checkout` after auth, call the RPC; on `false` return `429 { error: "Too many checkout attempts" }`. Log every attempt as `analytics_events` with `event_type='checkout_attempt'`.
+**Migration:** create function `expire_stale_pending_payments()` (SECURITY DEFINER) that:
+- Selects payments older than 30 min with `payment_status = 'pending'` and no `razorpay_payment_id`.
+- For each, releases reserved stock for its order's items via the existing `release_stock` RPC, sets payment to `expired`, and order to `cancelled`.
 
-**Structured logging** — in addition to existing `console.error`, write to `analytics_events`:
-- `checkout_attempt` — user_id, item count, payment_method
-- `checkout_succeeded` — order_id, total, method
-- `checkout_failed` — reason (`stock`, `inactive_product`, `min_amount`, `gateway_error`, `rate_limited`)
+**Scheduling:** add a `pg_cron` schedule `every 10 minutes` to run it. (If `pg_cron` isn't enabled in this project, fall back to a small `expire-stale-payments` edge function and document a Lovable Cloud cron trigger.)
 
-**Quote-vs-actual drift logging** — accept optional `client_quoted_total` in the request. If it differs from server total by more than ₹0.01, write `event_type='checkout_quote_mismatch'` (don't reject — server total wins, but we want the audit). The frontend will pass the quote it just fetched. This catches stale clients and any tampering attempt.
+### 5. Mismatch alerting
 
-### 4. `quote-checkout` hardening
+**Migration:**
+- Add an `AFTER INSERT` trigger on `analytics_events WHEN event_type IN ('payment_amount_mismatch','checkout_quote_mismatch')` that inserts a row into `notifications` for every user with role `admin`. Reuses the existing notifications + realtime infra → admins see a red bell instantly.
 
-Same auth + rate limit (`event_type='quote_attempt'`, 30/min/user — quotes are cheaper and may be re-fetched).
+### 6. Automated tests
 
-### 5. Files
+Three new Deno test files under `supabase/functions/_tests/`. They hit the deployed function via fetch (same pattern as `verify_upi_payment_test.ts`) using the anon key + a test user JWT loaded from `.env`.
 
-**Migration**
-- `<ts>_checkout_rate_limit.sql` — `checkout_rate_limit(uuid)` and `quote_rate_limit(uuid)` SECURITY DEFINER functions.
+**`create_checkout_test.ts`** — covers:
+- ✅ Correct amount: small cart → response total equals sum of DB prices, `mode` field present, `razorpayOrderId` returned.
+- ✅ Wrong amount rejection: send `client_quoted_total` that disagrees with server → still succeeds (server wins) but a `checkout_quote_mismatch` analytics row exists.
+- ✅ Duplicate prevention: same `idempotency_key` twice in parallel → one `orders` row, one `payments` row, identical `orderId` in both responses.
+- ✅ Insufficient stock → 409.
+- ✅ Min/max amount bounds → 400.
+- ✅ Rate limit → 11th request in a minute returns 429.
 
-**New**
-- `supabase/functions/quote-checkout/index.ts`
-- `src/hooks/useCheckoutQuote.ts`
+**`verify_razorpay_payment_test.ts`** — covers (with mocked Razorpay key/secret + a deterministic HMAC fixture):
+- ✅ Valid signature + matching amount → success, payment row flipped.
+- ✅ Invalid signature → 400, payment row untouched.
+- ✅ Amount mismatch (manual DB tweak before verify) → 400, `payment_amount_mismatch` logged.
+- ✅ Idempotent: second call after success → 200 `idempotent: true`, no double credit.
+- ✅ Wrong user (different JWT) → 403.
 
-**Edit**
-- `supabase/functions/create-checkout/index.ts` — rate limit, structured logging, accept `client_quoted_total`, log drift.
-- `src/services/paymentService.ts` — add `quoteCheckout(items)`; `startCheckout` accepts optional `clientQuotedTotal`.
-- `src/pages/CheckoutPage.tsx` — show server-quoted "Final amount", loading/error states, gate "Place Order" on a fresh successful quote.
-- `src/pages/CartPage.tsx` — show server subtotal with drift hint.
-- `supabase/config.toml` — register `quote-checkout`.
+**`razorpay_webhook_test.ts`** — covers:
+- ✅ Valid signature `payment.captured` → flips status, idempotent on replay (dedupe via `webhook_events.provider_event_id`).
+- ✅ Invalid signature → 401.
+- ✅ Unknown order_id → 200 with `found: false` (Razorpay must get 2xx or it retries forever).
+- ✅ `payment.failed` → status flips to `failed`, stock released.
 
-### 6. Out of scope (intentional)
+### 7. Client error handling polish
 
-- Persisting quotes server-side / signed quote tokens — overkill given `create-checkout` already re-prices from DB at bind time. The quote is purely a UX preview.
-- Gateway-level rate limiting — Supabase platform already throttles per-IP; user-scoped DB limit is the meaningful guard.
-- IP-based limits — Edge runtime doesn't expose a stable client IP through the proxy; `user_id` scoped is the correct unit.
+**`paymentService.startCheckout` & `confirmRazorpayPayment`:**
+- Wrap network calls with the existing `withRetry` helper from `src/lib/retry.ts`. Configure: `retries: 3, delaysMs: [0, 600, 1800]`, `isTransient: defaultIsTransient` (only network/5xx — never retry 4xx). Combined with idempotency key from §1, retries are safe.
+- On Razorpay modal `payment.failed` event in `CheckoutPage.tsx`, log `analytics_events.payment_failed_client` with the failure code and surface a friendly toast with a "Retry payment" action that re-opens the **same** Razorpay order (no new gateway call).
 
-### Expected end state
+## Files
 
-- Cart page: shows server-priced subtotal with a "prices updated" notice if it drifted from local cache.
-- Checkout page: prominent "Final amount: ₹XXX — this is what you will be charged", loaded from `quote-checkout`, with loading/error states, and "Place Order" disabled until the quote is fresh.
-- Razorpay/UPI charge always equals that displayed final amount (already true after the previous turn's work).
-- Server rejects checkout abuse (429) and logs every attempt + price mismatch to `analytics_events` for the admin to inspect.
+**Migrations** (one new file)
+- `<ts>_payment_hardening.sql` — `orders.idempotency_key` + partial unique index, `expire_stale_pending_payments()` + cron schedule, `notify_admins_of_payment_alert()` trigger.
+
+**Edge functions**
+- `supabase/functions/create-checkout/index.ts` — idempotency key handling, `mode` in response, config-warning on boot.
+- `supabase/functions/_tests/create_checkout_test.ts` (new)
+- `supabase/functions/_tests/verify_razorpay_payment_test.ts` (new)
+- `supabase/functions/_tests/razorpay_webhook_test.ts` (new)
+
+**Config**
+- `supabase/config.toml` — `[functions.razorpay-webhook] verify_jwt = false`.
+
+**Frontend**
+- `src/services/paymentService.ts` — generate + persist idempotency key; wrap in `withRetry`.
+- `src/pages/CheckoutPage.tsx` — TEST MODE banner; "Retry payment" handler reusing the same Razorpay order.
+
+**Docs**
+- `README.md` — short "Razorpay test ↔ live mode" section.
+
+**No changes**
+- `verify-razorpay-payment/index.ts` — already correct (signature, amount, idempotency).
+- `razorpay-webhook/index.ts` — already correct after the config.toml fix.
+
+## Expected outcome
+
+- A double-click or flaky-network retry on Place Order produces exactly **one** order, one payment, one Razorpay order, one charge.
+- Razorpay webhook actually reaches its handler in production.
+- Operators can flip between test and live by swapping two secrets — no code change, no risk of charging real cards in QA (UI banner makes test mode unmistakable).
+- Stale `pending` payments self-clean after 30 min, freeing reserved stock.
+- Any amount/quote mismatch fires a real-time admin notification, not just a buried log row.
+- `bun run test` (Deno) covers correct/wrong/duplicate/edge-case flows for all three payment edge functions, so future refactors can't silently regress pricing or signature logic.
