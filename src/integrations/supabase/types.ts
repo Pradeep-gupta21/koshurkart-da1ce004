@@ -293,6 +293,7 @@ export type Database = {
           created_at: string
           estimated_delivery: string | null
           id: string
+          idempotency_key: string | null
           order_status: string
           payment_status: string
           shipping_provider: string | null
@@ -306,6 +307,7 @@ export type Database = {
           created_at?: string
           estimated_delivery?: string | null
           id?: string
+          idempotency_key?: string | null
           order_status?: string
           payment_status?: string
           shipping_provider?: string | null
@@ -319,6 +321,7 @@ export type Database = {
           created_at?: string
           estimated_delivery?: string | null
           id?: string
+          idempotency_key?: string | null
           order_status?: string
           payment_status?: string
           shipping_provider?: string | null

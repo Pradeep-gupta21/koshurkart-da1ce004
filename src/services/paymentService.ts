@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
+import { withRetry } from '@/lib/retry';
 
 declare global {
   interface Window {
@@ -24,6 +25,35 @@ export interface CheckoutResult {
   keyId?: string;
   amountPaise?: number;
   currency?: string;
+  /** "test" or "live" — derived server-side from RAZORPAY_KEY_ID prefix. */
+  mode?: 'test' | 'live';
+  /** True when the same idempotency_key returned a previously-created order. */
+  idempotent?: boolean;
+}
+
+/** Stable per-attempt idempotency key, persisted in sessionStorage so that
+ *  a user double-click or in-flight retry reuses the same key. */
+function getOrCreateIdempotencyKey(items: CheckoutItemInput[], paymentMethod: string): string {
+  if (typeof window === 'undefined') return crypto.randomUUID();
+  // Cart hash makes the key change when the cart changes — preventing a stale
+  // key from being reused after the user edits their cart and re-checks out.
+  const hash = items
+    .map((i) => `${i.product_id}:${i.quantity}`)
+    .sort()
+    .join('|') + `|${paymentMethod}`;
+  const storeKey = `checkout_idem:${hash}`;
+  const existing = sessionStorage.getItem(storeKey);
+  if (existing) return existing;
+  const k = (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/-/g, '');
+  sessionStorage.setItem(storeKey, k);
+  return k;
+}
+
+/** Clear the cached key (call after a terminal success/failure). */
+function clearIdempotencyKey(items: CheckoutItemInput[], paymentMethod: string) {
+  if (typeof window === 'undefined') return;
+  const hash = items.map((i) => `${i.product_id}:${i.quantity}`).sort().join('|') + `|${paymentMethod}`;
+  sessionStorage.removeItem(`checkout_idem:${hash}`);
 }
 
 export const paymentService = {
@@ -31,6 +61,11 @@ export const paymentService = {
    * SOURCE OF TRUTH: server re-prices items from DB, reserves stock,
    * creates the order/items/payment and (for razorpay/upi) the gateway artifact.
    * The client never sends prices.
+   *
+   * Idempotent: a stable per-attempt key is generated and persisted in
+   * sessionStorage so retries (network blips, double-clicks) collapse onto
+   * the same order. Combined with `withRetry`, transient 5xx/network errors
+   * are auto-retried without risk of duplicate orders or charges.
    */
   async startCheckout(
     items: CheckoutItemInput[],
@@ -38,17 +73,35 @@ export const paymentService = {
     pincode?: string,
     clientQuotedTotal?: number,
   ): Promise<CheckoutResult> {
-    const { data, error } = await supabase.functions.invoke('create-checkout', {
-      body: {
-        items,
-        payment_method: paymentMethod,
-        shipping_pincode: pincode,
-        client_quoted_total: clientQuotedTotal,
+    const idempotencyKey = getOrCreateIdempotencyKey(items, paymentMethod);
+
+    const result = await withRetry(
+      async () => {
+        const { data, error } = await supabase.functions.invoke('create-checkout', {
+          body: {
+            items,
+            payment_method: paymentMethod,
+            shipping_pincode: pincode,
+            client_quoted_total: clientQuotedTotal,
+            idempotency_key: idempotencyKey,
+          },
+        });
+        if (error) throw error;
+        if (data?.error) {
+          // App-level error — non-transient, do not retry.
+          const e = new Error(data.error) as Error & { status?: number };
+          e.status = 400;
+          throw e;
+        }
+        return data as CheckoutResult;
       },
-    });
-    if (error) throw new Error(error.message ?? 'Checkout failed');
-    if (data?.error) throw new Error(data.error);
-    return data as CheckoutResult;
+      { scope: 'startCheckout', retries: 3, delaysMs: [0, 600, 1800] },
+    );
+
+    // Cart-shape changed → clear stored key after success so a *new* checkout
+    // starts fresh. Keep it on failure so the user can retry safely.
+    clearIdempotencyKey(items, paymentMethod);
+    return result;
   },
 
   // ---- Payment record methods ----
