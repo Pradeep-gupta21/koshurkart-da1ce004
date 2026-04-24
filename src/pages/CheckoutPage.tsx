@@ -540,13 +540,22 @@ const CheckoutPage = () => {
         <div className="md:col-span-2">
           <div className="bg-card rounded-xl marketplace-shadow p-6 sticky top-24">
             <h2 className="font-semibold mb-4">Order Summary</h2>
+
+            {/* Line items: prefer server-priced lines for accuracy */}
             <div className="space-y-3 text-sm">
-              {items.map(({ product, quantity }) => (
-                <div key={product.id} className="flex justify-between">
-                  <span className="text-muted-foreground truncate mr-2">{product.title} ×{quantity}</span>
-                  <span className="tabular-nums shrink-0">{formatPrice((product.discountPrice ?? product.price) * quantity)}</span>
-                </div>
-              ))}
+              {quote
+                ? quote.lines.map((l) => (
+                    <div key={l.product_id} className="flex justify-between">
+                      <span className="text-muted-foreground truncate mr-2">{l.title} ×{l.quantity}</span>
+                      <span className="tabular-nums shrink-0">{formatPrice(l.line_total)}</span>
+                    </div>
+                  ))
+                : items.map(({ product, quantity }) => (
+                    <div key={product.id} className="flex justify-between">
+                      <span className="text-muted-foreground truncate mr-2">{product.title} ×{quantity}</span>
+                      <span className="tabular-nums shrink-0">{formatPrice((product.discountPrice ?? product.price) * quantity)}</span>
+                    </div>
+                  ))}
               <Separator />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Shipping</span>
@@ -556,11 +565,43 @@ const CheckoutPage = () => {
                   <span className="text-success font-medium">Free</span>
                 )}
               </div>
-              <div className="flex justify-between font-semibold text-base">
-                <span>Total</span>
-                <span className="tabular-nums">{formatPrice(grandTotal)}</span>
-              </div>
             </div>
+
+            {/* Final amount block — server-quoted, locked */}
+            <div className="mt-5 rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                <span>Verified by our server</span>
+              </div>
+              {quoteLoading ? (
+                <Skeleton className="h-9 w-32" />
+              ) : quoteError ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-destructive flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4" /> Could not load price
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => refetchQuote()} className="gap-2">
+                    <RefreshCw className="h-3.5 w-3.5" /> Retry
+                  </Button>
+                </div>
+              ) : quote ? (
+                <>
+                  <p className="text-2xl font-bold tabular-nums">
+                    Final amount: {formatPrice(quote.subtotal + shippingTotal)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This is the exact amount you will be charged in INR.
+                  </p>
+                  {Math.abs(quote.subtotal - totalPrice) > 0.01 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-start gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      Prices were updated since you added items to your cart.
+                    </p>
+                  )}
+                </>
+              ) : null}
+            </div>
+
             {hasUnserviceableItem && (
               <p className="mt-4 text-xs text-destructive bg-destructive/10 rounded-md p-2.5">
                 Some items can't be delivered. Update your delivery location or remove them.
@@ -569,10 +610,18 @@ const CheckoutPage = () => {
             <Button
               size="lg"
               className="w-full mt-6 h-12"
-              disabled={submitting || hasUnserviceableItem}
+              disabled={submitting || hasUnserviceableItem || quoteLoading || !!quoteError || !quote || quoteFetching}
               onClick={handlePlaceOrder}
             >
-              {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</> : `Place Order — ${formatPrice(grandTotal)}`}
+              {submitting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</>
+              ) : quoteLoading || quoteFetching ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading price...</>
+              ) : quote ? (
+                `Place Order — ${formatPrice(quote.subtotal + shippingTotal)}`
+              ) : (
+                'Place Order'
+              )}
             </Button>
           </div>
         </div>
