@@ -287,8 +287,16 @@ Deno.serve(async (req) => {
   }
 
   // ---- 8. Branch by payment method ----
+  const logSuccess = (method: string, extra: Record<string, unknown> = {}) =>
+    service.from("analytics_events").insert({
+      event_type: "checkout_succeeded",
+      user_id: user.id,
+      metadata: { order_id: orderId, total, method, ...extra },
+    });
+
   if (payment_method === "cod") {
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
+    await logSuccess("cod");
     return json({ orderId, paymentId: payment.id, total, method: "cod" });
   }
 
@@ -296,13 +304,21 @@ Deno.serve(async (req) => {
     const upiLink = `upi://pay?pa=${encodeURIComponent(merchantUpiId)}&pn=${encodeURIComponent(merchantName)}&am=${total}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
     await service.from("payments").update({ qr_code_url: qrCodeUrl, upi_id: merchantUpiId }).eq("id", payment.id);
+    await logSuccess("upi");
     return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId });
   }
 
   // razorpay
   const keyId = Deno.env.get("RAZORPAY_KEY_ID");
   const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
-  if (!keyId || !keySecret) return json({ error: "Razorpay not configured" }, 500);
+  if (!keyId || !keySecret) {
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "razorpay_not_configured", order_id: orderId },
+    });
+    return json({ error: "Razorpay not configured" }, 500);
+  }
 
   const amountPaise = Math.round(total * 100);
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
@@ -318,6 +334,11 @@ Deno.serve(async (req) => {
   if (!rpRes.ok) {
     const errBody = await rpRes.text();
     console.error("razorpay order create failed", rpRes.status, errBody);
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId },
+    });
     return json({ error: "Failed to create Razorpay order" }, 502);
   }
   const rpOrder = await rpRes.json();
@@ -325,6 +346,7 @@ Deno.serve(async (req) => {
     .from("payments")
     .update({ razorpay_order_id: rpOrder.id })
     .eq("id", payment.id);
+  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise });
 
   return json({
     orderId,
