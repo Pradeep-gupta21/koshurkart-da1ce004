@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Wallet, DollarSign, CreditCard, ArrowDownToLine, Megaphone, TrendingUp, Info } from "lucide-react";
+import { Wallet, IndianRupee, CreditCard, ArrowDownToLine, Megaphone, TrendingUp, Info } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 const VendorPayments = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
@@ -14,6 +15,7 @@ const VendorPayments = () => {
   const [adSpend, setAdSpend] = useState(0);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     if (!vendorId) return;
@@ -59,7 +61,7 @@ const VendorPayments = () => {
   };
 
   const cards = [
-    { label: "Total Earnings", value: totalEarnings, icon: DollarSign },
+    { label: "Total Earnings", value: totalEarnings, icon: IndianRupee },
     { label: "Withdrawable", value: withdrawableBalance, icon: Wallet },
     { label: "Ad Spend", value: adSpend, icon: Megaphone },
     { label: "Paid Out", value: totalPaidOut, icon: CreditCard },
@@ -88,7 +90,7 @@ const VendorPayments = () => {
               <item.icon className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${item.value.toFixed(2)}</div>
+              <div className="text-2xl font-bold">{formatPrice(item.value)}</div>
             </CardContent>
           </Card>
         ))}
@@ -110,7 +112,7 @@ const VendorPayments = () => {
               {payouts.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
                   <div>
-                    <p className="font-medium text-sm">${Number(p.amount).toFixed(2)}</p>
+                    <p className="font-medium text-sm">{formatPrice(Number(p.amount))}</p>
                     <p className="text-xs text-muted-foreground">{new Date(p.requested_at).toLocaleDateString()}</p>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full ${

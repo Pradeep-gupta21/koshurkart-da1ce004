@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Store, ShoppingCart, Package, DollarSign, Megaphone, AlertTriangle, Trophy, Archive } from "lucide-react";
+import { Users, Store, ShoppingCart, Package, IndianRupee, Megaphone, AlertTriangle, Trophy, Archive } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { Badge } from "@/components/ui/badge";
 import { analyticsService } from "@/services/analyticsService";
 import { TimeRangeSelector, type TimeRange } from "@/components/analytics/TimeRangeSelector";
@@ -25,6 +26,7 @@ const COLORS = [
 const AdminOverview = () => {
   const { toast } = useToast();
   const [range, setRange] = useState<TimeRange>("monthly");
+  const { formatPrice } = useCurrency();
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
   const [abnormalPurchases, setAbnormalPurchases] = useState<any[]>([]);
@@ -124,7 +126,7 @@ const AdminOverview = () => {
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
     { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
-    { label: "Revenue", value: `$${stats.revenue.toFixed(2)}`, icon: DollarSign, color: "text-secondary" },
+    { label: "Revenue", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-secondary" },
   ];
 
   return (
@@ -163,7 +165,7 @@ const AdminOverview = () => {
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip contentStyle={{ borderRadius: '0.5rem', border: '1px solid hsl(214,32%,91%)' }} />
                 <Legend />
-                <Area type="monotone" dataKey="revenue" stroke={COLORS[0]} fill={COLORS[0]} fillOpacity={0.15} name="Revenue ($)" />
+                <Area type="monotone" dataKey="revenue" stroke={COLORS[0]} fill={COLORS[0]} fillOpacity={0.15} name="Revenue (₹)" />
                 <Area type="monotone" dataKey="orders" stroke={COLORS[1]} fill={COLORS[1]} fillOpacity={0.1} name="Orders" />
               </AreaChart>
             </ResponsiveContainer>
@@ -187,7 +189,7 @@ const AdminOverview = () => {
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="adRevenue" stroke={COLORS[2]} strokeWidth={2} name="Ad Revenue ($)" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="adRevenue" stroke={COLORS[2]} strokeWidth={2} name="Ad Revenue (₹)" dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -236,7 +238,7 @@ const AdminOverview = () => {
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+                  <Tooltip formatter={(v: number) => formatPrice(v)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

@@ -3,7 +3,7 @@
 import {
   Tag, Sparkles, Trophy, Flame, Home, ShoppingCart, ShoppingBag, Heart,
   User, Store, ShieldAlert, HelpCircle, Settings, Bell, Star, FileText,
-  LogIn, Package, BarChart3, Wallet, CreditCard, DollarSign, Users,
+  LogIn, Package, BarChart3, Wallet, CreditCard, IndianRupee, Users,
   Megaphone, LayoutGrid, LayoutDashboard, MessageSquare, type LucideIcon,
 } from "lucide-react";
 
@@ -37,8 +37,10 @@ const ICONS: Record<string, LucideIcon> = {
   wallet: Wallet,
   card: CreditCard,
   "credit-card": CreditCard,
-  dollar: DollarSign,
-  "dollar-sign": DollarSign,
+  dollar: IndianRupee,
+  "dollar-sign": IndianRupee,
+  rupee: IndianRupee,
+  "indian-rupee": IndianRupee,
   users: Users,
   megaphone: Megaphone,
   grid: LayoutGrid,

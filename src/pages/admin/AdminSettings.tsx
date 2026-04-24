@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Info, DollarSign, QrCode, CreditCard, Store } from "lucide-react";
+import { Info, IndianRupee, QrCode, CreditCard, Store } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -226,7 +226,7 @@ const AdminSettings = () => {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-primary" />
+            <IndianRupee className="h-5 w-5 text-primary" />
             <CardTitle>Commission Configuration</CardTitle>
           </div>
           <CardDescription>
