@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/hooks/useAuth";
+import type { PricingDebug } from "@/components/checkout/PricingDebugBox";
 
 export interface QuoteLine {
   product_id: string;
@@ -21,6 +22,8 @@ export interface CheckoutQuote {
   lines: QuoteLine[];
   subtotal: number;
   expires_at: string;
+  /** Present only when DEBUG_PRICING=true on the edge function. */
+  debug?: PricingDebug;
 }
 
 /**
