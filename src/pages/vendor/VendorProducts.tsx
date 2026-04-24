@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { productService } from "@/services/productService";
 import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle } from "lucide-react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
 const statusOptions = [
@@ -284,7 +285,7 @@ const VendorProducts = () => {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate">{p.title}</h3>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                      <span>${p.price}</span>
+                      <span>{formatPrice(Number(p.price))}</span>
                       {(() => {
                         const avail = p.stock - (p.reservedStock ?? 0);
                         const isLow = avail > 0 && avail <= (p.lowStockThreshold ?? 5);

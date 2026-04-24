@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useCurrency } from "@/contexts/CurrencyContext";
 
 interface VendorOrderItem {
   id: string;
@@ -237,7 +238,7 @@ const VendorOrders = () => {
                       <p className="text-sm font-medium truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
-                    <p className="text-sm font-semibold tabular-nums">${(Number(item.price) * item.quantity).toFixed(2)}</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
                   </div>
                 ))}
               </div>

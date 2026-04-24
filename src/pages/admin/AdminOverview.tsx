@@ -284,7 +284,7 @@ const AdminOverview = () => {
                     <span className="text-sm font-bold text-muted-foreground w-6">{i + 1}.</span>
                     <span className="font-medium text-sm">{v.name}</span>
                   </div>
-                  <span className="font-semibold text-sm tabular-nums">${v.revenue.toFixed(2)}</span>
+                  <span className="font-semibold text-sm tabular-nums">{formatPrice(Number(v.revenue))}</span>
                 </div>
               ))}
             </div>

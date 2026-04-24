@@ -272,7 +272,7 @@ const VendorOverview = () => {
                 {recentPayments.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div className="space-y-0.5">
-                      <p className="font-medium text-sm">${Number(p.amount).toFixed(2)}</p>
+                      <p className="font-medium text-sm">{formatPrice(Number(p.amount))}</p>
                       <p className="text-xs text-muted-foreground capitalize">{p.payment_method} • {format(parseISO(p.created_at), "MMM dd, yyyy")}</p>
                     </div>
                     <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${statusColor(p.payment_status)}`}>
@@ -306,7 +306,7 @@ const VendorOverview = () => {
                       <p className="font-medium text-sm truncate">{item.title}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
-                    <p className="font-semibold text-sm shrink-0">${(item.price * item.quantity).toFixed(2)}</p>
+                    <p className="font-semibold text-sm shrink-0">{formatPrice(Number(item.price) * item.quantity)}</p>
                   </div>
                 ))}
               </div>

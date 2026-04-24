@@ -76,7 +76,7 @@ const VendorCampaigns = () => {
         <Card className="marketplace-shadow">
           <CardContent className="py-4">
             <p className="text-sm text-muted-foreground">Total Budget</p>
-            <p className="text-2xl font-bold">${totalBudget.toFixed(2)}</p>
+            <p className="text-2xl font-bold">{formatPrice(totalBudget)}</p>
           </CardContent>
         </Card>
         <Card className="marketplace-shadow">
