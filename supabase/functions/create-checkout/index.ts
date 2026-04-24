@@ -158,11 +158,40 @@ Deno.serve(async (req) => {
   const total = Math.round(totalRaw * 100) / 100;
   if (total < 1) {
     await releaseReserved();
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "min_amount", total },
+    });
     return json({ error: "Order total must be at least ₹1" }, 400);
   }
   if (total > 1_000_000) {
     await releaseReserved();
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "max_amount", total },
+    });
     return json({ error: "Order total exceeds maximum allowed" }, 400);
+  }
+
+  // Drift / tampering audit — log if client's quoted total disagrees with server.
+  // We never reject on this (server total wins), but we want a paper trail.
+  if (
+    typeof client_quoted_total === "number" &&
+    Math.abs(client_quoted_total - total) > 0.01
+  ) {
+    console.warn("checkout quote drift", { user: user.id, client: client_quoted_total, server: total });
+    await service.from("analytics_events").insert({
+      event_type: "checkout_quote_mismatch",
+      user_id: user.id,
+      metadata: {
+        client_quoted_total,
+        server_total: total,
+        delta: Math.round((client_quoted_total - total) * 100) / 100,
+        payment_method,
+      },
+    });
   }
 
   // ---- 4. Insert order ----
