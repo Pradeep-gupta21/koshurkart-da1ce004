@@ -427,25 +427,39 @@ Deno.serve(async (req) => {
   }
 
   // ---- 8. Branch by payment method ----
+  const debugBlock = DEBUG_PRICING
+    ? {
+        debug: {
+          lines: pricing.line_breakdown,
+          calculatedAmountInr: total,
+          razorpayAmountPaise: amountPaise,
+          mode,
+        },
+      }
+    : {};
+
   const logSuccess = (method: string, extra: Record<string, unknown> = {}) =>
     service.from("analytics_events").insert({
       event_type: "checkout_succeeded",
       user_id: user.id,
-      metadata: { order_id: orderId, total, method, mode, ...extra },
+      metadata: { order_id: orderId, total, amount_paise: amountPaise, method, mode, ...extra },
     });
 
   if (payment_method === "cod") {
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
     await logSuccess("cod");
-    return json({ orderId, paymentId: payment.id, total, method: "cod", mode });
+    return json({ orderId, paymentId: payment.id, total, method: "cod", mode, ...debugBlock });
   }
 
   if (payment_method === "upi") {
-    const upiLink = `upi://pay?pa=${encodeURIComponent(merchantUpiId)}&pn=${encodeURIComponent(merchantName)}&am=${total}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
+    // UPI link `am=` MUST be the same rupee value derived from amountPaise so
+    // the QR amount is provably equal to the gateway/order amount.
+    const amountForUpi = (amountPaise / 100).toFixed(2);
+    const upiLink = `upi://pay?pa=${encodeURIComponent(merchantUpiId)}&pn=${encodeURIComponent(merchantName)}&am=${amountForUpi}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
     await service.from("payments").update({ qr_code_url: qrCodeUrl, upi_id: merchantUpiId }).eq("id", payment.id);
     await logSuccess("upi");
-    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId, mode });
+    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId, mode, amountPaise, currency: "INR", ...debugBlock });
   }
 
   // razorpay
@@ -458,7 +472,6 @@ Deno.serve(async (req) => {
     return json({ error: "Razorpay not configured" }, 500);
   }
 
-  const amountPaise = Math.round(total * 100);
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
 
   const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
@@ -496,5 +509,6 @@ Deno.serve(async (req) => {
     mode,
     amountPaise,
     currency: "INR",
+    ...debugBlock,
   });
 });
