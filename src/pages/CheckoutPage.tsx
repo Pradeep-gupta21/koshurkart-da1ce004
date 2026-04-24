@@ -175,7 +175,8 @@ const CheckoutPage = () => {
       const result = await paymentService.startCheckout(
         itemsPayload,
         paymentMethod as 'cod' | 'upi' | 'razorpay',
-        shipping.zip
+        shipping.zip,
+        quote?.subtotal,
       );
 
       setOrderId(result.orderId);
@@ -265,7 +266,8 @@ const CheckoutPage = () => {
       const result = await paymentService.startCheckout(
         itemsPayload,
         paymentMethod as 'cod' | 'upi' | 'razorpay',
-        shipping.zip
+        shipping.zip,
+        quote?.subtotal,
       );
 
       setOrderId(result.orderId);
