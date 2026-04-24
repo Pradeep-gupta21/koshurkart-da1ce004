@@ -73,6 +73,7 @@ const nextShippingStatus: Record<string, ShippingStatus> = {
 const VendorOrders = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
+  const { formatPrice } = useCurrency();
   const [items, setItems] = useState<VendorOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
