@@ -27,10 +27,11 @@ const ALL_PAYMENT_METHODS = [
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
-  const { items, totalPrice, shippingTotal, grandTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
+  const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { data: quote, isLoading: quoteLoading, error: quoteError, refetch: refetchQuote, isFetching: quoteFetching } = useCheckoutQuote();
   const [flowState, setFlowState] = useState<FlowState>("form");
   const [orderId, setOrderId] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState<string | null>(null);
