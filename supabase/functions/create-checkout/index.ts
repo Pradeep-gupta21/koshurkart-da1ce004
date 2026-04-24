@@ -60,12 +60,30 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { items, payment_method } = parsed.data;
+  const { items, payment_method, client_quoted_total } = parsed.data;
 
   const service = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // ---- Rate limit (per-user sliding window) ----
+  const { data: allowed } = await service.rpc("checkout_rate_limit", { _user_id: user.id });
+  if (allowed === false) {
+    await service.from("analytics_events").insert({
+      event_type: "checkout_failed",
+      user_id: user.id,
+      metadata: { reason: "rate_limited" },
+    });
+    return json({ error: "Too many checkout attempts. Please wait a minute." }, 429);
+  }
+
+  // Log every attempt for audit + rate-limit accounting.
+  await service.from("analytics_events").insert({
+    event_type: "checkout_attempt",
+    user_id: user.id,
+    metadata: { item_count: items.length, payment_method },
+  });
 
   // ---- 1. Re-price from DB (server is the only source of truth) ----
   const productIds = [...new Set(items.map((i) => i.product_id))];
