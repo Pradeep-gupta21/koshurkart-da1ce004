@@ -71,11 +71,9 @@ const CheckoutPage = () => {
   const [proofFile, setProofFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Razorpay state
+  // Tracked only to keep Razorpay handler closure stable; not read directly in render.
   const [, setRazorpayPaymentRecord] = useState<{ id: string } | null>(null);
-
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
-
+  const [, setPendingOrderId] = useState<string | null>(null);
 
   const [shipping, setShipping] = useState({
     firstName: "", lastName: "", address: "", city: "", zip: "",
