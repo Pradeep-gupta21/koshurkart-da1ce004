@@ -13,7 +13,9 @@ import { analyticsService } from "@/services/analyticsService";
 
 import { fetchPaymentMethodSettings, type PaymentMethodSettings } from "@/config/platformSettings";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check } from "lucide-react";
+import { useCheckoutQuote } from "@/hooks/useCheckoutQuote";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ALL_PAYMENT_METHODS = [
