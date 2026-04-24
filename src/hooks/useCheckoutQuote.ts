@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface QuoteLine {
   product_id: string;
@@ -28,14 +29,15 @@ export interface CheckoutQuote {
  */
 export function useCheckoutQuote() {
   const { items } = useCart();
+  const { user } = useAuth();
   const itemsKey = items
     .map((i) => `${i.product.id}:${i.quantity}`)
     .sort()
     .join(",");
 
   return useQuery<CheckoutQuote>({
-    queryKey: ["checkout-quote", itemsKey],
-    enabled: items.length > 0,
+    queryKey: ["checkout-quote", user?.id ?? "guest", itemsKey],
+    enabled: items.length > 0 && !!user,
     staleTime: 60_000,
     refetchInterval: 4 * 60_000,
     refetchOnWindowFocus: true,
