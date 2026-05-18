@@ -1,62 +1,31 @@
 ## Goal
-Give shoppers a dedicated page to track their UPI/Razorpay/COD payment status, see admin verification results, and retry any failed or rejected payment.
 
-## New route
-- `/payments` — list of the current user's payments (latest first), grouped by status
-- `/payments/:paymentId` — single payment detail with verification result + retry actions
+On `/payments/:paymentId`, automatically poll for status updates so users see verification results without manually refreshing. Stop polling once the payment reaches a terminal state.
 
-Both protected by `ProtectedRoute` and lazy-loaded in `src/App.tsx`.
+## Behavior
 
-## UI
+- **Polls while status is non-terminal:** `pending`, `pending_verification`.
+- **Stops polling at terminal states:** `success`, `failed`, `rejected`, `reversed`.
+- **Polling cadence:** every 5s for the first minute, then 15s afterwards (gentle backoff). Capped at 10 minutes total, then stops with a "Still waiting? Refresh" hint.
+- **Pauses when tab is hidden** (`document.visibilityState`) and resumes on focus to avoid wasted requests.
+- **Realtime boost:** also subscribe to `postgres_changes` on `payments` filtered by `id=eq.{paymentId}` via existing `useRealtimeSubscription`. Realtime updates re-run the loader immediately; polling remains as a fallback for missed events.
+- **Status change UX:** when status transitions to a terminal state, show a subtle toast ("Payment verified" / "Payment failed") and stop polling. The existing verification-result card already renders the new state.
+- **No UI layout change** beyond a small inline "Auto-refreshing…" indicator next to the status badge while polling is active.
 
-### PaymentsListPage
-- Table/card list of `payments` for `auth.uid()` (RLS already permits `Users read own payments`)
-- Columns: Order ID (short), Date, Method (UPI/Razorpay/COD), Amount (₹), Status badge, Action
-- Status badges: `success` (green), `pending` (amber), `pending_verification` (blue "Awaiting admin review"), `failed`/`rejected` (red)
-- Tabs/filter: All · Awaiting verification · Failed · Successful
-- Empty state when no payments
+## Technical details
 
-### PaymentDetailPage (`/payments/:id`)
-Sections:
-1. **Header** — amount, method, status badge, created date
-2. **Verification result panel** (UPI only):
-   - `pending` → "Submit your UPI reference to complete payment" + link back to checkout flow
-   - `pending_verification` → "Your payment is being verified by our team" + show submitted proof (`payment_proof`) and `transaction_id`
-   - `success` → green check, `credited_at`, transaction id
-   - `failed`/`rejected` → red banner with reason from `payment_audit_log` (latest entry where `new_status` matches) + **Retry** button
-3. **Order summary** — fetched from `orders` + `order_items` (joined, RLS already allows owner)
-4. **Audit timeline** — only show transitions visible to user (derived from `payment_status` changes; we don't have user read on `payment_audit_log`, so derive from current state + `created_at`/`credited_at`/`reversed_at` columns instead)
-5. **Actions**
-   - Retry payment (failed/rejected only): calls `paymentService.createOrUpdatePayment` reusing the same `orderId` (the service already handles re-using existing pending rows). Navigates user back to a lightweight retry flow that re-renders the QR / Razorpay modal inline on this page.
-   - Cancel order link (only if still pending and method is COD/UPI not yet verified)
+Edits limited to `src/pages/PaymentDetailPage.tsx`:
 
-### Retry flow (in-page)
-- For UPI: re-generate QR via existing service, show UPI link + textfield to submit new UTR reference → calls `confirm-upi-payment` edge function (already exists)
-- For Razorpay: invoke `create-razorpay-order` + open Razorpay checkout (mirror logic from `CheckoutPage`)
-- For COD: no retry needed — show info text
+1. Add a `useEffect` that:
+   - Computes `isTerminal = ["success","failed","rejected","reversed"].includes(status)`.
+   - If terminal → no-op.
+   - Else sets up a `setTimeout` loop that calls a lightweight reload (selecting only `payment` row, not re-fetching the order) and reschedules with the cadence above.
+   - Tracks start time in a ref to enforce the 10-minute cap.
+   - Listens to `visibilitychange` to pause/resume.
+   - Cleans up timers on unmount and on status change.
+2. Refactor `load` slightly: extract `loadPayment()` (payments row only) used by the poller, while initial mount still loads payment + order.
+3. Add `useRealtimeSubscription` for `payments` table filtered by `id=eq.${paymentId}`, calling `loadPayment()` on payload.
+4. Add a small `<span>` near the status badge: `"Auto-refreshing…"` muted text + spinning `Loader2` icon, only while polling is active.
+5. Use `useToast` to announce terminal transitions (compare previous status ref vs new).
 
-## Data access
-All read-only via existing tables and RLS:
-- `payments` (own rows)
-- `orders` + `order_items` (own rows, owner policy)
-- `shipment_events` (optional, for context)
-
-No DB migration required. No new edge functions required.
-
-## Files
-**New**
-- `src/pages/PaymentsListPage.tsx`
-- `src/pages/PaymentDetailPage.tsx`
-- `src/components/payments/PaymentStatusBadge.tsx`
-- `src/components/payments/RetryPaymentPanel.tsx` (handles UPI QR + Razorpay reopen)
-
-**Edited**
-- `src/App.tsx` — register two lazy routes under `ProtectedRoute`
-- `src/services/paymentService.ts` — add `listMyPayments()` and `getPaymentDetail(id)` helpers (thin wrappers around supabase queries)
-- `src/components/layout/Header.tsx` or profile dropdown — add "My Payments" link (small nav addition)
-- `src/pages/ProfilePage.tsx` — add a "Payments" quick-link card
-
-## Out of scope
-- New verification logic (admin tools already exist on `/admin/payments`)
-- Schema changes / new edge functions
-- Multi-currency formatting changes (uses existing `formatPrice`)
+No service, schema, route, or other component changes.

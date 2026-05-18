@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useToast } from "@/hooks/use-toast";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import PaymentStatusBadge from "@/components/payments/PaymentStatusBadge";
 import RetryPaymentPanel from "@/components/payments/RetryPaymentPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { AlertCircle, CheckCircle2, Clock, ShieldQuestion, ArrowLeft } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, ShieldQuestion, ArrowLeft, Loader2 } from "lucide-react";
 
 type Payment = {
   id: string;
@@ -34,29 +36,47 @@ type OrderRow = {
   order_items: { id: string; title: string; quantity: number; price: number; image: string | null }[];
 };
 
+const TERMINAL_STATUSES = ["success", "failed", "rejected", "reversed"];
+const POLL_MAX_MS = 10 * 60 * 1000; // 10 minutes
+const POLL_FAST_MS = 5_000;
+const POLL_FAST_WINDOW_MS = 60_000;
+const POLL_SLOW_MS = 15_000;
+
 export default function PaymentDetailPage() {
   const { paymentId } = useParams<{ paymentId: string }>();
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
+  const { toast } = useToast();
   const [payment, setPayment] = useState<Payment | null>(null);
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [pollExpired, setPollExpired] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!paymentId) return;
-    setLoading(true);
-    const { data: p } = await supabase
+  const prevStatusRef = useRef<string | null>(null);
+  const pollStartedAtRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadPayment = useCallback(async () => {
+    if (!paymentId) return null;
+    const { data } = await supabase
       .from("payments")
       .select("*")
       .eq("id", paymentId)
       .maybeSingle();
+    if (data) setPayment(data as Payment);
+    return (data as Payment) ?? null;
+  }, [paymentId]);
+
+  const loadAll = useCallback(async () => {
+    if (!paymentId) return;
+    setLoading(true);
+    const p = await loadPayment();
     if (!p) {
       setNotFound(true);
       setLoading(false);
       return;
     }
-    setPayment(p as Payment);
     const { data: o } = await supabase
       .from("orders")
       .select("id, total_amount, order_status, payment_status, order_items(id, title, quantity, price, image)")
@@ -64,9 +84,81 @@ export default function PaymentDetailPage() {
       .maybeSingle();
     if (o) setOrder(o as OrderRow);
     setLoading(false);
-  }, [paymentId]);
+  }, [paymentId, loadPayment]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Realtime updates push status changes immediately.
+  useRealtimeSubscription({
+    table: "payments",
+    event: "UPDATE",
+    filter: paymentId ? `id=eq.${paymentId}` : undefined,
+    enabled: !!paymentId,
+    onPayload: () => { loadPayment(); },
+  });
+
+  const status = payment?.payment_status ?? null;
+  const isTerminal = !!status && TERMINAL_STATUSES.includes(status);
+  const isPolling = !!payment && !isTerminal && !pollExpired;
+
+  // Toast on terminal transitions.
+  useEffect(() => {
+    if (!status) return;
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (!prev || prev === status) return;
+    if (!TERMINAL_STATUSES.includes(status)) return;
+    if (status === "success") {
+      toast({ title: "Payment verified", description: "Your payment was confirmed." });
+    } else if (status === "failed" || status === "rejected") {
+      toast({
+        title: status === "rejected" ? "Payment rejected" : "Payment failed",
+        description: "You can retry below.",
+        variant: "destructive",
+      });
+    } else if (status === "reversed") {
+      toast({ title: "Payment reversed", description: "The payment was reversed." });
+    }
+  }, [status, toast]);
+
+  // Polling loop with visibility pause.
+  useEffect(() => {
+    if (!isPolling) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      return;
+    }
+    if (pollStartedAtRef.current == null) pollStartedAtRef.current = Date.now();
+
+    const tick = async () => {
+      if (document.visibilityState === "visible") {
+        await loadPayment();
+      }
+      const elapsed = Date.now() - (pollStartedAtRef.current ?? Date.now());
+      if (elapsed >= POLL_MAX_MS) {
+        setPollExpired(true);
+        return;
+      }
+      const delay = elapsed < POLL_FAST_WINDOW_MS ? POLL_FAST_MS : POLL_SLOW_MS;
+      timerRef.current = setTimeout(tick, delay);
+    };
+
+    timerRef.current = setTimeout(tick, POLL_FAST_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        // Refresh promptly on tab refocus.
+        loadPayment();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [isPolling, loadPayment]);
 
   if (!user) return <Navigate to="/auth" replace />;
   if (notFound) return <Navigate to="/payments" replace />;
@@ -81,7 +173,6 @@ export default function PaymentDetailPage() {
     );
   }
 
-  const status = payment.payment_status;
   const isUpi = payment.payment_method === "upi";
   const isFailed = status === "failed" || status === "rejected";
   const isAwaitingVerification = status === "pending_verification";
@@ -104,9 +195,22 @@ export default function PaymentDetailPage() {
                 {" · "}{payment.payment_method.toUpperCase()}
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-right space-y-1">
               <div className="text-2xl font-bold">{formatPrice(Number(payment.amount))}</div>
-              <PaymentStatusBadge status={status} />
+              <PaymentStatusBadge status={status!} />
+              {isPolling && (
+                <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Auto-refreshing…
+                </p>
+              )}
+              {pollExpired && !isTerminal && (
+                <button
+                  onClick={() => { setPollExpired(false); pollStartedAtRef.current = null; loadPayment(); }}
+                  className="text-xs text-primary underline"
+                >
+                  Still waiting? Refresh
+                </button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -180,7 +284,7 @@ export default function PaymentDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Retry payment</CardTitle></CardHeader>
           <CardContent>
-            <RetryPaymentPanel payment={payment} onUpdated={load} />
+            <RetryPaymentPanel payment={payment} onUpdated={loadAll} />
           </CardContent>
         </Card>
       )}
