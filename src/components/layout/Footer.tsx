@@ -10,7 +10,7 @@ const Footer = () => (
               <span className="text-accent font-serif font-bold text-base">K</span>
             </div>
             <span className="text-lg font-serif font-semibold">
-              Kashmir <span className="text-accent">Bazaar</span>
+              Koshur <span className="text-accent">Kart</span>
             </span>
           </div>
           <p className="text-sm opacity-70 leading-relaxed">
