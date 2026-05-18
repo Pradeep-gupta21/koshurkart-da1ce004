@@ -29,6 +29,8 @@ import { LocationProvider } from "@/contexts/LocationContext";
 // behind auth/role guards so most users never download them.
 const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const PaymentsListPage = lazy(() => import("@/pages/PaymentsListPage"));
+const PaymentDetailPage = lazy(() => import("@/pages/PaymentDetailPage"));
 const VendorOnboardingPage = lazy(() => import("@/pages/VendorOnboardingPage"));
 const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
