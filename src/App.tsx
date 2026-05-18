@@ -87,6 +87,8 @@ const App = () => (
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                      <Route path="/payments" element={<ProtectedRoute><PaymentsListPage /></ProtectedRoute>} />
+                      <Route path="/payments/:paymentId" element={<ProtectedRoute><PaymentDetailPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply" element={<ProtectedRoute><VendorOnboardingPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply/kyc" element={<ProtectedRoute><VendorKYCPage /></ProtectedRoute>} />
 
