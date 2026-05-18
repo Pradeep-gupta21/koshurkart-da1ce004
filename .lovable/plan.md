@@ -1,76 +1,62 @@
-# Plan: Eliminate all "$" leakage and standardize on ₹ (INR)
+## Goal
+Give shoppers a dedicated page to track their UPI/Razorpay/COD payment status, see admin verification results, and retry any failed or rejected payment.
 
-## Findings
+## New route
+- `/payments` — list of the current user's payments (latest first), grouped by status
+- `/payments/:paymentId` — single payment detail with verification result + retry actions
 
-The system is already INR-only end-to-end:
+Both protected by `ProtectedRoute` and lazy-loaded in `src/App.tsx`.
 
-- `src/services/currencyService.ts` — formats with `Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' })` → outputs `₹...`.
-- `src/contexts/CurrencyContext.tsx` — exposes `formatPrice(amount)` everywhere via `useCurrency()`.
-- Cart, Checkout, ProductCard, PriceDisplay all use `formatPrice` correctly.
-- Backend (`create-checkout`, `create-razorpay-order`, UPI flows) already uses `currency: "INR"` and the shared paise helper. No `$` is sent from any edge function.
+## UI
 
-**The only real leaks are 4 frontend files** (admin/vendor dashboards + search slider) that build display strings with template literals like `` `$${value.toFixed(2)}` ``. Plus several places using the `DollarSign` lucide icon (visual dollar glyph).
+### PaymentsListPage
+- Table/card list of `payments` for `auth.uid()` (RLS already permits `Users read own payments`)
+- Columns: Order ID (short), Date, Method (UPI/Razorpay/COD), Amount (₹), Status badge, Action
+- Status badges: `success` (green), `pending` (amber), `pending_verification` (blue "Awaiting admin review"), `failed`/`rejected` (red)
+- Tabs/filter: All · Awaiting verification · Failed · Successful
+- Empty state when no payments
 
-## Files to change
+### PaymentDetailPage (`/payments/:id`)
+Sections:
+1. **Header** — amount, method, status badge, created date
+2. **Verification result panel** (UPI only):
+   - `pending` → "Submit your UPI reference to complete payment" + link back to checkout flow
+   - `pending_verification` → "Your payment is being verified by our team" + show submitted proof (`payment_proof`) and `transaction_id`
+   - `success` → green check, `credited_at`, transaction id
+   - `failed`/`rejected` → red banner with reason from `payment_audit_log` (latest entry where `new_status` matches) + **Retry** button
+3. **Order summary** — fetched from `orders` + `order_items` (joined, RLS already allows owner)
+4. **Audit timeline** — only show transitions visible to user (derived from `payment_status` changes; we don't have user read on `payment_audit_log`, so derive from current state + `created_at`/`credited_at`/`reversed_at` columns instead)
+5. **Actions**
+   - Retry payment (failed/rejected only): calls `paymentService.createOrUpdatePayment` reusing the same `orderId` (the service already handles re-using existing pending rows). Navigates user back to a lightweight retry flow that re-renders the QR / Razorpay modal inline on this page.
+   - Cancel order link (only if still pending and method is COD/UPI not yet verified)
 
-### 1. Hardcoded "$" → `formatPrice`
+### Retry flow (in-page)
+- For UPI: re-generate QR via existing service, show UPI link + textfield to submit new UTR reference → calls `confirm-upi-payment` edge function (already exists)
+- For Razorpay: invoke `create-razorpay-order` + open Razorpay checkout (mirror logic from `CheckoutPage`)
+- For COD: no retry needed — show info text
 
-| File | Lines | Change |
-|---|---|---|
-| `src/pages/vendor/VendorAnalytics.tsx` | 60, 239 | `` `$${totalRevenue.toFixed(2)}` `` → `formatPrice(totalRevenue)`; recharts `Tooltip formatter={(v) => `$${v.toFixed(2)}`}` → `formatPrice(v)` |
-| `src/pages/vendor/VendorOverview.tsx` | 147, 148, 221 | Same pattern for Total Earnings, Withdrawable, and Tooltip formatter |
-| `src/pages/admin/AdminOverview.tsx` | 127, 239 | Revenue stat + Tooltip formatter |
-| `src/pages/vendor/VendorPayments.tsx` | 62 | `value: totalEarnings` (raw number) → wrap with `formatPrice` where rendered (verify render site) |
-| `src/pages/vendor/VendorCampaigns.tsx` | 201 | `` `Bid: $${...}` `` → `` `Bid: ${formatPrice(Number(c.bid_amount ?? 0))}` `` |
-| `src/pages/admin/AdminCampaigns.tsx` | 100 | Same as above |
-| `src/pages/SearchPage.tsx` | 212 | Price-range slider label `` `$${priceRange[0]}` `` / `` `$${priceRange[1]}` `` → `formatPrice(...)` |
+## Data access
+All read-only via existing tables and RLS:
+- `payments` (own rows)
+- `orders` + `order_items` (own rows, owner policy)
+- `shipment_events` (optional, for context)
 
-Each file will get `import { useCurrency } from "@/contexts/CurrencyContext";` and `const { formatPrice } = useCurrency();` if not already present.
+No DB migration required. No new edge functions required.
 
-### 2. Visual `DollarSign` icon → `IndianRupee`
+## Files
+**New**
+- `src/pages/PaymentsListPage.tsx`
+- `src/pages/PaymentDetailPage.tsx`
+- `src/components/payments/PaymentStatusBadge.tsx`
+- `src/components/payments/RetryPaymentPanel.tsx` (handles UPI QR + Razorpay reopen)
 
-Both are lucide-react icons. Swap in:
-
-- `src/pages/vendor/VendorAnalytics.tsx`
-- `src/pages/vendor/VendorOverview.tsx`
-- `src/pages/vendor/VendorPayments.tsx`
-- `src/pages/vendor/VendorCampaigns.tsx`
-- `src/pages/admin/AdminOverview.tsx`
-- `src/pages/admin/AdminCampaigns.tsx`
-- `src/pages/admin/AdminSettings.tsx`
-- `src/config/navigation.ts` (Dynamic Pricing nav item)
-- `src/lib/iconRegistry.ts` — keep `dollar` / `dollar-sign` keys mapped to `IndianRupee` for backward compat, add `rupee` / `indian-rupee` keys.
-
-### 3. Lint guard (production safety)
-
-Add an ESLint `no-restricted-syntax` rule to `eslint.config.js` that flags template literals and string literals containing a literal `$` immediately followed by `{` referencing a price/amount/total/revenue/earnings/balance/bid identifier — practical heuristic: forbid the regex `/\$\$\{.*(price|amount|total|revenue|earnings|balance|bid|paise|inr)/i` in JSX/TS files under `src/`. This catches future regressions.
-
-(Lightweight alternative: a one-line custom rule that disallows the substring `` `$${ `` followed within 60 chars by those keywords.)
-
-### 4. No backend changes needed
-
-Verified:
-- `supabase/functions/create-razorpay-order/index.ts` already passes `currency: "INR"`.
-- `supabase/functions/create-checkout/index.ts` uses shared `pricing.ts` (paise + INR, no symbol).
-- `supabase/functions/_shared/pricing.ts` returns numbers, never strings.
-- No edge function returns a `$` formatted string.
-
-### 5. No changes needed to
-
-- `currencyService.ts` / `CurrencyContext.tsx` — already correct, INR-only, uses `Intl.NumberFormat('en-IN')`.
-- Cart, Checkout, ProductCard, PriceDisplay — already use `formatPrice`.
-- `PricingDebugBox` — shows raw numbers + paise, no symbol issues.
+**Edited**
+- `src/App.tsx` — register two lazy routes under `ProtectedRoute`
+- `src/services/paymentService.ts` — add `listMyPayments()` and `getPaymentDetail(id)` helpers (thin wrappers around supabase queries)
+- `src/components/layout/Header.tsx` or profile dropdown — add "My Payments" link (small nav addition)
+- `src/pages/ProfilePage.tsx` — add a "Payments" quick-link card
 
 ## Out of scope
-
-- Multi-currency switching (the service already exposes a stub `setCurrency` no-op; can be extended later without touching call sites because they all go through `formatPrice`).
-- Email/invoice templates — none exist in the project yet.
-- Renaming the existing `formatPrice` to `formatCurrency` — that would touch ~20 call sites for zero behavior change. Keep current name; it already does exactly what's requested (₹ + en-IN formatting).
-
-## Verification after implementation
-
-1. `rg -n "\\\$\\\$\\{" src/` returns zero matches in JSX/TS files (only legitimate shell/escape uses elsewhere).
-2. `rg -n "DollarSign" src/` returns only the iconRegistry backward-compat alias.
-3. Manual smoke: open `/admin`, `/vendor`, `/vendor/analytics`, `/vendor/payments`, `/search` — all monetary values render as `₹1,234.56`.
-
-Approve and I'll implement.
+- New verification logic (admin tools already exist on `/admin/payments`)
+- Schema changes / new edge functions
+- Multi-currency formatting changes (uses existing `formatPrice`)
