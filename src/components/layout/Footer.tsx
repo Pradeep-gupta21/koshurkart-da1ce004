@@ -44,7 +44,7 @@ const Footer = () => (
         </div>
       </div>
       <div className="mt-12 pt-6 border-t border-wood text-sm opacity-50 text-center">
-        © 2026 Kashmir Bazaar. Crafted in the valley.
+        © 2026 Koshur Kart. Crafted in the valley.
       </div>
     </div>
   </footer>
