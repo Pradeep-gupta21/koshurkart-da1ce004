@@ -29,6 +29,8 @@ import { LocationProvider } from "@/contexts/LocationContext";
 // behind auth/role guards so most users never download them.
 const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const PaymentsListPage = lazy(() => import("@/pages/PaymentsListPage"));
+const PaymentDetailPage = lazy(() => import("@/pages/PaymentDetailPage"));
 const VendorOnboardingPage = lazy(() => import("@/pages/VendorOnboardingPage"));
 const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
@@ -85,6 +87,8 @@ const App = () => (
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                      <Route path="/payments" element={<ProtectedRoute><PaymentsListPage /></ProtectedRoute>} />
+                      <Route path="/payments/:paymentId" element={<ProtectedRoute><PaymentDetailPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply" element={<ProtectedRoute><VendorOnboardingPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply/kyc" element={<ProtectedRoute><VendorKYCPage /></ProtectedRoute>} />
 
