@@ -215,6 +215,20 @@ const ProfilePage = () => {
         </Card>
       )}
 
+      <Card className="marketplace-shadow">
+        <CardContent className="py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CreditCard className="h-5 w-5 text-primary" />
+            <div>
+              <div className="font-medium">My Payments</div>
+              <div className="text-xs text-muted-foreground">UPI verification status and retry failed payments</div>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="outline"><Link to="/payments">View</Link></Button>
+        </CardContent>
+      </Card>
+
+
       {/* Notifications */}
       <Card className="marketplace-shadow">
         <CardHeader>
