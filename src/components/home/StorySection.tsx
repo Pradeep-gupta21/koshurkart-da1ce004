@@ -15,7 +15,7 @@ const StorySection = () => (
           <span className="italic text-accent">in Kashmir</span>
         </h2>
         <p className="mt-5 text-sm md:text-base text-muted-foreground leading-relaxed">
-          Every product on Kashmir Bazaar carries the touch of a craftsperson — a weaver in Srinagar, a saffron
+          Every product on Koshur Kart carries the touch of a craftsperson — a weaver in Srinagar, a saffron
           farmer in Pampore, a wood carver in Shopian. We partner directly with artisans, ensuring fair earnings
           and authentic provenance.
         </p>
