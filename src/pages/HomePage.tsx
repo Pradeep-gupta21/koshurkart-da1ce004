@@ -88,7 +88,7 @@ const HomePage = () => {
         <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
           <img
             src={heroBanner}
-            alt="Kashmir Bazaar — crafts from the valley"
+            alt="Koshur Kart — crafts from the valley"
             width={1920}
             height={460}
             loading="eager"
