@@ -88,7 +88,7 @@ const Header = () => {
                 <Mountain className="absolute -bottom-1 -right-1 h-3.5 w-3.5 text-accent bg-background rounded-full p-[1px]" strokeWidth={2.5} />
               </div>
               <span className="text-xl font-serif font-semibold tracking-tight hidden sm:inline">
-                Kashmir <span className="text-accent">Bazaar</span>
+                Koshur <span className="text-accent">Kart</span>
               </span>
             </Link>
 
