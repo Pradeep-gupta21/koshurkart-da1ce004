@@ -1,31 +1,43 @@
-## Goal
+# Rebrand: Kashmir Bazaar → Koshur Kart
 
-On `/payments/:paymentId`, automatically poll for status updates so users see verification results without manually refreshing. Stop polling once the payment reaches a terminal state.
+Scope: brand name only. Regional "Kashmir" references (badges, copy about the valley, KashmirCategories component, "Sell on Kashmir" link, file names, region utils) stay as-is per your choice.
 
-## Behavior
+## Files to update
 
-- **Polls while status is non-terminal:** `pending`, `pending_verification`.
-- **Stops polling at terminal states:** `success`, `failed`, `rejected`, `reversed`.
-- **Polling cadence:** every 5s for the first minute, then 15s afterwards (gentle backoff). Capped at 10 minutes total, then stops with a "Still waiting? Refresh" hint.
-- **Pauses when tab is hidden** (`document.visibilityState`) and resumes on focus to avoid wasted requests.
-- **Realtime boost:** also subscribe to `postgres_changes` on `payments` filtered by `id=eq.{paymentId}` via existing `useRealtimeSubscription`. Realtime updates re-run the loader immediately; polling remains as a fallback for missed events.
-- **Status change UX:** when status transitions to a terminal state, show a subtle toast ("Payment verified" / "Payment failed") and stop polling. The existing verification-result card already renders the new state.
-- **No UI layout change** beyond a small inline "Auto-refreshing…" indicator next to the status badge while polling is active.
+1. **`index.html`** — replace placeholder Lovable meta with real branding:
+   - `<title>` → `Koshur Kart — Authentic crafts from Kashmir`
+   - `<meta name="description">` → short premium tagline (Pashmina, saffron, walnut wood from verified Kashmiri artisans)
+   - `<meta name="author">` → `Koshur Kart`
+   - `og:title`, `og:description` → match above
+   - Drop `og:image` (current value is a Lovable placeholder; better to omit until we have a real asset — per head-meta guidance)
+   - Add `<link rel="canonical" href="/" />`
+   - Add Organization JSON-LD with `name: "Koshur Kart"`
 
-## Technical details
+2. **`src/components/layout/Header.tsx`** (line 91)
+   - Logo wordmark: `Kashmir Bazaar` → `Koshur Kart` (keep the two-tone styling: `Koshur <span class="text-accent">Kart</span>`)
+   - The `K` logo monogram stays (still works).
 
-Edits limited to `src/pages/PaymentDetailPage.tsx`:
+3. **`src/components/layout/Footer.tsx`** (lines 13, 47)
+   - Logo wordmark same treatment as header
+   - Copyright: `© 2026 Koshur Kart. Crafted in the valley.`
 
-1. Add a `useEffect` that:
-   - Computes `isTerminal = ["success","failed","rejected","reversed"].includes(status)`.
-   - If terminal → no-op.
-   - Else sets up a `setTimeout` loop that calls a lightweight reload (selecting only `payment` row, not re-fetching the order) and reschedules with the cadence above.
-   - Tracks start time in a ref to enforce the 10-minute cap.
-   - Listens to `visibilitychange` to pause/resume.
-   - Cleans up timers on unmount and on status change.
-2. Refactor `load` slightly: extract `loadPayment()` (payments row only) used by the poller, while initial mount still loads payment + order.
-3. Add `useRealtimeSubscription` for `payments` table filtered by `id=eq.${paymentId}`, calling `loadPayment()` on payload.
-4. Add a small `<span>` near the status badge: `"Auto-refreshing…"` muted text + spinning `Loader2` icon, only while polling is active.
-5. Use `useToast` to announce terminal transitions (compare previous status ref vs new).
+4. **`src/components/home/StorySection.tsx`** (line 18)
+   - `Every product on Kashmir Bazaar carries…` → `Every product on Koshur Kart carries…`
 
-No service, schema, route, or other component changes.
+5. **`src/pages/HomePage.tsx`** (line 91)
+   - Hero image `alt` → `Koshur Kart — crafts from the valley`
+
+## Out of scope (intentionally untouched)
+
+- "Sell on Kashmir" header link, "Discover Kashmir's…" hero, From-Kashmir badges, KashmirCategories component, regionUtils, vendor onboarding region copy, docs/VENDOR_API.md region examples, and all file/component names — these are regional, not brand.
+- `package.json` `name` field, supabase project id, edge functions — these are internal identifiers, not user-facing branding.
+- Admin/Vendor dashboards, AuthPage, notifications, invoices — checked, they don't carry a hardcoded "Kashmir Bazaar" string today, so they automatically reflect the new brand via Header/Footer/meta.
+- Email templates — none currently scaffolded in the project; nothing to rename. (If you want branded auth emails later, that's a separate setup.)
+
+## Verification after implementation
+
+- Grep `Kashmir Bazaar` returns zero matches.
+- Browser tab title shows "Koshur Kart …".
+- Header + Footer wordmark reads "Koshur Kart".
+
+Approve and I'll apply the edits.
