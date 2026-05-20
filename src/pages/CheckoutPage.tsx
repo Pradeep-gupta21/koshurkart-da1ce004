@@ -45,9 +45,8 @@ const CheckoutPage = () => {
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
       setPmSettings(s);
-      // Set default to first available method
-      if (s.upiEnabled) setPaymentMethod("upi");
-      else if (s.razorpayEnabled) setPaymentMethod("razorpay");
+      // Razorpay is the recommended default.
+      if (s.razorpayEnabled) setPaymentMethod("razorpay");
       else setPaymentMethod("cod");
     });
   }, []);
@@ -55,8 +54,7 @@ const CheckoutPage = () => {
   // If COD is unavailable for this destination but it was selected, switch away
   useEffect(() => {
     if (paymentMethod === "cod" && !codAvailable && pmSettings) {
-      if (pmSettings.upiEnabled) setPaymentMethod("upi");
-      else if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
+      if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
     }
   }, [codAvailable, paymentMethod, pmSettings]);
 
