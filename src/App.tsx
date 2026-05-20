@@ -31,6 +31,8 @@ const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 const PaymentsListPage = lazy(() => import("@/pages/PaymentsListPage"));
 const PaymentDetailPage = lazy(() => import("@/pages/PaymentDetailPage"));
+const PaymentSuccessPage = lazy(() => import("@/pages/PaymentSuccessPage"));
+const PaymentFailedPage = lazy(() => import("@/pages/PaymentFailedPage"));
 const VendorOnboardingPage = lazy(() => import("@/pages/VendorOnboardingPage"));
 const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
