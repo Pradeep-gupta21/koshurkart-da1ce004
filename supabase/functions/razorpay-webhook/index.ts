@@ -131,6 +131,12 @@ Deno.serve(async (req) => {
             currency: paidCurrency,
           },
         });
+        await service.rpc("log_payment_event", {
+          p_payment_id: paymentRow.id,
+          p_event_type: "webhook_mismatch",
+          p_message: "Captured amount/currency does not match",
+          p_metadata: { expected_paise: expectedPaise, actual_paise: paidAmount, currency: paidCurrency },
+        });
         return new Response(JSON.stringify({ ok: true, mismatch: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -153,11 +159,31 @@ Deno.serve(async (req) => {
           payment_status: "completed",
           order_status: "confirmed",
         }).eq("id", paymentRow.order_id);
+
+        await service.rpc("log_payment_event", {
+          p_payment_id: paymentRow.id,
+          p_event_type: "webhook_captured",
+          p_message: "Payment captured via Razorpay webhook",
+          p_metadata: { razorpay_payment_id: razorpayPaymentId, amount_paise: paidAmount },
+        });
+      } else {
+        await service.rpc("log_payment_event", {
+          p_payment_id: paymentRow.id,
+          p_event_type: "webhook_captured_noop",
+          p_message: "Webhook captured received but payment already success",
+          p_metadata: { razorpay_payment_id: razorpayPaymentId },
+        });
       }
     } else if (eventType === "payment.failed") {
       if (paymentRow.payment_status !== "success") {
         await service.from("payments").update({ payment_status: "failed" }).eq("id", paymentRow.id);
         await service.from("orders").update({ payment_status: "failed" }).eq("id", paymentRow.order_id);
+        await service.rpc("log_payment_event", {
+          p_payment_id: paymentRow.id,
+          p_event_type: "webhook_failed",
+          p_message: "Payment failed via Razorpay webhook",
+          p_metadata: { razorpay_payment_id: razorpayPaymentId, error: payment?.error_description ?? null },
+        });
       }
     }
 
