@@ -3,6 +3,9 @@ project_id = "xlqzbomiuuadxcygnsal"
 [functions.razorpay-webhook]
 verify_jwt = false
 
+[functions.admin-resync-payment]
+verify_jwt = true
+
 [functions.location]
 verify_jwt = false
 
