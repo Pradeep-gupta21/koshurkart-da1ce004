@@ -76,6 +76,20 @@ Deno.serve(async (req) => {
         payload: event,
       });
     if (dedupeErr && (dedupeErr as { code?: string }).code === "23505") {
+      // Try to log the duplicate against the payment row, if found
+      const { data: dupPay } = await service
+        .from("payments")
+        .select("id")
+        .eq("razorpay_order_id", payment?.order_id)
+        .maybeSingle();
+      if (dupPay) {
+        await service.rpc("log_payment_event", {
+          p_payment_id: dupPay.id,
+          p_event_type: "webhook_duplicate",
+          p_message: `Duplicate ${eventType} webhook ignored`,
+          p_metadata: { event_id: eventId },
+        });
+      }
       return new Response(JSON.stringify({ ok: true, deduped: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
