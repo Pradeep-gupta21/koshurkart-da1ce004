@@ -81,7 +81,16 @@ Deno.serve(async (req) => {
     .select("id, title, price, discount_price, dynamic_price, stock, reserved_stock, status, images")
     .in("id", productIds);
 
-  if (prodErr) return json({ error: "Failed to load products" }, 500);
+  if (prodErr) {
+    console.error("[quote-checkout] products query failed", {
+      message: prodErr.message,
+      code: (prodErr as any).code,
+      details: (prodErr as any).details,
+      hint: (prodErr as any).hint,
+      productIds,
+    });
+    return json({ error: "Failed to load products", details: prodErr.message }, 500);
+  }
   if (!products || products.length !== productIds.length) {
     return json({ error: "One or more products not found" }, 404);
   }
