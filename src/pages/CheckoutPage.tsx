@@ -123,20 +123,19 @@ const CheckoutPage = () => {
             });
           }
 
-          setTransactionId(response.razorpay_payment_id);
           clearCart();
-          setFlowState("success");
+          navigate(`/payment/success?orderId=${currentOrderId}&paymentId=${payment.id}&txn=${response.razorpay_payment_id}`, { replace: true });
         } catch (err: any) {
-          setFailureError(err.message ?? "Payment confirmation failed.");
-          setFlowState("failed");
+          const reason = encodeURIComponent(err?.message ?? "Payment confirmation failed.");
+          navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         }
       },
       modal: {
         ondismiss: async () => {
           // Server-side stale-order sweep will release the reservation if not paid.
           await paymentService.updatePaymentStatus(payment.id, 'failed');
-          setFailureError("Payment was cancelled.");
-          setFlowState("failed");
+          const reason = encodeURIComponent("Payment was cancelled.");
+          navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         },
       },
       theme: { color: "#6366f1" },
