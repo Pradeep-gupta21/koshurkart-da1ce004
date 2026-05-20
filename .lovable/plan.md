@@ -1,64 +1,41 @@
-## Goal
-Finish converting the existing payment stack into a clean, Razorpay-first, production-grade flow. Most pieces already exist (create-order edge fn, signature verification, HMAC webhook with dedupe, vendor earnings trigger, idempotency keys, audit log). This plan closes the remaining gaps and removes the manual UPI/QR path from the Razorpay flow.
+# Finalize Razorpay Admin UI
 
-## What already works (keep as-is)
-- `create-razorpay-order` (server reprices + creates order/payment + Razorpay order)
-- `verify-razorpay-payment` (HMAC verify, amount/currency check vs Razorpay API, idempotent)
-- `razorpay-webhook` (HMAC verify, `webhook_events` dedupe, handles `payment.captured` / `payment.failed`)
-- Vendor earnings auto-credit via `on_payment_success` trigger; refund reversal via `on_order_refund_reverse_earnings`
-- `payment_audit_log` (status transitions) + `webhook_events` (raw payloads)
-- Idempotency keys in `paymentService.startCheckout`, retry via `withRetry`
+The full Razorpay backend (create-order, verify, webhook with signature + idempotency, payment_logs, payment_audit_log, vendor earnings trigger, success/failed pages, admin-resync-payment edge function) is already in place from previous turns. The remaining gap is the admin-facing UI surface.
+
+## Scope
+
+Wire up `src/pages/admin/AdminPayments.tsx` end-to-end so admins can monitor, debug, and recover payments.
 
 ## Changes
 
-### 1. Make Razorpay the primary method (remove manual QR)
-- `src/pages/CheckoutPage.tsx`: drop the "Pay using UPI" (manual QR/proof upload) option from `ALL_PAYMENT_METHODS`. Razorpay's checkout modal already covers UPI + cards + netbanking + wallets natively.
-- Default selection order: `razorpay` → `cod`. Remove `upi_pending` flow state, QR rendering block, proof upload, `confirmUpiPayment` calls.
-- `src/config/platformSettings.ts`: keep `upiEnabled` shape but stop exposing it in checkout UI (admin toggle stays for backward compat).
-- Polish Razorpay card: prominent "Recommended", show accepted method icons (UPI/Card/Netbanking/Wallet), loading + retry states.
+1. **Tabs view** — Add Tabs: `All`, `Success`, `Pending`, `Failed`, `Refunded`. Each tab filters the payments query by `payment_status`. Show counts as badges.
 
-### 2. Dedicated result pages
-- New `src/pages/PaymentSuccessPage.tsx` at `/payment/success?orderId=…` — confirmation, order summary link, "Continue shopping". Replaces inline success block.
-- New `src/pages/PaymentFailedPage.tsx` at `/payment/failed?orderId=…&reason=…` — error reason, "Retry payment" button that routes to `/payments/:id` (existing RetryPaymentPanel).
-- Wire `App.tsx` routes; Checkout navigates to these on terminal states.
+2. **Payments table enhancements**
+   - Columns: created_at, order id (short), user email, method, provider, amount + currency (INR), status badge, razorpay_payment_id, actions.
+   - Search by order id / razorpay id / user email.
+   - Skeleton loader during fetch; empty state.
 
-### 3. Unified payment_logs (richer than audit log)
-- New table `payment_logs(id, payment_id, event_type, message, metadata jsonb, created_at)` with RLS:
-  - Admins read all
-  - Vendors read logs for payments on orders containing their items
-  - Users read logs for their own payments
-  - Inserts only via SECURITY DEFINER helper `log_payment_event(p_payment_id, p_event_type, p_message, p_metadata)`
-- Emit logs from:
-  - `create-razorpay-order` → `order_created`
-  - `verify-razorpay-payment` → `verify_success` / `verify_failed` / `amount_mismatch`
-  - `razorpay-webhook` → `webhook_captured` / `webhook_failed` / `webhook_duplicate` / `webhook_mismatch`
-  - Trigger on `payments` status change → `status_changed` (replaces having to read audit_log separately)
+3. **Payment Logs timeline drawer**
+   - Clicking a row opens a `Sheet` (right-side) with a `ScrollArea` showing chronological `payment_logs` for that payment (event_type, message, metadata JSON, created_at).
+   - Realtime subscribe to `payment_logs` filtered by `payment_id` so new webhook events stream in live.
 
-### 4. Admin upgrades (`src/pages/admin/AdminPayments.tsx`)
-- Tabs: **All / Pending / Failed / Razorpay**.
-- Row click → drawer with: payment fields, related order, full `payment_logs` timeline, raw `webhook_events` for that `razorpay_order_id`.
-- "Re-verify with Razorpay" button on failed/pending → calls a new edge fn `admin-resync-payment` that fetches `/v1/payments/{id}` from Razorpay and reconciles status server-side (admin-only via `has_role`).
-- Failed payments counter card at the top.
+4. **Re-sync with Razorpay button**
+   - In the drawer header for any payment with a `razorpay_order_id` or `razorpay_payment_id`.
+   - Calls existing `admin-resync-payment` edge function via `supabase.functions.invoke`.
+   - Shows `Loader2` while pending, toast on success/failure, refetches the payment + logs.
 
-### 5. Edge function: `admin-resync-payment`
-- Auth: requires admin role (`has_role`).
-- Input: `paymentId`.
-- Fetches Razorpay payment by `razorpay_payment_id` (or order if missing), reapplies amount/currency check, updates `payments` + `orders`, writes a `payment_logs` entry. Idempotent.
+5. **Failed payment quick actions**
+   - In the Failed tab: surface "Re-sync" inline and a "View order" link.
 
-### 6. Secrets check
-- Required env vars (already expected): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Will verify via `fetch_secrets` before deploying; request any missing via `add_secret`.
+6. **Toasts & error handling** — use existing `useToast`; never block UI on errors.
 
 ## Out of scope
-- Replacing existing UPI manual flow in DB (kept for old records; just removed from new checkout UI).
-- Payouts UI changes (existing `payouts` table + vendor flow untouched).
-- Multi-currency (locked to INR as requested).
-- Real commission % (stays 0; existing `commission_percentage` column + `calculateCommission` already future-proof).
 
-## Technical notes
-- DB migration adds `payment_logs` table, RLS policies, `log_payment_event` SECURITY DEFINER fn, and a trigger `on_payment_status_log` mirroring status transitions into `payment_logs`.
-- No edits to `src/integrations/supabase/{client,types}.ts` (auto-generated).
-- Webhook continues to be public (`verify_jwt = false` already in `config.toml`); auth is via HMAC signature only.
+- No backend/schema changes — all required tables, triggers, RLS, and edge functions already exist.
+- No checkout flow changes.
 
 ## Files touched
-- New: `src/pages/PaymentSuccessPage.tsx`, `src/pages/PaymentFailedPage.tsx`, `supabase/functions/admin-resync-payment/index.ts`, migration.
-- Edited: `src/App.tsx`, `src/pages/CheckoutPage.tsx`, `src/pages/admin/AdminPayments.tsx`, `supabase/functions/create-razorpay-order/index.ts`, `supabase/functions/verify-razorpay-payment/index.ts`, `supabase/functions/razorpay-webhook/index.ts`, `supabase/config.toml` (register new fn).
+
+- `src/pages/admin/AdminPayments.tsx` (only file)
+
+After approval I'll implement in one pass and verify by loading the admin payments route.
