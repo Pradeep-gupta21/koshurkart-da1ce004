@@ -63,7 +63,6 @@ const CheckoutPage = () => {
   const availableMethods = useMemo(() => {
     if (!pmSettings) return ALL_PAYMENT_METHODS.filter((m) => m.value === "cod");
     return ALL_PAYMENT_METHODS.filter((m) => {
-      if (m.value === "upi") return pmSettings.upiEnabled;
       if (m.value === "razorpay") return pmSettings.razorpayEnabled;
       return true; // cod always listed; disabled below if not available
     });
