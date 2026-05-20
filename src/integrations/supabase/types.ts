@@ -365,6 +365,33 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_logs: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          message: string
+          metadata: Json
+          payment_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          message?: string
+          metadata?: Json
+          payment_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          message?: string
+          metadata?: Json
+          payment_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -1369,6 +1396,15 @@ export type Database = {
       is_vendor_order: {
         Args: { _order_id: string; _user_id: string }
         Returns: boolean
+      }
+      log_payment_event: {
+        Args: {
+          p_event_type: string
+          p_message?: string
+          p_metadata?: Json
+          p_payment_id: string
+        }
+        Returns: undefined
       }
       promote_to_admin: { Args: { _email: string }; Returns: undefined }
       quote_rate_limit: { Args: { _user_id: string }; Returns: boolean }

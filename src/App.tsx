@@ -31,6 +31,8 @@ const CheckoutPage = lazy(() => import("@/pages/CheckoutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 const PaymentsListPage = lazy(() => import("@/pages/PaymentsListPage"));
 const PaymentDetailPage = lazy(() => import("@/pages/PaymentDetailPage"));
+const PaymentSuccessPage = lazy(() => import("@/pages/PaymentSuccessPage"));
+const PaymentFailedPage = lazy(() => import("@/pages/PaymentFailedPage"));
 const VendorOnboardingPage = lazy(() => import("@/pages/VendorOnboardingPage"));
 const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
@@ -89,6 +91,8 @@ const App = () => (
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
                       <Route path="/payments" element={<ProtectedRoute><PaymentsListPage /></ProtectedRoute>} />
                       <Route path="/payments/:paymentId" element={<ProtectedRoute><PaymentDetailPage /></ProtectedRoute>} />
+                      <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
+                      <Route path="/payment/failed" element={<ProtectedRoute><PaymentFailedPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply" element={<ProtectedRoute><VendorOnboardingPage /></ProtectedRoute>} />
                       <Route path="/vendor/apply/kyc" element={<ProtectedRoute><VendorKYCPage /></ProtectedRoute>} />
 

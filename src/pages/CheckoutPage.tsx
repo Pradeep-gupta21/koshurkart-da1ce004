@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,9 +20,8 @@ import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Ch
 import { cn } from "@/lib/utils";
 
 const ALL_PAYMENT_METHODS = [
-  { value: "upi", label: "Pay using UPI", description: "Scan QR code to pay instantly", icon: QrCode, iconBg: "bg-primary/10 text-primary" },
-  { value: "razorpay", label: "Pay via Razorpay", description: "Card, UPI, Netbanking & more", icon: CreditCard, iconBg: "bg-accent/10 text-accent" },
-  { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary" },
+  { value: "razorpay", label: "Pay via Razorpay", description: "UPI, Cards, Netbanking & Wallets", icon: CreditCard, iconBg: "bg-primary/10 text-primary", recommended: true },
+  { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary", recommended: false },
 ] as const;
 
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
@@ -32,6 +31,7 @@ const CheckoutPage = () => {
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { data: quote, isLoading: quoteLoading, error: quoteError, refetch: refetchQuote, isFetching: quoteFetching } = useCheckoutQuote();
   const [flowState, setFlowState] = useState<FlowState>("form");
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -46,9 +46,8 @@ const CheckoutPage = () => {
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
       setPmSettings(s);
-      // Set default to first available method
-      if (s.upiEnabled) setPaymentMethod("upi");
-      else if (s.razorpayEnabled) setPaymentMethod("razorpay");
+      // Razorpay is the recommended default.
+      if (s.razorpayEnabled) setPaymentMethod("razorpay");
       else setPaymentMethod("cod");
     });
   }, []);
@@ -56,15 +55,13 @@ const CheckoutPage = () => {
   // If COD is unavailable for this destination but it was selected, switch away
   useEffect(() => {
     if (paymentMethod === "cod" && !codAvailable && pmSettings) {
-      if (pmSettings.upiEnabled) setPaymentMethod("upi");
-      else if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
+      if (pmSettings.razorpayEnabled) setPaymentMethod("razorpay");
     }
   }, [codAvailable, paymentMethod, pmSettings]);
 
   const availableMethods = useMemo(() => {
     if (!pmSettings) return ALL_PAYMENT_METHODS.filter((m) => m.value === "cod");
     return ALL_PAYMENT_METHODS.filter((m) => {
-      if (m.value === "upi") return pmSettings.upiEnabled;
       if (m.value === "razorpay") return pmSettings.razorpayEnabled;
       return true; // cod always listed; disabled below if not available
     });
@@ -126,20 +123,19 @@ const CheckoutPage = () => {
             });
           }
 
-          setTransactionId(response.razorpay_payment_id);
           clearCart();
-          setFlowState("success");
+          navigate(`/payment/success?orderId=${currentOrderId}&paymentId=${payment.id}&txn=${response.razorpay_payment_id}`, { replace: true });
         } catch (err: any) {
-          setFailureError(err.message ?? "Payment confirmation failed.");
-          setFlowState("failed");
+          const reason = encodeURIComponent(err?.message ?? "Payment confirmation failed.");
+          navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         }
       },
       modal: {
         ondismiss: async () => {
           // Server-side stale-order sweep will release the reservation if not paid.
           await paymentService.updatePaymentStatus(payment.id, 'failed');
-          setFailureError("Payment was cancelled.");
-          setFlowState("failed");
+          const reason = encodeURIComponent("Payment was cancelled.");
+          navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         },
       },
       theme: { color: "#6366f1" },
@@ -213,7 +209,8 @@ const CheckoutPage = () => {
         });
       }
       clearCart();
-      setFlowState("success");
+      navigate(`/payment/success?orderId=${result.orderId}&paymentId=${result.paymentId}&method=cod`, { replace: true });
+      return;
     } catch (err: any) {
       const isMismatch = err?.message?.includes('Amount mismatch') || err?.code === 'AMOUNT_MISMATCH';
       const msg = isMismatch

@@ -201,6 +201,13 @@ Deno.serve(async (req) => {
       .eq("id", orderId);
     if (ordErr) console.error("Order update failed", ordErr.code);
 
+    await service.rpc("log_payment_event", {
+      p_payment_id: paymentId,
+      p_event_type: "verify_success",
+      p_message: "Client-side verify completed and signature validated",
+      p_metadata: { razorpay_payment_id: razorpayPaymentId, razorpay_order_id: razorpayOrderId },
+    });
+
     return new Response(
       JSON.stringify({ success: true, message: "Payment verified and confirmed" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
