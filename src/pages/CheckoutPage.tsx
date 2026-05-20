@@ -20,9 +20,8 @@ import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Ch
 import { cn } from "@/lib/utils";
 
 const ALL_PAYMENT_METHODS = [
-  { value: "upi", label: "Pay using UPI", description: "Scan QR code to pay instantly", icon: QrCode, iconBg: "bg-primary/10 text-primary" },
-  { value: "razorpay", label: "Pay via Razorpay", description: "Card, UPI, Netbanking & more", icon: CreditCard, iconBg: "bg-accent/10 text-accent" },
-  { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary" },
+  { value: "razorpay", label: "Pay via Razorpay", description: "UPI, Cards, Netbanking & Wallets", icon: CreditCard, iconBg: "bg-primary/10 text-primary", recommended: true },
+  { value: "cod", label: "Cash on Delivery", description: "Pay when you receive your order", icon: Banknote, iconBg: "bg-secondary/10 text-secondary", recommended: false },
 ] as const;
 
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
