@@ -209,7 +209,8 @@ const CheckoutPage = () => {
         });
       }
       clearCart();
-      setFlowState("success");
+      navigate(`/payment/success?orderId=${result.orderId}&paymentId=${result.paymentId}&method=cod`, { replace: true });
+      return;
     } catch (err: any) {
       const isMismatch = err?.message?.includes('Amount mismatch') || err?.code === 'AMOUNT_MISMATCH';
       const msg = isMismatch
