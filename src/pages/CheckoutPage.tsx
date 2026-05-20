@@ -31,6 +31,7 @@ const CheckoutPage = () => {
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { data: quote, isLoading: quoteLoading, error: quoteError, refetch: refetchQuote, isFetching: quoteFetching } = useCheckoutQuote();
   const [flowState, setFlowState] = useState<FlowState>("form");
   const [orderId, setOrderId] = useState<string | null>(null);
