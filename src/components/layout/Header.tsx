@@ -129,7 +129,7 @@ const Header = () => {
         </div>
 
         {/* Category bar - desktop */}
-        <nav className="hidden lg:block border-t border-wood/20">
+        <nav className="hidden lg:block border-t border-border">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-1 py-2 overflow-x-auto">
               <Mountain className="h-4 w-4 text-accent mr-2 shrink-0" strokeWidth={2.5} />
