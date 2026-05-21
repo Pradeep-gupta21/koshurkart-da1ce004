@@ -329,7 +329,7 @@ const CheckoutPage = () => {
 
           {/* QR Code */}
           {qrCodeUrl && (
-            <div className="bg-white rounded-xl p-4 inline-block mb-4">
+            <div className="bg-card border border-border rounded-xl p-4 inline-block mb-4 shadow-sm">
               <img src={qrCodeUrl} alt="UPI QR Code" className="w-[200px] h-[200px]" />
             </div>
           )}
