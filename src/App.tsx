@@ -128,7 +128,7 @@ const App = () => (
                   </Suspense>
                 </main>
                 <Footer />
-                <DevRoleSwitcher />
+                
               </div>
               </SidebarProvider>
             </BrowserRouter>
