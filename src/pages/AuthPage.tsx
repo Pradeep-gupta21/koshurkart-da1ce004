@@ -155,38 +155,30 @@ const AuthPage = () => {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    const cleaned = phone.trim().replace(/\s+/g, "");
-    if (!/^\+?[1-9]\d{9,14}$/.test(cleaned)) {
-      setErrors({ phone: "Enter a valid phone number with country code (e.g. +919876543210)" });
+    const e164 = toE164(countryCode, phone);
+    if (!e164) {
+      setErrors({ phone: "Enter a valid phone number" });
+      return;
+    }
+    const rateCheck = checkRateLimit(`otp:${e164}`, RATE_LIMIT_RULES.otpSend);
+    if (!rateCheck.allowed) {
+      setErrors({ phone: `Too many requests. Try again in ${formatRetryTime(rateCheck.retryAfterMs)}.` });
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ phone: cleaned });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Couldn't send code", description: error.message, variant: "destructive" });
-      return;
+    try {
+      await sendOtp(e164);
+      toast({ title: "Code sent", description: `We sent a 6-digit code to ${e164}` });
+      navigate(`/auth/verify-otp?phone=${encodeURIComponent(e164)}`);
+    } catch (err) {
+      toast({
+        title: "Couldn't send code",
+        description: err instanceof Error ? err.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    setOtpSent(true);
-    toast({ title: "Code sent", description: `We sent a 6-digit code to ${cleaned}` });
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otp.length !== 6) {
-      setErrors({ otp: "Enter the 6-digit code" });
-      return;
-    }
-    setLoading(true);
-    const cleaned = phone.trim().replace(/\s+/g, "");
-    const { error } = await supabase.auth.verifyOtp({ phone: cleaned, token: otp, type: "sms" });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Verification failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Signed in" });
-    await routeAfterLogin();
   };
 
   const FieldError = ({ field }: { field: string }) =>
