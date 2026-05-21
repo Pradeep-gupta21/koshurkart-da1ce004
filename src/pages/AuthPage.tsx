@@ -293,43 +293,19 @@ const AuthPage = () => {
         </TabsContent>
 
         <TabsContent value="phone">
-          {!otpSent ? (
-            <form onSubmit={handleSendOtp} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone number</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="phone" type="tel" placeholder="+91 98765 43210" className="pl-10"
-                    value={phone} onChange={(e) => setPhone(e.target.value)} required />
-                </div>
-                <FieldError field="phone" />
-                <p className="text-xs text-muted-foreground">Include your country code (e.g. +91 for India).</p>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Sending code..." : "Send code"}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4 mt-4">
-              <div className="space-y-2 text-center">
-                <Label>Enter the 6-digit code</Label>
-                <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                    <InputOTPGroup>
-                      {[0, 1, 2, 3, 4, 5].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <FieldError field="otp" />
-                <button type="button" className="text-xs text-accent hover:underline" onClick={() => { setOtpSent(false); setOtp(""); }}>
-                  Use a different number
-                </button>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading || otp.length !== 6}>
-                {loading ? "Verifying..." : "Verify & Sign In"}
-              </Button>
-            </form>
-          )}
+          <form onSubmit={handleSendOtp} className="space-y-4 mt-4">
+            <PhoneInput
+              countryCode={countryCode}
+              onCountryChange={setCountryCode}
+              phone={phone}
+              onPhoneChange={setPhone}
+              error={errors.phone}
+              disabled={loading}
+            />
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Sending code..." : "Send verification code"}
+            </Button>
+          </form>
         </TabsContent>
       </Tabs>
     </AuthShell>
