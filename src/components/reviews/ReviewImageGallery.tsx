@@ -50,7 +50,7 @@ export default function ReviewImageGallery({ images }: Props) {
             <img
               src={images[idx]}
               alt={`Review image ${idx + 1}`}
-              className="w-full max-h-[80vh] object-contain bg-black"
+              className="w-full max-h-[80vh] object-contain bg-muted"
             />
             {images.length > 1 && (
               <>
