@@ -1,11 +1,10 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User, Sun, Moon, Globe, Mountain, Package, Heart } from "lucide-react";
+import { ShoppingCart, User, Sun, Moon, Mountain, Package, Heart } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useTheme } from "@/hooks/useTheme";
-import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -15,9 +14,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { currencyService, CURRENCIES } from "@/services/currencyService";
 import ShopSidebarTrigger from "@/components/navigation/ShopSidebarTrigger";
 import LocationPill from "@/components/location/LocationPill";
+
 
 const jkCategories = [
   "Pashmina",
