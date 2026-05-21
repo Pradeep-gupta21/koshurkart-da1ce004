@@ -48,7 +48,7 @@ const DevRoleSwitcher = () => {
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="h-10 w-10 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-lg hover:bg-orange-600 transition-colors"
+          className="h-10 w-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center shadow-lg hover:bg-accent/90 transition-colors"
           title="Dev Tools"
         >
           <Bug className="h-5 w-5" />

@@ -1,41 +1,92 @@
-# Finalize Razorpay Admin UI
+# UI Consistency Pass — Koshur Kart
 
-The full Razorpay backend (create-order, verify, webhook with signature + idempotency, payment_logs, payment_audit_log, vendor earnings trigger, success/failed pages, admin-resync-payment edge function) is already in place from previous turns. The remaining gap is the admin-facing UI surface.
+The token system in `src/index.css` and `tailwind.config.ts` is already in place, but pages and components drift from it (hardcoded colors in a few spots, inconsistent paddings, mixed button sizes/variants, ad-hoc card chrome, weak dark mode coverage). This plan tightens everything against one unified system without changing business logic.
 
-## Scope
+## 1. Lock the design system (foundation)
 
-Wire up `src/pages/admin/AdminPayments.tsx` end-to-end so admins can monitor, debug, and recover payments.
+Refine `src/index.css`:
+- Re-tune light tokens for a cleaner Amazon/Shopify/Apple feel: softer `--background` (near-white), neutral `--card` (pure white), warmer borders, calmer muted.
+- Re-tune dark tokens: keep card a half-step lighter than background (no pure black), borders at low-alpha neutral (drop the walnut tint that muddies dark mode), readable `--muted-foreground`.
+- Standardize `--radius` to `0.625rem` (10px) project-wide; ensure `xl/lg/md/sm` scale correctly.
+- Add one canonical elevation scale: `--shadow-xs`, `--shadow-sm`, `--shadow-md`, `--shadow-lg` (replace ad-hoc `marketplace-shadow*`).
+- Add a spacing rhythm contract (documented): page gutter `px-4 md:px-6 lg:px-8`, section `py-8 md:py-12`, card padding `p-4 md:p-6`, stack gap `gap-4 md:gap-6`.
 
-## Changes
+Refine `tailwind.config.ts`:
+- Expose `boxShadow.xs/sm/md/lg` mapped to the new CSS vars.
+- Add `container` paddings per breakpoint matching the gutter rhythm.
 
-1. **Tabs view** — Add Tabs: `All`, `Success`, `Pending`, `Failed`, `Refunded`. Each tab filters the payments query by `payment_status`. Show counts as badges.
+## 2. Primitive component polish
 
-2. **Payments table enhancements**
-   - Columns: created_at, order id (short), user email, method, provider, amount + currency (INR), status badge, razorpay_payment_id, actions.
-   - Search by order id / razorpay id / user email.
-   - Skeleton loader during fetch; empty state.
+- `components/ui/button.tsx`: add `xl` size, normalize heights (`h-9/h-10/h-11`), unified focus ring, smooth `transition-all`, consistent disabled/hover states, add `loading` prop pattern (spinner slot).
+- `components/ui/card.tsx`: switch to token-driven shadow (`shadow-sm hover:shadow-md`), consistent `rounded-xl`, padding presets via variants (`default`, `compact`).
+- `components/ui/input.tsx`, `textarea.tsx`, `select.tsx`: align heights, focus rings, dark-mode bg (`bg-background` not `bg-card`).
+- `badge.tsx`: add `success/warning/info` variants tied to tokens.
+- `dialog.tsx`, `drawer.tsx`, `alert-dialog.tsx`: replace `bg-white`/hardcoded colors with `bg-background`/`bg-card`.
 
-3. **Payment Logs timeline drawer**
-   - Clicking a row opens a `Sheet` (right-side) with a `ScrollArea` showing chronological `payment_logs` for that payment (event_type, message, metadata JSON, created_at).
-   - Realtime subscribe to `payment_logs` filtered by `payment_id` so new webhook events stream in live.
+## 3. Hardcoded color sweep
 
-4. **Re-sync with Razorpay button**
-   - In the drawer header for any payment with a `razorpay_order_id` or `razorpay_payment_id`.
-   - Calls existing `admin-resync-payment` edge function via `supabase.functions.invoke`.
-   - Shows `Loader2` while pending, toast on success/failure, refetches the payment + logs.
+Replace direct color classes with tokens in:
+- `src/pages/CheckoutPage.tsx`
+- `src/components/dev/DevRoleSwitcher.tsx`
+- `src/components/ui/{drawer,dialog,alert-dialog}.tsx`
+- `src/components/reviews/ReviewImageGallery.tsx`
 
-5. **Failed payment quick actions**
-   - In the Failed tab: surface "Re-sync" inline and a "View order" link.
+(Six files surfaced by ripgrep — surgical edits.)
 
-6. **Toasts & error handling** — use existing `useToast`; never block UI on errors.
+## 4. Layout & shell consistency
+
+- `Header.tsx`, `Footer.tsx`, `DashboardLayout.tsx`, `DashboardSidebar.tsx`, `ShopSidebar.tsx`: unify background (`bg-background`/`bg-card`), border (`border-border`), gutter, sticky behavior, mobile breakpoints. Ensure no `bg-white` regressions in dark mode.
+- Confirm `<main>` containers use the standard gutter + max-width rhythm.
+
+## 5. Page-level pass
+
+For each route group, apply the spacing contract, replace ad-hoc cards with `<Card>` primitives, normalize headings (`text-2xl md:text-3xl font-serif`), section spacing, empty states, and skeleton sizing:
+
+- Shop: `HomePage`, `SearchPage`, `ProductDetailPage`, `CartPage`, `CheckoutPage`, `PaymentSuccess/Failed/Detail`, `PaymentsListPage`, `ProfilePage`.
+- Vendor: `VendorDashboard`, `VendorOverview`, `VendorProducts`, `VendorOrders`, `VendorAnalytics`, `VendorPayments`, `VendorCampaigns`, `VendorSettings`, `VendorNotifications`, `VendorKYCPage`.
+- Admin: `AdminOverview`, `AdminVendors`, `AdminPayments`, `AdminPayouts`, `AdminReviews`, `AdminCampaigns`, `AdminPlacements`, `AdminPricing`, `AdminSecurity`, `AdminSettings`, `AdminMenu`.
+- Auth/Onboarding: `AuthPage`, `VendorApplyPage`, `VendorOnboardingPage` + onboarding steps.
+
+## 6. Product / commerce surfaces
+
+- `ProductCard`, `SponsoredProductCard`: identical chrome (radius, shadow, hover lift, price typography, badge placement).
+- `PriceDisplay`, `RatingStars`, badges: consistent sizing scale (sm/md/lg).
+- `ProductGrid`: standard responsive grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`, `gap-4 md:gap-6`).
+
+## 7. Dark mode polish pass
+
+- Manually verify every page in dark mode: no white cards, no invisible borders, no low-contrast muted text.
+- Adjust any component still relying on `bg-white`/Tailwind grays to use semantic tokens.
+- Ensure images/illustrations have appropriate `dark:` treatments where needed (subtle ring or contrast wrapper).
+
+## 8. Mobile responsiveness
+
+- Audit at 360 / 414 / 768 widths: header collapse, sidebar drawer behavior, tables → stacked cards (admin/vendor lists), checkout single-column, sticky bottom CTA on mobile for product/cart pages.
+- Replace fixed widths with fluid + `max-w-*`; ensure no horizontal scroll.
+
+## 9. QA checklist (verify before done)
+
+- Toggle light/dark on every top-level route, no broken contrast.
+- Tab through forms — visible focus ring everywhere.
+- Resize to mobile — no overflow, CTAs reachable.
+- All buttons share variant set (no rogue `<button className="bg-...">`).
+- Grep confirms zero remaining `bg-white|text-black|bg-gray-|text-gray-|bg-slate-|text-slate-` in `src/`.
 
 ## Out of scope
 
-- No backend/schema changes — all required tables, triggers, RLS, and edge functions already exist.
-- No checkout flow changes.
+- No business logic, data fetching, or backend changes.
+- No new features or routes.
+- Razorpay/checkout flows untouched beyond visual tokenization.
 
-## Files touched
+## Technical details
 
-- `src/pages/admin/AdminPayments.tsx` (only file)
+```text
+Token changes      → src/index.css, tailwind.config.ts
+Primitive polish   → src/components/ui/*
+Hardcoded sweep    → 6 files identified via ripgrep
+Layout shell       → Header, Footer, Dashboard/Shop sidebars, layouts
+Page passes        → ~35 page files (shop + vendor + admin + auth)
+Commerce surfaces  → ProductCard, SponsoredProductCard, ProductGrid, PriceDisplay
+```
 
-After approval I'll implement in one pass and verify by loading the admin payments route.
+Estimated scope: large but mechanical — mostly className normalization driven by a fixed contract, no new dependencies.
