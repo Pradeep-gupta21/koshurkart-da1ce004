@@ -1,11 +1,10 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User, Sun, Moon, Globe, Mountain, Package, Heart } from "lucide-react";
+import { ShoppingCart, User, Sun, Moon, Mountain, Package, Heart } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useTheme } from "@/hooks/useTheme";
-import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -15,9 +14,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { currencyService, CURRENCIES } from "@/services/currencyService";
 import ShopSidebarTrigger from "@/components/navigation/ShopSidebarTrigger";
 import LocationPill from "@/components/location/LocationPill";
+
 
 const jkCategories = [
   "Pashmina",
@@ -36,47 +35,12 @@ const actionBtn =
 const Header = () => {
   const { totalItems } = useCart();
   const { theme, toggleTheme } = useTheme();
-  const { currency, setCurrency } = useCurrency();
   const { user } = useAuth();
-  const currentInfo = CURRENCIES[currency];
-  const allCurrencies = currencyService.getSupportedCurrencies();
 
   return (
     <header className="sticky top-0 z-50">
-      {/* Top utility bar — glass navy */}
-      <div className="bg-[hsl(222_47%_11%)]/90 backdrop-blur-md text-[hsl(210_40%_98%)] shadow-[0_1px_0_hsl(var(--accent)/0.15)]">
-        <div className="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <LocationPill />
-          </div>
-          <div className="hidden sm:flex items-center gap-4">
-            <span className="hidden md:inline opacity-80">Free shipping on orders over $50</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 hover:text-accent transition-colors cursor-pointer">
-                <Globe className="h-3 w-3" />
-                {currentInfo.flag} {currency}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[180px]">
-                {allCurrencies.map((c) => (
-                  <DropdownMenuItem
-                    key={c.code}
-                    onClick={() => setCurrency(c.code)}
-                    className={currency === c.code ? "bg-accent/20 font-medium" : ""}
-                  >
-                    <span className="mr-2">{c.flag}</span>
-                    {c.code} — {c.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Link to="/vendor" className="hover:text-accent transition-colors">Sell on Kashmir</Link>
-            <Link to="/admin" className="hover:text-accent transition-colors">Admin</Link>
-          </div>
-        </div>
-      </div>
-
       {/* Main header — glass snow */}
-      <div className="bg-background/80 backdrop-blur-md shadow-sm border-b border-wood/20">
+      <div className="bg-background/85 backdrop-blur-md shadow-sm border-b border-border">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-3 sm:gap-4">
             <ShopSidebarTrigger />
@@ -92,8 +56,12 @@ const Header = () => {
               </span>
             </Link>
 
+            {/* Location — between brand and search */}
+            <LocationPill />
+
             {/* Search */}
             <SearchBar />
+
 
             {/* Actions */}
             <div className="flex items-center gap-1 shrink-0">
@@ -161,7 +129,7 @@ const Header = () => {
         </div>
 
         {/* Category bar - desktop */}
-        <nav className="hidden lg:block border-t border-wood/20">
+        <nav className="hidden lg:block border-t border-border">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-1 py-2 overflow-x-auto">
               <Mountain className="h-4 w-4 text-accent mr-2 shrink-0" strokeWidth={2.5} />
