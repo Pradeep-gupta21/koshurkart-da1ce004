@@ -19,7 +19,7 @@ import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
-import DevRoleSwitcher from "@/components/dev/DevRoleSwitcher";
+
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
 import PageSkeleton from "@/components/ui/PageSkeleton";
