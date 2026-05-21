@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, Store, ShieldAlert, Phone } from "lucide-react";
+import { Mail, Lock, User, Store, ShieldAlert } from "lucide-react";
 import { loginSchema, signupSchema } from "@/lib/validators/securitySchema";
 import { sanitizeEmail, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
 import AuthShell from "@/components/auth/AuthShell";
+import PhoneInput, { toE164 } from "@/components/auth/PhoneInput";
+import { sendOtp } from "@/lib/otpClient";
 
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -33,8 +35,7 @@ const AuthPage = () => {
   const [isVendorSignup, setIsVendorSignup] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [countryCode, setCountryCode] = useState("+91");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitMsg, setRateLimitMsg] = useState("");
   const { toast } = useToast();
@@ -154,38 +155,30 @@ const AuthPage = () => {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    const cleaned = phone.trim().replace(/\s+/g, "");
-    if (!/^\+?[1-9]\d{9,14}$/.test(cleaned)) {
-      setErrors({ phone: "Enter a valid phone number with country code (e.g. +919876543210)" });
+    const e164 = toE164(countryCode, phone);
+    if (!e164) {
+      setErrors({ phone: "Enter a valid phone number" });
+      return;
+    }
+    const rateCheck = checkRateLimit(`otp:${e164}`, RATE_LIMIT_RULES.otpSend);
+    if (!rateCheck.allowed) {
+      setErrors({ phone: `Too many requests. Try again in ${formatRetryTime(rateCheck.retryAfterMs)}.` });
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ phone: cleaned });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Couldn't send code", description: error.message, variant: "destructive" });
-      return;
+    try {
+      await sendOtp(e164);
+      toast({ title: "Code sent", description: `We sent a 6-digit code to ${e164}` });
+      navigate(`/auth/verify-otp?phone=${encodeURIComponent(e164)}`);
+    } catch (err) {
+      toast({
+        title: "Couldn't send code",
+        description: err instanceof Error ? err.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    setOtpSent(true);
-    toast({ title: "Code sent", description: `We sent a 6-digit code to ${cleaned}` });
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otp.length !== 6) {
-      setErrors({ otp: "Enter the 6-digit code" });
-      return;
-    }
-    setLoading(true);
-    const cleaned = phone.trim().replace(/\s+/g, "");
-    const { error } = await supabase.auth.verifyOtp({ phone: cleaned, token: otp, type: "sms" });
-    setLoading(false);
-    if (error) {
-      toast({ title: "Verification failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Signed in" });
-    await routeAfterLogin();
   };
 
   const FieldError = ({ field }: { field: string }) =>
@@ -300,43 +293,19 @@ const AuthPage = () => {
         </TabsContent>
 
         <TabsContent value="phone">
-          {!otpSent ? (
-            <form onSubmit={handleSendOtp} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone number</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="phone" type="tel" placeholder="+91 98765 43210" className="pl-10"
-                    value={phone} onChange={(e) => setPhone(e.target.value)} required />
-                </div>
-                <FieldError field="phone" />
-                <p className="text-xs text-muted-foreground">Include your country code (e.g. +91 for India).</p>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Sending code..." : "Send code"}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4 mt-4">
-              <div className="space-y-2 text-center">
-                <Label>Enter the 6-digit code</Label>
-                <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                    <InputOTPGroup>
-                      {[0, 1, 2, 3, 4, 5].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <FieldError field="otp" />
-                <button type="button" className="text-xs text-accent hover:underline" onClick={() => { setOtpSent(false); setOtp(""); }}>
-                  Use a different number
-                </button>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading || otp.length !== 6}>
-                {loading ? "Verifying..." : "Verify & Sign In"}
-              </Button>
-            </form>
-          )}
+          <form onSubmit={handleSendOtp} className="space-y-4 mt-4">
+            <PhoneInput
+              countryCode={countryCode}
+              onCountryChange={setCountryCode}
+              phone={phone}
+              onPhoneChange={setPhone}
+              error={errors.phone}
+              disabled={loading}
+            />
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Sending code..." : "Send verification code"}
+            </Button>
+          </form>
         </TabsContent>
       </Tabs>
     </AuthShell>

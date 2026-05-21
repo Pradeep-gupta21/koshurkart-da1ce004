@@ -21,6 +21,7 @@ import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
+const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
@@ -89,6 +90,7 @@ const App = () => (
                       <Route path="/auth" element={<AuthPage />} />
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+                      <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
 
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />

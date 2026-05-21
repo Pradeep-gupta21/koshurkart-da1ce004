@@ -7,6 +7,8 @@ export const RATE_LIMIT_RULES = {
   loginAttempts: { maxAttempts: 5, windowMs: 15 * 60 * 1000 } as RateLimitRule,
   apiCalls: { maxAttempts: 60, windowMs: 60 * 1000 } as RateLimitRule,
   adClicks: { maxAttempts: 3, windowMs: 5 * 60 * 1000 } as RateLimitRule,
+  otpSend: { maxAttempts: 3, windowMs: 10 * 60 * 1000 } as RateLimitRule,
+  otpVerify: { maxAttempts: 5, windowMs: 5 * 60 * 1000 } as RateLimitRule,
 };
 
 type RateLimitEntry = {
