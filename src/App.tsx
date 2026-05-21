@@ -21,6 +21,7 @@ import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
+const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
