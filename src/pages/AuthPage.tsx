@@ -35,8 +35,7 @@ const AuthPage = () => {
   const [isVendorSignup, setIsVendorSignup] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [countryCode, setCountryCode] = useState("+91");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rateLimitMsg, setRateLimitMsg] = useState("");
   const { toast } = useToast();
