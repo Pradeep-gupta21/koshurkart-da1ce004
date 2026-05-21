@@ -1,63 +1,84 @@
-## Production authentication system for Koshur Kart
+# OTP Login System — Plan
 
-Build on what's already there (Supabase session, `useAuth`, `ProtectedRoute`, `RoleRoute`, `VendorStatusGate`, `profiles` + `user_roles` tables, rate limiter, Zod validation). Fill the gaps: dedicated auth routes, password recovery, phone OTP, Google sign-in, global logout, and correct branding.
+The project already has basic phone OTP via Supabase Auth on `/auth`. This plan upgrades it to a production-grade, provider-agnostic OTP flow with a premium UI and a dedicated verification page.
 
-### New / refactored pages
+## 1. UX flow
 
-```text
-/auth                  → Login + Signup (email/password)  +  Google  +  Phone OTP tab
-/auth/forgot-password  → email → resetPasswordForEmail({ redirectTo: /auth/reset-password })
-/auth/reset-password   → detects recovery session → updateUser({ password })
+```
+/auth (Phone tab)        →  enter phone, "Send code"
+        ↓ navigate
+/auth/verify-otp?phone=  →  6-digit OTP, countdown, resend, change number
+        ↓ on success
+role-based redirect (/, /vendor, /admin)
 ```
 
-Phone OTP lives inside `/auth` as a third tab: enter phone → `signInWithOtp({ phone })` → 6-digit code input → `verifyOtp({ phone, token, type: 'sms' })`. No extra route needed.
+- Country-code selector (default `+91`) + number input with live E.164 validation.
+- Dedicated `OtpVerifyPage` with: masked phone display, 6 digit OTP slots with auto-advance and paste support, **30s countdown timer** before "Resend code" becomes active, max 3 resends per session, "Change number" link.
+- Errors shown inline (invalid code, expired, too many attempts).
+- Subtle motion (fade/scale) on send → verify transition; haptic-style focused OTP slots.
+- Rate limited client-side via existing `rateLimiter` (`otpSend`, `otpVerify` rules) and server-side by the provider.
 
-All pages share one `<AuthShell>` (brand mark, card, tabs) so look stays consistent. Rebrand the leftover **"Nexus Market"** copy to **Koshur Kart**.
+## 2. Backend architecture (provider-agnostic)
 
-### `useAuth` additions
+Default provider = **Supabase Auth phone OTP** (already wired). To support Twilio / MSG91 / Firebase without rewriting the frontend, introduce two edge functions and a `platform_settings` row.
 
-- `signOut(scope?: 'local' | 'global')` — default `global` so "logout everywhere" revokes refresh tokens across all devices.
-- Keep existing `onAuthStateChange` → `getSession` order (session persistence already works via Supabase's localStorage + auto-refresh).
+```text
+Frontend ──► supabase.functions.invoke("otp-send",   { phone })
+Frontend ──► supabase.functions.invoke("otp-verify", { phone, code })
+                          │
+                          ▼
+              ┌──────────────────────┐
+              │  Provider Strategy   │  selected via platform_settings.otp_provider
+              ├──────────────────────┤
+              │ supabase  (default)  │  → supabase.auth.signInWithOtp / verifyOtp
+              │ twilio               │  → Verify v2 /Services/{sid}/Verifications(/Check)
+              │ msg91                │  → /api/v5/otp + /api/v5/otp/verify
+              │ firebase             │  → Identity Toolkit sendVerificationCode + signInWithPhoneNumber
+              └──────────────────────┘
+```
 
-### Route guards (already implemented — verified, no change)
+Both functions:
+- Validate input with Zod (`phone` E.164, `code` 4–8 digits).
+- CORS handled.
+- Rate limit by `phone` + IP (in-memory bucket; documented as best-effort).
+- Never log full phone or OTP; log only hashed values.
+- On verify success, mint a Supabase session for the user (for non-Supabase providers, use `supabase.auth.admin.generateLink` / signInWithIdToken pattern documented inline; user MUST add provider secret before enabling).
 
-- `ProtectedRoute` — redirects unauthenticated users to `/auth`.
-- `RoleRoute requiredRole="vendor" | "admin"` — checks `roles` from `user_roles` table.
-- `VendorStatusGate` — gates vendor dashboard on `verification_status` / `kyc_status`.
-- Add `/auth/forgot-password` and `/auth/reset-password` as **public** routes (not behind `ProtectedRoute`).
+`platform_settings` key `otp_provider` = `"supabase" | "twilio" | "msg91" | "firebase"` (default `supabase`). Admin can switch later.
 
-### Header changes
+## 3. Secrets (only added when user enables a provider)
 
-- Account dropdown: when signed in show "Sign out" → `signOut('global')`; when signed out, "Sign in" links to `/auth`. Already partially done; just wire the sign-out item.
+Not requested now — only `supabase` is active. When the user enables another provider we will call `add_secret`:
 
-### Backend / Cloud auth config
+- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID`
+- MSG91: `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`, `MSG91_SENDER_ID`
+- Firebase: `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`
 
-- Enable providers: **email/password** + **Google** (managed via `configure_social_auth`).
-- Keep `auto_confirm_email = false` (verify email before login — production behavior).
-- Enable **HIBP leaked-password check** (`password_hibp_enabled: true`).
-- Phone OTP requires an SMS provider in Cloud → Auth settings. If not configured yet, the UI shows a friendly error and the user can use email/Google. (No code changes needed once provider is configured.)
+## 4. OTP expiration / resend rules
 
-### Security recap (already in place, preserved)
+- OTP lifetime: 5 minutes (Supabase default; mirrored in providers).
+- Resend cooldown: 30s; max 3 resends; then 10-minute lockout per phone.
+- Verify attempts: max 5 per code; after that, code is invalidated and user must resend.
 
-- Passwords hashed by Supabase (bcrypt).
-- JWT-based sessions with auto refresh in `supabase-js`.
-- Rate limiting on login attempts (`RATE_LIMIT_RULES.loginAttempts`).
-- Zod validation + `sanitizeEmail` / `sanitizeText`.
-- Roles stored only in `user_roles` (never on `profiles`), checked via `has_role()` SECURITY DEFINER — no privilege-escalation surface.
+## 5. Files
 
-### Files touched
+**New**
+- `src/pages/auth/OtpVerifyPage.tsx` — OTP entry, timer, resend, change-number.
+- `src/components/auth/PhoneInput.tsx` — country code + number, E.164 normalization.
+- `src/hooks/useOtpCountdown.ts` — countdown + resend state.
+- `src/lib/otpClient.ts` — thin wrapper that calls `otp-send` / `otp-verify` edge functions and falls back to `supabase.auth.signInWithOtp` when provider = supabase.
+- `supabase/functions/otp-send/index.ts`
+- `supabase/functions/otp-verify/index.ts`
 
-- **edit** `src/pages/AuthPage.tsx` — 3 tabs (Email, Phone, Google button on top), "Forgot password?" link, brand rename, role-aware post-login redirect kept.
-- **new** `src/pages/auth/ForgotPasswordPage.tsx`
-- **new** `src/pages/auth/ResetPasswordPage.tsx`
-- **new** `src/components/auth/AuthShell.tsx` (shared card layout)
-- **edit** `src/hooks/useAuth.tsx` — `signOut(scope)` default global.
-- **edit** `src/components/layout/Header.tsx` — wire Sign-out menu item.
-- **edit** `src/App.tsx` — add `/auth/forgot-password` and `/auth/reset-password` public routes.
-- **config** call `configure_social_auth(['google'])` and `configure_auth({ password_hibp_enabled: true, auto_confirm_email: false, disable_signup: false, external_anonymous_users_enabled: false })`.
+**Edited**
+- `src/pages/AuthPage.tsx` — Phone tab uses `PhoneInput`, navigates to `/auth/verify-otp` on send.
+- `src/App.tsx` — public route `/auth/verify-otp`.
+- `src/lib/rateLimiter.ts` — add `otpSend` and `otpVerify` rules.
 
-### Out of scope
+**Migration**
+- Seed `platform_settings` row `otp_provider = "supabase"` (idempotent upsert).
 
-- No DB schema changes (profiles / user_roles / vendors already model everything needed).
-- No new edge functions.
-- No custom auth-email templates (default Lovable templates are fine; can be customized later if user asks).
+## Out of scope
+- Actual Twilio/MSG91/Firebase secret entry & live testing (provider stays Supabase until user opts in).
+- WhatsApp OTP, voice OTP, silent network auth.
+- Linking phone to an existing email account (separate flow).
