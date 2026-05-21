@@ -1406,7 +1406,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      promote_to_admin: { Args: { _email: string }; Returns: undefined }
       quote_rate_limit: { Args: { _user_id: string }; Returns: boolean }
       recalculate_ad_quality_score: {
         Args: { p_campaign_id: string }
