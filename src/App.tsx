@@ -90,6 +90,7 @@ const App = () => (
                       <Route path="/auth" element={<AuthPage />} />
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+                      <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
 
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
