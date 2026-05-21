@@ -19,6 +19,8 @@ import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
+const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
@@ -85,6 +87,8 @@ const App = () => (
                       <Route path="/product/:slug" element={<ProductDetailPage />} />
                       <Route path="/cart" element={<CartPage />} />
                       <Route path="/auth" element={<AuthPage />} />
+                      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+                      <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />

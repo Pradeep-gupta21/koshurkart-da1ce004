@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { ShoppingCart, User, Sun, Moon, Mountain, Package, Heart } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ShoppingCart, User, Sun, Moon, Mountain, Package, Heart, LogOut } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import SearchBar from "@/components/search/SearchBar";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,13 @@ const actionBtn =
 const Header = () => {
   const { totalItems } = useCart();
   const { theme, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut("global");
+    navigate("/");
+  };
 
   return (
     <header className="sticky top-0 z-50">
@@ -111,6 +117,14 @@ const Header = () => {
                       <Heart className="h-4 w-4" /> Wishlist
                     </Link>
                   </DropdownMenuItem>
+                  {user && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut} className="flex items-center gap-2 text-destructive focus:text-destructive">
+                        <LogOut className="h-4 w-4" /> Sign out everywhere
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 

@@ -197,7 +197,7 @@ const ProfilePage = () => {
             <CardTitle>{profile?.name || "User"}</CardTitle>
             <p className="text-sm text-muted-foreground">{profile?.email}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={signOut}>
+          <Button variant="outline" size="sm" onClick={() => signOut()}>
             <LogOut className="h-4 w-4 mr-2" /> Sign Out
           </Button>
         </CardHeader>
