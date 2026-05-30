@@ -26,6 +26,10 @@ async function sha256Hex(input: string) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function phoneToSyntheticEmail(phone: string) {
+  return `${phone.replace(/[^\d]/g, "")}@phone.local`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -83,19 +87,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Code matches — consume it
+    // Code valid — consume
     await supabase.from("phone_otps").delete().eq("phone", phone);
 
-    // Find or create the user keyed by phone
+    // Find or create the user keyed by phone (use a synthetic email so we can mint a magic-link token)
+    const syntheticEmail = phoneToSyntheticEmail(phone);
+
+    // Try to find by email (synthetic) — listUsers paginated
     let userId: string | null = null;
-    // Try to find existing user by phone (paginate)
-    const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
-    if (listErr) throw new Error(`listUsers: ${listErr.message}`);
-    const existing = list?.users?.find((u) => u.phone === phone.replace(/^\+/, "") || u.phone === phone);
-    if (existing) {
-      userId = existing.id;
-    } else {
+    for (let page = 1; page <= 10 && !userId; page++) {
+      const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+      if (listErr) throw new Error(`listUsers: ${listErr.message}`);
+      const found = list?.users?.find(
+        (u) => u.email === syntheticEmail || u.phone === phone || u.phone === phone.replace(/^\+/, ""),
+      );
+      if (found) userId = found.id;
+      if (!list?.users || list.users.length < 200) break;
+    }
+
+    if (!userId) {
       const { data: created, error: createErr } = await supabase.auth.admin.createUser({
+        email: syntheticEmail,
+        email_confirm: true,
         phone,
         phone_confirm: true,
       });
@@ -103,48 +116,23 @@ Deno.serve(async (req) => {
       userId = created.user.id;
     }
 
-    // Mint a session via magic link (we extract the recovery tokens)
-    // generateLink with type 'magiclink' returns access/refresh tokens we can hand to the client.
+    // Generate a magic-link token; client converts it to a session via verifyOtp({ token_hash, type: 'magiclink' })
     const { data: link, error: linkErr } = await supabase.auth.admin.generateLink({
       type: "magiclink",
-      // generateLink requires email for magiclink — fall back to a synthetic email tied to phone
-      email: `${phone.replace(/[^\d]/g, "")}@phone.local`,
-    } as any);
-
-    // Most setups won't have that email tied to the user; instead generate via the user's id directly is not supported.
-    // Fallback: use signInWithIdToken style — actually simplest is to issue a session using the admin API directly.
-    let access_token: string | undefined;
-    let refresh_token: string | undefined;
-
-    // Try the typed admin endpoint to create a session for the user.
-    // Supabase JS v2.45+ exposes admin.generateLink with type 'magiclink' and embeds hashed_token only.
-    // To reliably get session tokens, we use the admin REST endpoint:
-    const adminRes = await fetch(
-      `${Deno.env.get("SUPABASE_URL")}/auth/v1/admin/users/${userId}/sessions`,
-      {
-        method: "POST",
-        headers: {
-          apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      },
-    );
-    if (adminRes.ok) {
-      const sj = await adminRes.json();
-      access_token = sj?.access_token;
-      refresh_token = sj?.refresh_token;
-    } else {
-      console.error("admin sessions endpoint failed", adminRes.status, await adminRes.text());
-    }
-
-    if (!access_token || !refresh_token) {
-      throw new Error("Failed to mint session for verified phone user");
+      email: syntheticEmail,
+    });
+    if (linkErr || !link?.properties?.hashed_token) {
+      throw new Error(`generateLink failed: ${linkErr?.message ?? "no token"}`);
     }
 
     return new Response(
-      JSON.stringify({ ok: true, provider: "twilio", access_token, refresh_token, user_id: userId }),
+      JSON.stringify({
+        ok: true,
+        provider: "twilio",
+        token_hash: link.properties.hashed_token,
+        type: "magiclink",
+        user_id: userId,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
