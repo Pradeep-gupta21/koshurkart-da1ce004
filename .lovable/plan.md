@@ -1,33 +1,28 @@
-## Goal
+## Status
 
-Replace the failing Supabase Auth phone OTP with **Twilio Verify via the Lovable Twilio connector** — no manual secrets, no Firebase, no changes to RLS or roles.
+A full OTP login screen already exists — `/auth/verify` (`src/pages/auth/OtpVerifyPage.tsx`) — with 6-digit input, 30s resend countdown (3-resend cap), success toasts, inline error, masked phone, and a "use a different number" back link. The phone-entry step is on `/auth` (`AuthPage.tsx` → `PhoneInput.tsx`) and posts to the Twilio-backed `otp-send` / `otp-verify` edge functions we just wired.
 
-## How it works
+So rather than build a new screen, this plan **polishes the existing one** to fully match your ask.
 
-1. User enters phone → frontend calls `otp-send` edge function.
-2. `otp-send` calls Twilio Verify (`/Verifications`) through the connector gateway → Twilio sends SMS.
-3. User enters code → frontend calls `otp-verify` edge function.
-4. `otp-verify` calls Twilio Verify (`/VerificationCheck`). If `approved`, it uses the Supabase service role to find/create a `auth.users` row keyed by phone and returns a Supabase session (`access_token`, `refresh_token`).
-5. Frontend calls `supabase.auth.setSession(...)` → user is logged in, existing roles/RLS keep working unchanged.
+## Changes
 
-Resend = same `otp-send` call. Expiration = Twilio Verify enforces 10-min default server-side. No OTP storage in our DB needed — Twilio handles hashing, attempts, and expiry.
+1. **Switch toasts to `sonner`** on `OtpVerifyPage.tsx` (project preferred). Replace `useToast` with `import { toast } from "sonner"`.
+2. **Add an error toast on every failure** (verify failure, resend failure, expired/invalid code) in addition to the existing inline message — so the user gets the same feedback pattern regardless of where they're looking.
+3. **Success toast on send/resend** with description (`"Code sent to +91 •••• 210"`).
+4. **Disable the OTP input** while verifying to prevent double-submits and clear the code on failure so the user can retype cleanly.
+5. **Auto-submit** when the 6th digit is entered (still keeps the explicit button).
+6. **Clearer countdown copy**: `Resend available in 0:30` (mm:ss) and a subtle "Didn't get it? Check spam/SMS filters" hint after the first failed resend.
 
-## Steps
+## Files touched
 
-1. **Connect Twilio** via `standard_connectors--connect` (one-click — you pick/create the connection in the picker; no manual secrets).
-2. Rewrite `supabase/functions/otp-send/index.ts` → call `POST {gateway}/twilio/Verify/v2/Services/{SID}/Verifications` with `To`, `Channel=sms`.
-3. Rewrite `supabase/functions/otp-verify/index.ts` → call `POST {gateway}/twilio/Verify/v2/Services/{SID}/VerificationCheck`. On `approved` → mint Supabase session via service role + return tokens.
-4. Update `src/lib/otpClient.ts` to consume the session tokens and call `supabase.auth.setSession`.
-5. Drop the previous Supabase-Auth phone signup path that caused the "Unable to get SMS provider" error.
+- `src/pages/auth/OtpVerifyPage.tsx` — toast swap, error toasts, auto-submit, disabled state, copy tweaks.
 
-## What you'll need to provide once connected
+No backend, no routing, no schema changes. No new components needed.
 
-- A **Twilio Verify Service SID** (one-time create in Twilio Console → Verify → Services → "Create new"). I'll ask for it as a single secret `TWILIO_VERIFY_SERVICE_SID` after the connector is linked. Account SID + auth are handled by the connector — you don't supply them.
+## Out of scope
 
-## Things unchanged
+- The phone-entry step (`AuthPage`) — already exists and works.
+- Roles routing after sign-in — already in place.
+- Edge functions — Twilio integration just shipped in the previous step.
 
-- All RLS, roles, profiles, vendor/admin flows.
-- Existing OTP UI, countdown, resend.
-- Email/password and Google sign-in (Google can be added later via Lovable Cloud's managed OAuth — say the word).
-
-Ready to switch to build mode and run the connector picker?
+Approve to apply.
