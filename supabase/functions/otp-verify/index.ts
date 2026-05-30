@@ -20,15 +20,14 @@ function hit(key: string, max: number, windowMs: number) {
   return true;
 }
 
-async function getProvider(supabase: ReturnType<typeof createClient>) {
-  const { data } = await supabase
-    .from("platform_settings")
-    .select("value")
-    .eq("key", "otp_provider")
-    .maybeSingle();
-  const raw = (data?.value ?? "supabase") as unknown;
-  const p = typeof raw === "string" ? raw : (raw as { provider?: string })?.provider ?? "supabase";
-  return ["supabase", "twilio", "msg91", "firebase"].includes(p) ? p : "supabase";
+async function sha256Hex(input: string) {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function phoneToSyntheticEmail(phone: string) {
+  return `${phone.replace(/[^\d]/g, "")}@phone.local`;
 }
 
 Deno.serve(async (req) => {
@@ -52,84 +51,93 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const provider = await getProvider(supabase);
 
-    // For Supabase provider, verification happens client-side (so a session cookie can be set).
-    // We return the directive; client calls supabase.auth.verifyOtp directly.
-    if (provider === "supabase") {
-      return new Response(JSON.stringify({ ok: true, provider, clientVerify: true }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Look up stored OTP
+    const { data: row, error: selErr } = await supabase
+      .from("phone_otps")
+      .select("code_hash, attempts, expires_at")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (selErr) throw new Error(selErr.message);
+    if (!row) {
+      return new Response(JSON.stringify({ error: "No code requested for this number" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      await supabase.from("phone_otps").delete().eq("phone", phone);
+      return new Response(JSON.stringify({ error: "Code expired. Request a new one." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if ((row.attempts ?? 0) >= 5) {
+      return new Response(JSON.stringify({ error: "Too many attempts. Request a new code." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (provider === "twilio") {
-      const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-      const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-      const verifySid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID");
-      if (!sid || !token || !verifySid) throw new Error("Twilio not configured");
-      const res = await fetch(
-        `https://verify.twilio.com/v2/Services/${verifySid}/VerificationCheck`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({ To: phone, Code: code }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok || data.status !== "approved") {
-        return new Response(JSON.stringify({ error: "Invalid or expired code" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    } else if (provider === "msg91") {
-      const key = Deno.env.get("MSG91_AUTH_KEY");
-      if (!key) throw new Error("MSG91 not configured");
-      const res = await fetch(
-        `https://control.msg91.com/api/v5/otp/verify?otp=${code}&mobile=${encodeURIComponent(phone.replace("+", ""))}`,
-        { method: "GET", headers: { authkey: key } },
-      );
-      const data = await res.json();
-      if (!res.ok || data.type !== "success") {
-        return new Response(JSON.stringify({ error: "Invalid or expired code" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    } else {
-      throw new Error(`Provider ${provider} not yet enabled`);
+    const incoming_hash = await sha256Hex(code);
+    if (incoming_hash !== row.code_hash) {
+      await supabase
+        .from("phone_otps")
+        .update({ attempts: (row.attempts ?? 0) + 1 })
+        .eq("phone", phone);
+      return new Response(JSON.stringify({ error: "Invalid code" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Mint a Supabase session for the verified phone using admin API.
-    // Find existing user by phone or create one.
-    const { data: list } = await supabase.auth.admin.listUsers();
-    let user = list.users.find((u) => u.phone === phone.replace("+", ""));
-    if (!user) {
-      const { data: created, error: cErr } = await supabase.auth.admin.createUser({
-        phone: phone.replace("+", ""),
+    // Code valid — consume
+    await supabase.from("phone_otps").delete().eq("phone", phone);
+
+    // Find or create the user keyed by phone (use a synthetic email so we can mint a magic-link token)
+    const syntheticEmail = phoneToSyntheticEmail(phone);
+
+    // Try to find by email (synthetic) — listUsers paginated
+    let userId: string | null = null;
+    for (let page = 1; page <= 10 && !userId; page++) {
+      const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+      if (listErr) throw new Error(`listUsers: ${listErr.message}`);
+      const found = list?.users?.find(
+        (u) => u.email === syntheticEmail || u.phone === phone || u.phone === phone.replace(/^\+/, ""),
+      );
+      if (found) userId = found.id;
+      if (!list?.users || list.users.length < 200) break;
+    }
+
+    if (!userId) {
+      const { data: created, error: createErr } = await supabase.auth.admin.createUser({
+        email: syntheticEmail,
+        email_confirm: true,
+        phone,
         phone_confirm: true,
       });
-      if (cErr) throw new Error(cErr.message);
-      user = created.user!;
+      if (createErr || !created?.user) throw new Error(`createUser: ${createErr?.message ?? "failed"}`);
+      userId = created.user.id;
     }
-    const { data: link, error: lErr } = await supabase.auth.admin.generateLink({
+
+    // Generate a magic-link token; client converts it to a session via verifyOtp({ token_hash, type: 'magiclink' })
+    const { data: link, error: linkErr } = await supabase.auth.admin.generateLink({
       type: "magiclink",
-      email: user.email ?? `${user.id}@phone.local`,
+      email: syntheticEmail,
     });
-    if (lErr) throw new Error(lErr.message);
+    if (linkErr || !link?.properties?.hashed_token) {
+      throw new Error(`generateLink failed: ${linkErr?.message ?? "no token"}`);
+    }
 
     return new Response(
       JSON.stringify({
         ok: true,
-        provider,
-        actionLink: link.properties?.action_link,
-        userId: user.id,
+        provider: "twilio",
+        token_hash: link.properties.hashed_token,
+        type: "magiclink",
+        user_id: userId,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
+    console.error("otp-verify error:", msg);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

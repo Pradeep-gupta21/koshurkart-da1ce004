@@ -6,7 +6,9 @@ const BodySchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{9,14}$/, "Phone must be E.164 (e.g. +919876543210)"),
 });
 
-// best-effort in-memory rate limit (per cold start)
+const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
+
+// Best-effort in-memory rate limit (per cold start)
 const buckets = new Map<string, { count: number; reset: number }>();
 function hit(key: string, max: number, windowMs: number) {
   const now = Date.now();
@@ -20,50 +22,16 @@ function hit(key: string, max: number, windowMs: number) {
   return true;
 }
 
-async function getProvider(supabase: ReturnType<typeof createClient>) {
-  const { data } = await supabase
-    .from("platform_settings")
-    .select("value")
-    .eq("key", "otp_provider")
-    .maybeSingle();
-  const raw = (data?.value ?? "supabase") as unknown;
-  const p = typeof raw === "string" ? raw : (raw as { provider?: string })?.provider ?? "supabase";
-  return ["supabase", "twilio", "msg91", "firebase"].includes(p) ? p : "supabase";
+async function sha256Hex(input: string) {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function sendViaSupabase(supabase: ReturnType<typeof createClient>, phone: string) {
-  const { error } = await supabase.auth.signInWithOtp({ phone });
-  if (error) throw new Error(error.message);
-}
-
-async function sendViaTwilio(phone: string) {
-  const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const verifySid = Deno.env.get("TWILIO_VERIFY_SERVICE_SID");
-  if (!sid || !token || !verifySid) throw new Error("Twilio not configured");
-  const res = await fetch(
-    `https://verify.twilio.com/v2/Services/${verifySid}/Verifications`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ To: phone, Channel: "sms" }),
-    },
-  );
-  if (!res.ok) throw new Error(`Twilio error ${res.status}: ${await res.text()}`);
-}
-
-async function sendViaMsg91(phone: string) {
-  const key = Deno.env.get("MSG91_AUTH_KEY");
-  const tpl = Deno.env.get("MSG91_TEMPLATE_ID");
-  if (!key || !tpl) throw new Error("MSG91 not configured");
-  const res = await fetch(
-    `https://control.msg91.com/api/v5/otp?template_id=${tpl}&mobile=${encodeURIComponent(phone.replace("+", ""))}`,
-    { method: "POST", headers: { authkey: key } },
-  );
-  if (!res.ok) throw new Error(`MSG91 error ${res.status}: ${await res.text()}`);
+function generateCode() {
+  // 6-digit, leading zeros allowed
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
+  return n.toString().padStart(6, "0");
 }
 
 Deno.serve(async (req) => {
@@ -91,22 +59,54 @@ Deno.serve(async (req) => {
       });
     }
 
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
+    const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!TWILIO_API_KEY) throw new Error("TWILIO_API_KEY is not configured (connect Twilio in Lovable)");
+    if (!TWILIO_FROM_NUMBER) throw new Error("TWILIO_FROM_NUMBER is not configured");
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const provider = await getProvider(supabase);
-    if (provider === "twilio") await sendViaTwilio(phone);
-    else if (provider === "msg91") await sendViaMsg91(phone);
-    else if (provider === "firebase") throw new Error("Firebase provider not yet enabled");
-    else await sendViaSupabase(supabase, phone);
+    // Generate and persist hashed OTP (10 min TTL)
+    const code = generateCode();
+    const code_hash = await sha256Hex(code);
+    const expires_at = new Date(Date.now() + 10 * 60_000).toISOString();
 
-    return new Response(JSON.stringify({ ok: true, provider }), {
+    const { error: upErr } = await supabase
+      .from("phone_otps")
+      .upsert({ phone, code_hash, attempts: 0, expires_at }, { onConflict: "phone" });
+    if (upErr) throw new Error(`Failed to persist OTP: ${upErr.message}`);
+
+    // Send SMS via Twilio gateway (path is /Messages.json; gateway prepends Accounts prefix)
+    const res = await fetch(`${GATEWAY_URL}/Messages.json`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TWILIO_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        To: phone,
+        From: TWILIO_FROM_NUMBER,
+        Body: `Your verification code is ${code}. It expires in 10 minutes.`,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("Twilio send failed", res.status, data);
+      throw new Error(`Twilio error [${res.status}]: ${data?.message ?? JSON.stringify(data)}`);
+    }
+
+    return new Response(JSON.stringify({ ok: true, provider: "twilio" }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
+    console.error("otp-send error:", msg);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
