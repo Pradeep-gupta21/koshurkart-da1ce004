@@ -122,7 +122,11 @@ const AuthPage = () => {
     }
 
     setLoading(true);
-    const metadata: Record<string, string> = { name: sanitizedName };
+    const metadata: Record<string, string | boolean> = {
+      name: sanitizedName,
+      terms_accepted: true,
+      terms_accepted_at: new Date().toISOString(),
+    };
     if (isVendorSignup && sanitizedStore) {
       metadata.store_name = sanitizedStore;
       metadata.store_slug = sanitizedStore
