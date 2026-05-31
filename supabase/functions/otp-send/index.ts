@@ -90,21 +90,6 @@ Deno.serve(async (req) => {
     if (!TWILIO_API_KEY) throw new Error("TWILIO_API_KEY is not configured (connect Twilio in Lovable)");
     if (!TWILIO_FROM_NUMBER) throw new Error("TWILIO_FROM_NUMBER is not configured");
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    // Generate and persist hashed OTP (10 min TTL)
-    const code = generateCode();
-    const code_hash = await sha256Hex(code);
-    const expires_at = new Date(Date.now() + 10 * 60_000).toISOString();
-
-    const { error: upErr } = await supabase
-      .from("phone_otps")
-      .upsert({ phone, code_hash, attempts: 0, expires_at }, { onConflict: "phone" });
-    if (upErr) throw new Error(`Failed to persist OTP: ${upErr.message}`);
-
     const supabase = serviceSupabase;
 
     // Generate and persist hashed OTP (10 min TTL)
@@ -116,6 +101,7 @@ Deno.serve(async (req) => {
       .from("phone_otps")
       .upsert({ phone, code_hash, attempts: 0, expires_at }, { onConflict: "phone" });
     if (upErr) throw new Error(`Failed to persist OTP: ${upErr.message}`);
+
 
     // Send SMS via Twilio gateway
     const res = await fetch(`${GATEWAY_URL}/Messages.json`, {
