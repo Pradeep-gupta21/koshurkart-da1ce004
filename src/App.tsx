@@ -43,6 +43,7 @@ const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
 const TermsAndConditionsPage = lazy(() => import("@/pages/TermsAndConditionsPage"));
 const RefundReturnPolicyPage = lazy(() => import("@/pages/RefundReturnPolicyPage"));
+const AboutUsPage = lazy(() => import("@/pages/AboutUsPage"));
 
 const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
 const VendorOverview = lazy(() => import("@/pages/vendor/VendorOverview"));
