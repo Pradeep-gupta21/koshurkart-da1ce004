@@ -72,9 +72,9 @@ const VendorOverview = () => {
 
     setStats({
       products: activeProducts.length,
-      totalSales: vendorRes.data?.total_sales ?? 0,
-      totalEarnings: Number(vendorRes.data?.total_earnings ?? 0),
-      withdrawableBalance: Number(vendorRes.data?.withdrawable_balance ?? 0),
+      totalSales: financials.totalSales,
+      totalEarnings: financials.totalEarnings,
+      withdrawableBalance: financials.withdrawableBalance,
     });
 
     setRecentOrders(orderItemsRes.data ?? []);
