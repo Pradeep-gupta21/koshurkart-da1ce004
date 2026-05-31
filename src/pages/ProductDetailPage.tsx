@@ -132,7 +132,7 @@ const ProductDetailPage = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from('vendors')
-        .select('trust_score, is_verified, review_rating, pickup_state, verification_status, kyc_status')
+        .select('trust_score, is_verified, review_rating, pickup_state, verification_status')
         .eq('id', product!.vendorId)
         .single();
       return data;
