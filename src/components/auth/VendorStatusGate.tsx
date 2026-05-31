@@ -24,14 +24,10 @@ const VendorStatusGate = ({ children }: Props) => {
   // Pull rejection reason if needed (separate query — small payload)
   useEffect(() => {
     if (!vendorId || (vendorStatus !== "rejected" && vendorStatus !== "suspended")) return;
-    supabase
-      .from("vendors")
-      .select("verification_rejection_reason, kyc_rejection_reason")
-      .eq("id", vendorId)
-      .single()
-      .then(({ data }) =>
-        setRejectionReason(data?.verification_rejection_reason ?? data?.kyc_rejection_reason ?? null),
-      );
+    supabase.rpc("get_my_vendor").then(({ data }) => {
+      const row = data?.[0] as any;
+      setRejectionReason(row?.verification_rejection_reason ?? row?.kyc_rejection_reason ?? null);
+    });
   }, [vendorId, vendorStatus]);
 
   if (loading) {
