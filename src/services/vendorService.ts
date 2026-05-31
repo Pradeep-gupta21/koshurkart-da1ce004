@@ -121,15 +121,11 @@ export const vendorService = {
   /* ------------------------------ KYC ------------------------------ */
 
   async getKYC(vendorId: string) {
-    const { data, error } = await supabase
-      .from('vendors')
-      .select(
-        'id, user_id, kyc_status, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason, business_name, business_type, gstin, pan_number, aadhaar_last4, bank_account_holder, bank_account_number_masked, bank_ifsc, kyc_doc_pan, kyc_doc_address, kyc_doc_business'
-      )
-      .eq('id', vendorId)
-      .single();
+    // Admin-only path: fetch full vendor row through SECURITY DEFINER RPC so we
+    // can read KYC/bank/financial fields that are revoked on direct selects.
+    const { data, error } = await supabase.rpc('get_vendor_admin', { _vendor_id: vendorId });
     if (error) throw error;
-    return data;
+    return (data?.[0] ?? null) as any;
   },
 
   /** Upload a KYC document (image). Compresses on the fly. Path: {userId}/{kind}.jpg */
