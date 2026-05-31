@@ -122,12 +122,14 @@ const VendorOverview = () => {
     if (vendorId) {
       vendorService.getTrustMetrics(vendorId).then(setTrustMetrics).catch(() => {});
       pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
-      supabase
-        .from("vendors")
-        .select("pickup_state, verification_status, kyc_status")
-        .eq("id", vendorId)
-        .single()
-        .then(({ data }) => { if (data) setVendorLocality(data as any); });
+      supabase.rpc("get_my_vendor").then(({ data }) => {
+        const row = data?.[0] as any;
+        if (row) setVendorLocality({
+          pickup_state: row.pickup_state ?? null,
+          verification_status: row.verification_status,
+          kyc_status: row.kyc_status,
+        });
+      });
     }
   }, [vendorId, fetchAll]);
 
