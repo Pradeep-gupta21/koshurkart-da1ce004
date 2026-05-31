@@ -36,7 +36,10 @@ export async function logAuthEvent(
           typeof navigator !== "undefined" ? navigator.userAgent : null,
       },
     });
-  } catch {
-    // Never throw from logging
+  } catch (err) {
+    // Never throw from logging, but surface for diagnostics
+    if (typeof console !== "undefined") {
+      console.warn("[authLog] failed to record event", event, err);
+    }
   }
 }

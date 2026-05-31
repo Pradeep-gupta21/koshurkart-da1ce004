@@ -79,7 +79,7 @@ const ShopSidebar = () => {
     <Sheet open={isOpen} onOpenChange={(v) => (v ? null : close())}>
       <SheetContent
         side="left"
-        className="w-[320px] sm:w-[360px] p-0 flex flex-col gap-0"
+        className="w-[min(90vw,320px)] sm:w-[360px] p-0 flex flex-col gap-0"
         aria-label="Main navigation"
       >
         <SheetTitle className="sr-only">Main navigation</SheetTitle>

@@ -17,7 +17,7 @@ export const notificationService = {
   async getUserNotifications(userId: string, limit = 50): Promise<AppNotification[]> {
     const { data, error } = await supabase
       .from('notifications')
-      .select('*')
+      .select('id, user_id, type, title, message, entity_id, metadata, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
