@@ -12,6 +12,7 @@ import { Mail, Lock, User, Store, ShieldAlert } from "lucide-react";
 import { loginSchema, signupSchema } from "@/lib/validators/securitySchema";
 import { sanitizeEmail, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
+import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
 import PhoneInput, { toE164 } from "@/components/auth/PhoneInput";
 import { sendOtp } from "@/lib/otpClient";
@@ -79,9 +80,11 @@ const AuthPage = () => {
     });
     setLoading(false);
     if (error) {
+      await logAuthEvent("login_failure", { email: sanitizedEmail, success: false, metadata: { reason: error.message } });
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
       return;
     }
+    await logAuthEvent("login_success", { email: sanitizedEmail });
     toast({ title: "Welcome back!" });
     await routeAfterLogin();
   };
@@ -128,9 +131,11 @@ const AuthPage = () => {
     });
     setLoading(false);
     if (error) {
+      await logAuthEvent("signup_failure", { email: sanitizedEmail, success: false, metadata: { reason: error.message } });
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
       return;
     }
+    await logAuthEvent("signup_success", { email: sanitizedEmail, metadata: { is_vendor: isVendorSignup } });
     toast({
       title: "Account created!",
       description: "Please check your email to verify your account.",
@@ -262,9 +267,10 @@ const AuthPage = () => {
               <Label htmlFor="signup-password">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input id="signup-password" type="password" placeholder="At least 6 characters" className="pl-10"
-                  value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required minLength={6} />
+                <Input id="signup-password" type="password" placeholder="At least 8 chars, mixed case + number" className="pl-10"
+                  value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} required minLength={8} />
               </div>
+
               <FieldError field="password" />
             </div>
 
