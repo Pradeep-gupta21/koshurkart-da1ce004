@@ -95,7 +95,7 @@ const AdminReviews = () => {
         r.is_suspicious
           ? multiFlag
             ? "border-destructive/50 bg-destructive/5"
-            : "border-yellow-500/50 bg-yellow-500/5"
+            : "border-warning/50 bg-warning/5"
           : ""
       }>
         <CardContent className="flex items-start justify-between gap-4 py-4">
@@ -115,7 +115,7 @@ const AdminReviews = () => {
                 </Badge>
               )}
               {r.moderation_status === "approved" && (
-                <Badge variant="outline" className="text-xs text-green-600 border-green-600">Approved</Badge>
+                <Badge variant="outline" className="text-xs text-success border-success">Approved</Badge>
               )}
               {r.moderation_status === "rejected" && (
                 <Badge variant="outline" className="text-xs text-destructive border-destructive">Rejected</Badge>
@@ -123,7 +123,7 @@ const AdminReviews = () => {
             </div>
             <div className="flex items-center gap-1 mt-1">
               {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} className={`h-3 w-3 ${i < r.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground"}`} />
+                <Star key={i} className={`h-3 w-3 ${i < r.rating ? "text-warning fill-warning" : "text-muted-foreground"}`} />
               ))}
               <span className="text-xs text-muted-foreground ml-2">
                 {new Date(r.created_at).toLocaleDateString()}

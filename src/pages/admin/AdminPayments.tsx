@@ -230,7 +230,7 @@ const AdminPayments = () => {
                 </TableCell>
                 <TableCell className="text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                   {p.payment_proof && (
-                    <Button size="icon" variant="ghost" onClick={() => setProofUrl(p.payment_proof)}>
+                    <Button size="icon" variant="ghost" aria-label="View payment proof" onClick={() => setProofUrl(p.payment_proof)}>
                       <ImageIcon className="h-4 w-4" />
                     </Button>
                   )}
