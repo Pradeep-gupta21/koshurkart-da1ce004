@@ -41,6 +41,7 @@ const PaymentFailedPage = lazy(() => import("@/pages/PaymentFailedPage"));
 const VendorOnboardingPage = lazy(() => import("@/pages/VendorOnboardingPage"));
 const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
+const TermsAndConditionsPage = lazy(() => import("@/pages/TermsAndConditionsPage"));
 
 const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
 const VendorOverview = lazy(() => import("@/pages/vendor/VendorOverview"));
@@ -94,6 +95,7 @@ const App = () => (
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
                       <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
+                      <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
 
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
