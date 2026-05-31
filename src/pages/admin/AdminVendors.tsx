@@ -31,10 +31,9 @@ const AdminVendors = () => {
   const { toast } = useToast();
 
   const fetchVendors = async () => {
-    const { data } = await supabase
-      .from("vendors")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.rpc("list_vendors_admin", {
+      _search: null, _status: null, _limit: 500, _offset: 0,
+    });
     setVendors((data as VendorRow[]) ?? []);
     setLoading(false);
   };
