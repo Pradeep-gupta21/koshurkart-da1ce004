@@ -5,25 +5,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, CheckCircle2 } from "lucide-react";
+import { Mail, CheckCircle2, ShieldAlert } from "lucide-react";
 import { sanitizeEmail } from "@/lib/sanitize";
+import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
+import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [rateLimitMsg, setRateLimitMsg] = useState("");
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRateLimitMsg("");
     const clean = sanitizeEmail(email);
     if (!clean) return;
+
+    const rateCheck = checkRateLimit(`reset:${clean}`, RATE_LIMIT_RULES.otpSend);
+    if (!rateCheck.allowed) {
+      setRateLimitMsg(`Please wait ${formatRetryTime(rateCheck.retryAfterMs)} before requesting another reset link.`);
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(clean, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     });
     setLoading(false);
+    await logAuthEvent("password_reset_request", { email: clean, success: !error });
     if (error) {
       toast({ title: "Couldn't send reset email", description: error.message, variant: "destructive" });
       return;
@@ -46,6 +58,12 @@ const ForgotPasswordPage = () => {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {rateLimitMsg && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              {rateLimitMsg}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <div className="relative">
@@ -54,7 +72,7 @@ const ForgotPasswordPage = () => {
                 value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !!rateLimitMsg}>
             {loading ? "Sending..." : "Send reset link"}
           </Button>
         </form>
