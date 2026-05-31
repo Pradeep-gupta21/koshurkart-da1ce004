@@ -8,6 +8,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import RoleRoute from "@/components/auth/RoleRoute";
 import VendorStatusGate from "@/components/auth/VendorStatusGate";
@@ -67,9 +68,10 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <ThemeProvider>
-        <AuthProvider>
+    <ErrorBoundary>
+      <TooltipProvider>
+        <ThemeProvider>
+          <AuthProvider>
           <CurrencyProvider>
           <LocationProvider>
           <CartProvider>
@@ -143,9 +145,10 @@ const App = () => (
           </CartProvider>
           </LocationProvider>
           </CurrencyProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </TooltipProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </TooltipProvider>
+    </ErrorBoundary>
   </QueryClientProvider>
 );
 
