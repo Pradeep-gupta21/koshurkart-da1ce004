@@ -59,9 +59,9 @@ const VendorOverview = () => {
 
     const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
 
-    const [prodRes, vendorRes, orderItemsRes, allOrderItemsRes, paymentsRes] = await Promise.all([
+    const [prodRes, financials, orderItemsRes, allOrderItemsRes, paymentsRes] = await Promise.all([
       supabase.from("products").select("id, title, stock, reserved_stock, low_stock_threshold, status").eq("vendor_id", vendorId),
-      supabase.from("vendors").select("total_sales, total_earnings, withdrawable_balance").eq("id", vendorId).single(),
+      vendorService.getFinancials(vendorId),
       supabase.from("order_items").select("*, order_id").eq("vendor_id", vendorId).order("id", { ascending: false }).limit(5),
       supabase.from("order_items").select("id, price, quantity, order_id, vendor_id").eq("vendor_id", vendorId),
       supabase.from("payments").select("*").gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }),
@@ -72,9 +72,9 @@ const VendorOverview = () => {
 
     setStats({
       products: activeProducts.length,
-      totalSales: vendorRes.data?.total_sales ?? 0,
-      totalEarnings: Number(vendorRes.data?.total_earnings ?? 0),
-      withdrawableBalance: Number(vendorRes.data?.withdrawable_balance ?? 0),
+      totalSales: financials.totalSales,
+      totalEarnings: financials.totalEarnings,
+      withdrawableBalance: financials.withdrawableBalance,
     });
 
     setRecentOrders(orderItemsRes.data ?? []);
@@ -122,12 +122,14 @@ const VendorOverview = () => {
     if (vendorId) {
       vendorService.getTrustMetrics(vendorId).then(setTrustMetrics).catch(() => {});
       pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
-      supabase
-        .from("vendors")
-        .select("pickup_state, verification_status, kyc_status")
-        .eq("id", vendorId)
-        .single()
-        .then(({ data }) => { if (data) setVendorLocality(data as any); });
+      supabase.rpc("get_my_vendor").then(({ data }) => {
+        const row = data?.[0] as any;
+        if (row) setVendorLocality({
+          pickup_state: row.pickup_state ?? null,
+          verification_status: row.verification_status,
+          kyc_status: row.kyc_status,
+        });
+      });
     }
   }, [vendorId, fetchAll]);
 

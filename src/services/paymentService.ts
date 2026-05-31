@@ -405,15 +405,16 @@ export const paymentService = {
   },
 
   async getPayoutSummary(vendorId: string) {
-    const [payoutsRes, vendorRes, campaignsRes] = await Promise.all([
+    const [payoutsRes, financialsRes, campaignsRes] = await Promise.all([
       supabase.from('payouts').select('*').eq('vendor_id', vendorId),
-      supabase.from('vendors').select('total_earnings, withdrawable_balance').eq('id', vendorId).single(),
+      supabase.rpc('get_vendor_financials', { _vendor_id: vendorId }),
       supabase.from('ad_campaigns').select('budget').eq('vendor_id', vendorId),
     ]);
 
     const payouts = payoutsRes.data ?? [];
-    const totalEarnings = Number(vendorRes.data?.total_earnings ?? 0);
-    const withdrawableBalance = Number(vendorRes.data?.withdrawable_balance ?? 0);
+    const financials = (financialsRes.data?.[0] ?? null) as any;
+    const totalEarnings = Number(financials?.total_earnings ?? 0);
+    const withdrawableBalance = Number(financials?.withdrawable_balance ?? 0);
     const adSpend = (campaignsRes.data ?? []).reduce((s, c) => s + Number(c.budget), 0);
     const totalPaidOut = payouts.filter(p => p.status === 'completed').reduce((s, p) => s + Number(p.amount), 0);
     const pendingPayouts = payouts.filter(p => p.status === 'pending').reduce((s, p) => s + Number(p.amount), 0);

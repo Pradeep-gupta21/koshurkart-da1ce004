@@ -1339,6 +1339,63 @@ export type Database = {
           view_count: number
         }[]
       }
+      get_my_vendor: {
+        Args: never
+        Returns: {
+          aadhaar_last4: string | null
+          bank_account_holder: string | null
+          bank_account_number_masked: string | null
+          bank_ifsc: string | null
+          bank_verified: boolean
+          banner: string | null
+          business_name: string | null
+          business_type: string | null
+          cancellation_rate: number | null
+          category: string | null
+          created_at: string
+          delivery_rate: number | null
+          description: string | null
+          gstin: string | null
+          id: string
+          is_verified: boolean | null
+          kyc_doc_address: string | null
+          kyc_doc_business: string | null
+          kyc_doc_pan: string | null
+          kyc_rejection_reason: string | null
+          kyc_reviewed_at: string | null
+          kyc_status: string
+          kyc_submitted_at: string | null
+          logo: string | null
+          pan_number: string | null
+          phone: string | null
+          phone_verified_at: string | null
+          pickup_address_line1: string | null
+          pickup_address_line2: string | null
+          pickup_city: string | null
+          pickup_country: string | null
+          pickup_pincode: string | null
+          pickup_state: string | null
+          rating: number | null
+          return_rate: number | null
+          review_rating: number | null
+          store_name: string
+          store_slug: string
+          tagline: string | null
+          total_earnings: number | null
+          total_sales: number | null
+          trust_score: number | null
+          user_id: string
+          verification_rejection_reason: string | null
+          verification_status: string
+          withdrawable_balance: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "vendors"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_ranked_products: {
         Args: {
           p_category?: string
@@ -1406,6 +1463,71 @@ export type Database = {
           view_count: number
         }[]
       }
+      get_vendor_admin: {
+        Args: { _vendor_id: string }
+        Returns: {
+          aadhaar_last4: string | null
+          bank_account_holder: string | null
+          bank_account_number_masked: string | null
+          bank_ifsc: string | null
+          bank_verified: boolean
+          banner: string | null
+          business_name: string | null
+          business_type: string | null
+          cancellation_rate: number | null
+          category: string | null
+          created_at: string
+          delivery_rate: number | null
+          description: string | null
+          gstin: string | null
+          id: string
+          is_verified: boolean | null
+          kyc_doc_address: string | null
+          kyc_doc_business: string | null
+          kyc_doc_pan: string | null
+          kyc_rejection_reason: string | null
+          kyc_reviewed_at: string | null
+          kyc_status: string
+          kyc_submitted_at: string | null
+          logo: string | null
+          pan_number: string | null
+          phone: string | null
+          phone_verified_at: string | null
+          pickup_address_line1: string | null
+          pickup_address_line2: string | null
+          pickup_city: string | null
+          pickup_country: string | null
+          pickup_pincode: string | null
+          pickup_state: string | null
+          rating: number | null
+          return_rate: number | null
+          review_rating: number | null
+          store_name: string
+          store_slug: string
+          tagline: string | null
+          total_earnings: number | null
+          total_sales: number | null
+          trust_score: number | null
+          user_id: string
+          verification_rejection_reason: string | null
+          verification_status: string
+          withdrawable_balance: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "vendors"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_vendor_financials: {
+        Args: { _vendor_id: string }
+        Returns: {
+          total_earnings: number
+          total_sales: number
+          withdrawable_balance: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1420,6 +1542,68 @@ export type Database = {
       is_vendor_order: {
         Args: { _order_id: string; _user_id: string }
         Returns: boolean
+      }
+      list_vendors_admin: {
+        Args: {
+          _limit?: number
+          _offset?: number
+          _search?: string
+          _status?: string
+        }
+        Returns: {
+          aadhaar_last4: string | null
+          bank_account_holder: string | null
+          bank_account_number_masked: string | null
+          bank_ifsc: string | null
+          bank_verified: boolean
+          banner: string | null
+          business_name: string | null
+          business_type: string | null
+          cancellation_rate: number | null
+          category: string | null
+          created_at: string
+          delivery_rate: number | null
+          description: string | null
+          gstin: string | null
+          id: string
+          is_verified: boolean | null
+          kyc_doc_address: string | null
+          kyc_doc_business: string | null
+          kyc_doc_pan: string | null
+          kyc_rejection_reason: string | null
+          kyc_reviewed_at: string | null
+          kyc_status: string
+          kyc_submitted_at: string | null
+          logo: string | null
+          pan_number: string | null
+          phone: string | null
+          phone_verified_at: string | null
+          pickup_address_line1: string | null
+          pickup_address_line2: string | null
+          pickup_city: string | null
+          pickup_country: string | null
+          pickup_pincode: string | null
+          pickup_state: string | null
+          rating: number | null
+          return_rate: number | null
+          review_rating: number | null
+          store_name: string
+          store_slug: string
+          tagline: string | null
+          total_earnings: number | null
+          total_sales: number | null
+          trust_score: number | null
+          user_id: string
+          verification_rejection_reason: string | null
+          verification_status: string
+          withdrawable_balance: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "vendors"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       log_payment_event: {
         Args: {

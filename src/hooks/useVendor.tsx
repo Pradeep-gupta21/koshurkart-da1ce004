@@ -9,8 +9,9 @@ export const useVendor = () => {
 
   const fetchVendor = useCallback(async () => {
     if (!vendorId) { setLoading(false); return; }
-    const { data } = await supabase.from("vendors").select("*").eq("id", vendorId).single();
-    setVendor(data);
+    // Owner full row via SECURITY DEFINER RPC.
+    const { data } = await supabase.rpc('get_my_vendor');
+    setVendor(data?.[0] ?? null);
     setLoading(false);
   }, [vendorId]);
 

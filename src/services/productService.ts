@@ -178,7 +178,7 @@ export const productService = {
   async getVendors() {
     const { data, error } = await supabase
       .from('vendors')
-      .select('*')
+      .select('id, user_id, store_name, store_slug, description, logo, banner, tagline, category, rating, review_rating, trust_score, is_verified, verification_status, pickup_city, pickup_state, pickup_country, total_sales, created_at')
       .eq('verification_status', 'approved')
       .order('total_sales', { ascending: false })
       .limit(6);
