@@ -38,6 +38,7 @@ const AuthPage = () => {
   const [phone, setPhone] = useState("");
   const [countryCode, setCountryCode] = useState("+91");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rateLimitMsg, setRateLimitMsg] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -92,6 +93,12 @@ const AuthPage = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+
+    if (!agreedToTerms) {
+      setErrors({ terms: "You must accept the Terms & Conditions to create an account." });
+      return;
+    }
+
 
     const sanitizedName = sanitizeText(signupName);
     const sanitizedEmail = sanitizeEmail(signupEmail);
@@ -292,11 +299,30 @@ const AuthPage = () => {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                aria-describedby="terms-error"
+              />
+              <span className="text-sm text-muted-foreground leading-snug">
+                I agree to the{" "}
+                <Link to="/terms-and-conditions" target="_blank" rel="noopener" className="text-accent hover:underline font-medium">
+                  Terms &amp; Conditions
+                </Link>{" "}
+                and Privacy Policy
+              </span>
+            </label>
+            <div id="terms-error"><FieldError field="terms" /></div>
+
+            <Button type="submit" className="w-full" disabled={loading || !agreedToTerms}>
               {loading ? "Creating account..." : "Create Account"}
             </Button>
           </form>
         </TabsContent>
+
 
         <TabsContent value="phone">
           <form onSubmit={handleSendOtp} className="space-y-4 mt-4">
