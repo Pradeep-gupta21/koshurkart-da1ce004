@@ -104,6 +104,18 @@ const stats = [
   { label: "Orders Delivered", value: 34500, suffix: "+" },
 ];
 
+function CounterCard({ label, target, suffix }: { label: string; target: number; suffix: string }) {
+  const { count, ref } = useCountUp(target);
+  return (
+    <div ref={ref} className="rounded-xl bg-card border border-border p-6 md:p-8 text-center">
+      <div className="text-3xl md:text-4xl font-bold text-accent tabular-nums mb-2">
+        {count.toLocaleString()}{suffix}
+      </div>
+      <div className="text-sm text-muted-foreground font-medium">{label}</div>
+    </div>
+  );
+}
+
 /* ── Page component ── */
 export default function AboutUsPage() {
   useEffect(() => {
