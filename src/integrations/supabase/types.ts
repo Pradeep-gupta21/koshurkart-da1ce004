@@ -763,6 +763,7 @@ export type Database = {
           name: string
           phone: string | null
           preferred_currency: string | null
+          terms_accepted_at: string | null
         }
         Insert: {
           avatar?: string | null
@@ -774,6 +775,7 @@ export type Database = {
           name?: string
           phone?: string | null
           preferred_currency?: string | null
+          terms_accepted_at?: string | null
         }
         Update: {
           avatar?: string | null
@@ -785,6 +787,7 @@ export type Database = {
           name?: string
           phone?: string | null
           preferred_currency?: string | null
+          terms_accepted_at?: string | null
         }
         Relationships: []
       }
