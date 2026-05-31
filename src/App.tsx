@@ -22,6 +22,7 @@ import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
+const AccountSecurityPage = lazy(() => import("@/pages/account/AccountSecurityPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
@@ -95,6 +96,7 @@ const App = () => (
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                      <Route path="/account/security" element={<ProtectedRoute><AccountSecurityPage /></ProtectedRoute>} />
                       <Route path="/payments" element={<ProtectedRoute><PaymentsListPage /></ProtectedRoute>} />
                       <Route path="/payments/:paymentId" element={<ProtectedRoute><PaymentDetailPage /></ProtectedRoute>} />
                       <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
