@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Lock } from "lucide-react";
 import AuthShell from "@/components/auth/AuthShell";
+import { resetPasswordSchema } from "@/lib/validators/securitySchema";
+import { logAuthEvent } from "@/lib/authLog";
 
 const ResetPasswordPage = () => {
   const [password, setPassword] = useState("");
@@ -18,12 +20,9 @@ const ResetPasswordPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Supabase recovery links arrive with type=recovery in the URL hash and
-    // automatically set a temporary session via onAuthStateChange.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setReady(true);
     });
-    // Also handle the case where the session is already set on mount.
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) setReady(true);
       else if (!window.location.hash.includes("type=recovery")) {
@@ -35,14 +34,18 @@ const ResetPasswordPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) return setError("Password must be at least 6 characters");
     if (password !== confirm) return setError("Passwords don't match");
+    const parsed = resetPasswordSchema.safeParse({ password });
+    if (!parsed.success) {
+      return setError(parsed.error.issues[0]?.message ?? "Invalid password");
+    }
     setError(null);
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error: updateErr } = await supabase.auth.updateUser({ password });
     setLoading(false);
-    if (error) {
-      toast({ title: "Couldn't update password", description: error.message, variant: "destructive" });
+    await logAuthEvent("password_reset_complete", { success: !updateErr });
+    if (updateErr) {
+      toast({ title: "Couldn't update password", description: updateErr.message, variant: "destructive" });
       return;
     }
     toast({ title: "Password updated", description: "You're now signed in." });
@@ -56,8 +59,8 @@ const ResetPasswordPage = () => {
           <Label htmlFor="new-password">New password</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input id="new-password" type="password" placeholder="At least 6 characters" className="pl-10"
-              value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} disabled={!ready} />
+            <Input id="new-password" type="password" placeholder="8+ chars, mixed case + number" className="pl-10"
+              value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} disabled={!ready} />
           </div>
         </div>
         <div className="space-y-2">
@@ -65,7 +68,7 @@ const ResetPasswordPage = () => {
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input id="confirm-password" type="password" placeholder="Repeat password" className="pl-10"
-              value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={6} disabled={!ready} />
+              value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={8} disabled={!ready} />
           </div>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}

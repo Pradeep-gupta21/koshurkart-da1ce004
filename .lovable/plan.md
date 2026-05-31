@@ -1,90 +1,120 @@
-# Vendor Security Regression Test Suite
+# Production-Readiness Hardening Plan
 
-Add an automated test suite that locks in the column-level vendor security model: only the correct role can read KYC / financial fields, and only through the right RPC.
+This plan has two tracks, executed in order. Track A hardens authentication. Track B is a full audit with automated safe fixes. Risky changes (anything that could log users out, break payments, or change billing) are flagged and will be confirmed before execution.
 
-## Where it lives
+---
 
-Reuse the existing Deno test runner under `supabase/functions/_tests/` (already wired into `supabase--test_edge_functions`). Tests hit the live Supabase REST + RPC endpoints with real role JWTs — this exercises Postgres GRANTs and RLS exactly as production does, which a Vitest/jsdom suite cannot.
+## Track A — Industrial-grade Authentication
 
-```
-supabase/functions/
-  _test-bootstrap/index.ts        (new) seed + token-mint helper, gated by TEST_BOOTSTRAP_SECRET
-  _tests/
-    vendor_security_test.ts       (new) the regression suite
-```
+### A1. Session & token security
+- Switch the Supabase client from `localStorage` to a custom storage adapter that prefers `sessionStorage` for "this device only" sign-ins and keeps `localStorage` only when user ticks "Remember me". This reduces XSS token theft exposure.
+- Enable PKCE flow explicitly (`flowType: 'pkce'`) and `detectSessionInUrl: true` for OAuth/reset flows.
+- Add a global `onAuthStateChange` listener that:
+  - Clears all in-memory caches on `SIGNED_OUT`.
+  - Forces `supabase.auth.getUser()` re-validation on `TOKEN_REFRESHED` for protected routes.
+- Add idle session expiration (configurable, default 30 min idle → force re-auth) implemented client-side via activity listener + `signOut()`.
 
-## Bootstrap helper (`_test-bootstrap`)
+Note on cookies: Supabase JS in a SPA does not use HTTP-only cookies for the auth token — tokens live in JS-accessible storage by design. True HTTP-only cookie auth would require an SSR/BFF layer we don't have. I'll document this trade-off and harden what we actually use (storage scope, idle timeout, refresh validation, CSP) instead of pretending we have cookie-based sessions.
 
-A single edge function used only by tests. Guarded by header `x-test-secret` matching new secret `TEST_BOOTSTRAP_SECRET`. Uses service-role client to:
+### A2. Brute-force & rate limiting
+- Extend existing `src/lib/rateLimiter.ts` (already has `loginAttempts`, `otpSend`, `otpVerify`) and wire it into:
+  - `AuthPage` login + signup submit
+  - `ForgotPasswordPage`
+  - `ResetPasswordPage`
+- Add server-side throttling in the OTP edge functions (`otp-send`, `otp-verify`) using a new `auth_rate_limits` table keyed by `(identifier, action)` with a sliding window — survives page reload, unlike the in-memory client limiter.
+- Lock account temporarily after N failed logins for the same email (soft lock, surfaced as "Too many attempts, try again in Xm").
 
-1. Upsert three deterministic test accounts via `auth.admin.createUser` (idempotent, `email_confirm: true`):
-   - `sec-buyer@test.koshurkart.local`
-   - `sec-vendor@test.koshurkart.local`
-   - `sec-admin@test.koshurkart.local`
-2. Upsert a `vendors` row owned by the vendor user with known KYC/financial values (`pan_number`, `total_earnings`, `withdrawable_balance`, `kyc_status='approved'`, etc.). Capture its `id` as `TARGET_VENDOR_ID`.
-3. Insert `user_roles` row `{user_id: admin, role: 'admin'}` (idempotent).
-4. Sign in each user with `signInWithPassword` (fixed password) and return `{ buyerToken, vendorToken, adminToken, vendorId }`.
+### A3. Input validation & XSS
+- Tighten `src/lib/validators/userSchema.ts`: enforce min 8 chars, complexity (upper/lower/number), reject leaked passwords via Supabase HIBP check.
+- Enable Supabase `password_hibp_enabled: true` via `configure_auth`.
+- Run all auth form inputs through `sanitizeText` / `sanitizeEmail` before submit.
+- Add a strict Content-Security-Policy `<meta>` in `index.html` (script-src self + Razorpay, connect-src self + Supabase + Razorpay, frame-src Razorpay, object-src none, base-uri self). XSS defense-in-depth.
+- Audit any `dangerouslySetInnerHTML` usage and replace with sanitized renders.
 
-Config: add `[functions._test-bootstrap]` block in `supabase/config.toml` with `verify_jwt = false`. Add `TEST_BOOTSTRAP_SECRET` via `add_secret`.
+### A4. CSRF
+- Supabase REST uses bearer tokens in `Authorization` header (not cookies) → not classically CSRF-exploitable. Will document this.
+- For the only state-changing endpoints that *do* accept cross-origin POST (`razorpay-webhook`, `confirm-upi-payment`, etc.), confirm they validate provider signatures (Razorpay HMAC) or require authenticated JWT — no extra CSRF token needed, but I'll add an Origin/Referer allow-list check on the non-webhook user-initiated edge functions.
 
-## Test cases (`vendor_security_test.ts`)
+### A5. Auth logs & device/session management
+- New table `auth_events(user_id, event_type, ip, user_agent, device_fingerprint, created_at, metadata)` populated by:
+  - Login success/failure
+  - Signup
+  - Password reset request/complete
+  - OTP send/verify
+  - Sign-out
+- New table `user_sessions(user_id, session_id, device_label, ip, user_agent, last_seen_at, revoked_at)` updated on login + on app focus.
+- New page `/account/security` showing:
+  - Recent auth activity (last 20 events)
+  - Active sessions with "Sign out" per session and "Sign out everywhere" button (calls `supabase.auth.signOut({ scope: 'global' })`).
+- RLS: users read only their own `auth_events` and `user_sessions`; admins read all.
 
-Setup: one `Deno.test` step calls bootstrap once, stores tokens + `vendorId` in module scope. A `client(token)` helper builds fetch headers (`apikey: ANON`, `Authorization: Bearer <token>`).
+### A6. Secrets & env hygiene
+- Audit `.env`: `RAZORPAY_KEY_SECRET` is currently committed there. **Critical**. Plan:
+  - Move `RAZORPAY_KEY_SECRET` to Lovable Cloud secrets (already used by edge functions via `Deno.env.get`).
+  - Remove from `.env`, leave only `VITE_*` publishable values.
+  - Recommend (does NOT auto-rotate) that the user rotate the Razorpay secret in Razorpay dashboard since it was in the repo.
 
-### A. Column-level REVOKE on `vendors` table
+### A7. Loading states & error handling
+- Standardize an `<AuthButton>` with built-in spinner + disabled state for all auth forms.
+- Wrap auth pages in `<ErrorBoundary>` (already exists) and surface friendly error messages via `useToast` instead of raw Supabase errors.
 
-For each sensitive column group, run a direct REST query `GET /rest/v1/vendors?id=eq.{vendorId}&select=<col>` and assert it fails (HTTP 401/403 or PostgREST permission error) for **anon, buyer, vendor (self), admin** — REVOKE applies to all non-service roles. Columns sampled: `pan_number`, `gstin`, `aadhaar_last4`, `bank_account_number_masked`, `bank_ifsc`, `total_earnings`, `withdrawable_balance`, `phone`, `pickup_address_line1`, `kyc_doc_pan`, `verification_rejection_reason`.
+---
 
-Also assert the **public allow-list** still works for anon: `select=id,store_name,store_slug,logo,trust_score,is_verified,rating` returns 200 with data.
+## Track B — Production-Readiness Audit (safe-fix only)
 
-### B. `get_my_vendor()` RPC
+For each area below: scan → list findings → auto-apply only LOW-RISK fixes. MEDIUM/HIGH risk findings get listed for explicit user approval.
 
-- **anon** → 401/empty.
-- **buyer** (no vendor row) → `null`/empty result, not an error.
-- **vendor** → full row with `pan_number`, `total_earnings`, `kyc_status`, bank fields populated and matching seed values.
-- **admin** (no vendor row of own) → null, not other vendors' data.
+### B1. UI consistency & responsiveness
+- Sweep all pages at 360 / 768 / 1024 / 1440 viewports. Auto-fix: missing `overflow-x` clipping, fixed widths, untruncated long text, missing focus rings, color tokens used directly instead of semantic ones.
+- Verify dark mode parity on all dashboards.
 
-### C. `get_vendor_admin(_vendor_id)` RPC
+### B2. Payment flow
+- Verify Razorpay create → verify → webhook chain end-to-end via `supabase--curl_edge_functions`.
+- Verify UPI manual flow and COD path.
+- Check idempotency keys on `orders` and replay protection on `webhook_events`.
+- Safe fix: add missing client-side disabled state on "Pay" button during processing; add explicit network-error retry UI in `RetryPaymentPanel`.
+- Risky (will ask): any change to commission/earnings triggers.
 
-- **anon, buyer, vendor (target's own id)** → error or empty (function should require admin role).
-- **admin** → returns full sensitive row for the target vendor.
+### B3. Auth flow & dashboard protection
+- Verify every `/admin/*` and `/vendor/*` route is wrapped in `ProtectedRoute` + `RoleRoute`. Auto-fix any unguarded route found.
+- Verify `VendorStatusGate` blocks unverified vendors from sensitive pages.
 
-### D. `get_vendor_financials(_vendor_id)` RPC
+### B4. API & DB security
+- Run `supabase--linter` and `security--run_security_scan`.
+- Re-verify the vendors column-grant fix from prior turn is still effective (run the regression test suite already in `_tests/vendor_security_test.ts`).
+- Sweep all RLS policies for `USING (true)` on tables with sensitive columns. The `profiles` table currently has `Anyone can view profiles` — phone + email are exposed publicly. **Will flag** and propose tightening to authenticated-only + restricted columns.
+- Check every edge function validates JWT via `auth.getUser()` (per project memory) and rejects on failure.
 
-- **anon, buyer** → denied/empty.
-- **vendor** with own id → returns `total_earnings`, `withdrawable_balance`, `total_sales`.
-- **vendor** with *another* vendor id → denied/empty.
-- **admin** with any vendor id → returns financials.
+### B5. Performance
+- Bundle analysis: identify any large eager imports on the home route; convert vendor/admin dashboards to `React.lazy` if not already.
+- Add `loading="lazy"` + `decoding="async"` to product images.
+- Verify `cacheService` TTLs are hit for home/product/search.
+- Add `<link rel="preconnect">` for Supabase + Razorpay in `index.html`.
 
-### E. `list_vendors_admin()` RPC (if present from prior migration)
+### B6. Database query review
+- Run `supabase--read_query` to check for N+1 patterns in product listing, vendor analytics, and order pages.
+- Verify indexes exist on: `products(vendor_id, status)`, `orders(user_id, created_at)`, `order_items(order_id, vendor_id)`, `payments(order_id)`, `analytics_events(product_id, created_at)`, `auth_events(user_id, created_at)`. Add missing ones via migration.
 
-- **anon, buyer, vendor** → denied/empty.
-- **admin** → array contains the seeded vendor with sensitive columns populated.
+### B7. Error handling
+- Ensure every `await` in services has try/catch + logger call.
+- Verify `ErrorBoundary` wraps the route tree (App.tsx).
+- Standardize toast error copy.
 
-### F. Negative regression: ensure no fallback path
+---
 
-Direct REST `GET /rest/v1/vendors?select=*` as vendor token must NOT return KYC columns (PostgREST should error on `*` because of the REVOKE, or strip — assert the response either errors or, if 200, does not contain any revoked key). This guards against future migrations that re-grant by accident.
+## Deliverables
 
-Each assertion uses a clear message so failures point to the exact role × field combination.
+1. Migrations: `auth_events`, `user_sessions`, `auth_rate_limits`, indexes, profile RLS tightening (pending approval).
+2. New page: `/account/security`.
+3. Updated: `client.ts` storage adapter, `AuthPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `otp-send`, `otp-verify` edge functions, `userSchema`, `index.html` (CSP + preconnect).
+4. `.env` cleanup + secret migration request.
+5. Audit report (in chat) listing: auto-fixed items, items needing user approval, items deferred with reason.
 
-## Running
+---
 
-```
-supabase--test_edge_functions { functions: ["_tests"], pattern: "vendor_security" }
-```
+## What I need to confirm before starting
 
-Tests are self-cleaning enough to be idempotent (bootstrap upserts, no DELETEs needed between runs).
-
-## Out of scope
-
-- Profiles email/phone exposure tests (separate follow-up finding).
-- Storage bucket upload policy tests.
-- Vitest UI-layer mocking — covered indirectly because services call these same RPCs.
-
-## Technical notes
-
-- Deno test file pattern matches existing `*_test.ts` convention picked up by the test runner.
-- `auth.admin.createUser` returns 422 if user exists; treat as success and fetch via `listUsers` filter.
-- Password constant lives only in the bootstrap function; tests never see it.
-- Bootstrap returns short-lived access tokens (default 1h) — fine for a test run.
-- If `TEST_BOOTSTRAP_SECRET` is missing in the env, the test suite skips with a clear message rather than failing, so CI without the secret stays green.
+1. **Profiles table** currently lets anyone (including anon) read `email` + `phone`. Tightening this is the single highest-impact security fix but may affect any public UI that shows seller/reviewer names — OK to lock down to authenticated + non-PII columns only for anon?
+2. **Idle session timeout** — default 30 min OK, or different?
+3. **Razorpay secret rotation** — I'll move it out of `.env`; will you rotate it in the Razorpay dashboard afterwards?
+4. **Scope of "auto-fix safe issues"** — confirm I should proceed without asking per-fix for: missing loading states, missing lazy-loading on images, missing indexes, unguarded routes, CSP/preconnect, validator tightening. Anything risky (RLS changes, payment logic, data migrations) I'll bring back for approval.

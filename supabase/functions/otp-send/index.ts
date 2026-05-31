@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
     const { phone } = parsed.data;
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
+    // In-memory per-cold-start guard
     if (!hit(`send:phone:${phone}`, 3, 30_000)) {
       return new Response(JSON.stringify({ error: "Please wait before requesting another code." }), {
         status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -59,6 +60,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Persistent server-side rate limit (sliding window via Postgres)
+    const serviceSupabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: allowedPhone } = await serviceSupabase.rpc("check_auth_rate_limit", {
+      _identifier: `phone:${phone}`, _action: "otp_send", _max_attempts: 5, _window_seconds: 600,
+    });
+    if (allowedPhone === false) {
+      return new Response(JSON.stringify({ error: "Too many OTP requests for this number. Try again in 10 minutes." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: allowedIp } = await serviceSupabase.rpc("check_auth_rate_limit", {
+      _identifier: `ip:${ip}`, _action: "otp_send", _max_attempts: 30, _window_seconds: 600,
+    });
+    if (allowedIp === false) {
+      return new Response(JSON.stringify({ error: "Too many OTP requests from this network." }), {
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
     const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
@@ -66,10 +90,7 @@ Deno.serve(async (req) => {
     if (!TWILIO_API_KEY) throw new Error("TWILIO_API_KEY is not configured (connect Twilio in Lovable)");
     if (!TWILIO_FROM_NUMBER) throw new Error("TWILIO_FROM_NUMBER is not configured");
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabase = serviceSupabase;
 
     // Generate and persist hashed OTP (10 min TTL)
     const code = generateCode();
@@ -81,7 +102,8 @@ Deno.serve(async (req) => {
       .upsert({ phone, code_hash, attempts: 0, expires_at }, { onConflict: "phone" });
     if (upErr) throw new Error(`Failed to persist OTP: ${upErr.message}`);
 
-    // Send SMS via Twilio gateway (path is /Messages.json; gateway prepends Accounts prefix)
+
+    // Send SMS via Twilio gateway
     const res = await fetch(`${GATEWAY_URL}/Messages.json`, {
       method: "POST",
       headers: {
@@ -98,8 +120,20 @@ Deno.serve(async (req) => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.error("Twilio send failed", res.status, data);
+      await supabase.rpc("log_auth_event", {
+        _user_id: null, _email: null, _event_type: "otp_send", _success: false,
+        _ip: ip, _user_agent: req.headers.get("user-agent"),
+        _metadata: { phone, twilio_status: res.status },
+      });
       throw new Error(`Twilio error [${res.status}]: ${data?.message ?? JSON.stringify(data)}`);
     }
+
+    await supabase.rpc("log_auth_event", {
+      _user_id: null, _email: null, _event_type: "otp_send", _success: true,
+      _ip: ip, _user_agent: req.headers.get("user-agent"),
+      _metadata: { phone },
+    });
+
 
     return new Response(JSON.stringify({ ok: true, provider: "twilio" }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

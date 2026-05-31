@@ -143,6 +143,63 @@ export type Database = {
         }
         Relationships: []
       }
+      auth_events: {
+        Row: {
+          created_at: string
+          email: string | null
+          event_type: string
+          id: string
+          ip: string | null
+          metadata: Json
+          success: boolean
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          event_type: string
+          id?: string
+          ip?: string | null
+          metadata?: Json
+          success?: boolean
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          event_type?: string
+          id?: string
+          ip?: string | null
+          metadata?: Json
+          success?: boolean
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      auth_rate_limits: {
+        Row: {
+          action: string
+          attempted_at: string
+          id: string
+          identifier: string
+        }
+        Insert: {
+          action: string
+          attempted_at?: string
+          id?: string
+          identifier: string
+        }
+        Update: {
+          action?: string
+          attempted_at?: string
+          id?: string
+          identifier?: string
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
           badge_key: string | null
@@ -977,6 +1034,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          created_at: string
+          device_label: string | null
+          id: string
+          ip: string | null
+          last_seen_at: string
+          revoked_at: string | null
+          session_token_hash: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          ip?: string | null
+          last_seen_at?: string
+          revoked_at?: string | null
+          session_token_hash: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          ip?: string | null
+          last_seen_at?: string
+          revoked_at?: string | null
+          session_token_hash?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       vendor_audit_log: {
         Row: {
           action: string
@@ -1250,6 +1343,15 @@ export type Database = {
       can_review_product: {
         Args: { _product_id: string; _user_id: string }
         Returns: string
+      }
+      check_auth_rate_limit: {
+        Args: {
+          _action: string
+          _identifier: string
+          _max_attempts: number
+          _window_seconds: number
+        }
+        Returns: boolean
       }
       check_serviceability: {
         Args: { _pincode: string; _product_ids: string[] }
@@ -1604,6 +1706,18 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      log_auth_event: {
+        Args: {
+          _email: string
+          _event_type: string
+          _ip: string
+          _metadata: Json
+          _success: boolean
+          _user_agent: string
+          _user_id: string
+        }
+        Returns: undefined
       }
       log_payment_event: {
         Args: {

@@ -8,6 +8,7 @@ import { CartProvider } from "@/contexts/CartContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import RoleRoute from "@/components/auth/RoleRoute";
 import VendorStatusGate from "@/components/auth/VendorStatusGate";
@@ -22,6 +23,7 @@ import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
+const AccountSecurityPage = lazy(() => import("@/pages/account/AccountSecurityPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import ShopSidebar from "@/components/navigation/ShopSidebar";
@@ -66,9 +68,10 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <ThemeProvider>
-        <AuthProvider>
+    <ErrorBoundary>
+      <TooltipProvider>
+        <ThemeProvider>
+          <AuthProvider>
           <CurrencyProvider>
           <LocationProvider>
           <CartProvider>
@@ -95,6 +98,7 @@ const App = () => (
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
                       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                      <Route path="/account/security" element={<ProtectedRoute><AccountSecurityPage /></ProtectedRoute>} />
                       <Route path="/payments" element={<ProtectedRoute><PaymentsListPage /></ProtectedRoute>} />
                       <Route path="/payments/:paymentId" element={<ProtectedRoute><PaymentDetailPage /></ProtectedRoute>} />
                       <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccessPage /></ProtectedRoute>} />
@@ -141,9 +145,10 @@ const App = () => (
           </CartProvider>
           </LocationProvider>
           </CurrencyProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </TooltipProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </TooltipProvider>
+    </ErrorBoundary>
   </QueryClientProvider>
 );
 

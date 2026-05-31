@@ -6,7 +6,27 @@
     <title>Koshur Kart — Authentic crafts from Kashmir</title>
     <meta name="description" content="Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans and shipped across India." />
     <meta name="author" content="Koshur Kart" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="canonical" href="/" />
+
+    <!--
+      Content-Security-Policy (defense-in-depth XSS).
+      Note: 'unsafe-inline' on style-src is needed by Tailwind/Vite-injected styles and shadcn.
+      'unsafe-eval' is intentionally NOT allowed.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      img-src 'self' data: blob: https:;
+      font-src 'self' data: https://fonts.gstatic.com;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.lovable.dev https://*.lovableproject.com https://api.razorpay.com https://lumberjack.razorpay.com;
+      frame-src https://*.razorpay.com https://api.razorpay.com;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      frame-ancestors 'self';
+    " />
 
     <meta property="og:title" content="Koshur Kart — Authentic crafts from Kashmir" />
     <meta property="og:description" content="Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans." />
@@ -24,6 +44,8 @@
       }
     </script>
 
+    <link rel="preconnect" href="https://xlqzbomiuuadxcygnsal.supabase.co" crossorigin />
+    <link rel="preconnect" href="https://checkout.razorpay.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&display=swap" rel="stylesheet" />
