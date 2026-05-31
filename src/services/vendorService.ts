@@ -16,27 +16,59 @@ export interface KYCSubmission {
   bank_ifsc: string;
 }
 
+// Columns on `vendors` that are safe for any reader (anon/authenticated).
+// Sensitive columns (KYC, bank, financials, contact) are revoked at DB level
+// and must be fetched through dedicated RPCs (get_my_vendor / get_vendor_admin).
+export const VENDOR_PUBLIC_COLUMNS =
+  'id, user_id, store_name, store_slug, description, logo, banner, tagline, category, ' +
+  'rating, review_rating, trust_score, is_verified, verification_status, ' +
+  'pickup_city, pickup_state, pickup_country, ' +
+  'delivery_rate, cancellation_rate, return_rate, total_sales, created_at';
+
 export const vendorService = {
   async getById(vendorId: string) {
-    const { data, error } = await supabase.from('vendors').select('*').eq('id', vendorId).single();
+    const { data, error } = await supabase
+      .from('vendors')
+      .select(VENDOR_PUBLIC_COLUMNS)
+      .eq('id', vendorId)
+      .single();
     if (error) throw error;
-    return data;
+    return data as any;
   },
 
   async getByUserId(userId: string) {
     const { data, error } = await supabase
       .from('vendors')
-      .select('*')
+      .select(VENDOR_PUBLIC_COLUMNS)
       .eq('user_id', userId)
       .maybeSingle();
     if (error) throw error;
-    return data;
+    return data as any;
+  },
+
+  /** Returns the caller's own full vendor row (including KYC/bank/financials). */
+  async getMine() {
+    const { data, error } = await supabase.rpc('get_my_vendor');
+    if (error) throw error;
+    return (data?.[0] ?? null) as any;
+  },
+
+  /** Owner or admin: financial summary for one vendor. */
+  async getFinancials(vendorId: string) {
+    const { data, error } = await supabase.rpc('get_vendor_financials', { _vendor_id: vendorId });
+    if (error) throw error;
+    const row = (data?.[0] ?? null) as any;
+    return {
+      totalEarnings: Number(row?.total_earnings ?? 0),
+      withdrawableBalance: Number(row?.withdrawable_balance ?? 0),
+      totalSales: Number(row?.total_sales ?? 0),
+    };
   },
 
   async update(vendorId: string, updates: { store_name?: string; description?: string; logo?: string }) {
-    const { data, error } = await supabase.from('vendors').update(updates).eq('id', vendorId).select().single();
+    const { data, error } = await supabase.from('vendors').update(updates).eq('id', vendorId).select(VENDOR_PUBLIC_COLUMNS).single();
     if (error) throw error;
-    return data;
+    return data as any;
   },
 
   async getProductCount(vendorId: string) {
