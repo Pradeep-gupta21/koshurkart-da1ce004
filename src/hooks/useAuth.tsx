@@ -30,16 +30,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [vendorStatus, setVendorStatus] = useState<VendorStatus>(null);
   const [kycStatus, setKycStatus] = useState<KYCStatus>(null);
 
-  const fetchVendor = async (userId: string) => {
-    const { data } = await supabase
-      .from("vendors")
-      .select("id, verification_status, kyc_status")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (data) {
-      setVendorId(data.id);
-      setVendorStatus((data.verification_status as VendorStatus) ?? null);
-      setKycStatus((data.kyc_status as KYCStatus) ?? null);
+  const fetchVendor = async (_userId: string) => {
+    // Uses SECURITY DEFINER RPC so we can read kyc_status (revoked on direct selects).
+    const { data } = await supabase.rpc('get_my_vendor');
+    const row = data?.[0];
+    if (row) {
+      setVendorId(row.id);
+      setVendorStatus((row.verification_status as VendorStatus) ?? null);
+      setKycStatus((row.kyc_status as KYCStatus) ?? null);
     } else {
       setVendorId(null);
       setVendorStatus(null);
