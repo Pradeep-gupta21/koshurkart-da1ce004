@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.quote-checkout]
 verify_jwt = false
+
+[functions.test-bootstrap]
+verify_jwt = false
