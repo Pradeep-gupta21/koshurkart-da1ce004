@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Wallet, IndianRupee, CreditCard, ArrowDownToLine, Megaphone, TrendingUp, Info } from "lucide-react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { vendorService } from "@/services/vendorService";
 
 const VendorPayments = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
