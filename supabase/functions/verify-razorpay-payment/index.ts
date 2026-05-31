@@ -148,6 +148,16 @@ Deno.serve(async (req) => {
     }
     const rpOrder = await rpRes.json();
 
+    // Razorpay order status must be 'paid' once the user finishes the modal flow.
+    // 'attempted' or 'created' means the user closed it before capture.
+    if (rpOrder.status !== "paid") {
+      console.error("Razorpay order not paid", { rpOrderId: razorpayOrderId, status: rpOrder.status });
+      return new Response(JSON.stringify({ error: "Payment not captured by gateway" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const expectedPaise = Math.round(Number(paymentRow.amount) * 100);
     if (rpOrder.amount !== expectedPaise || rpOrder.currency !== "INR") {
       console.error("Amount/currency mismatch", { expectedPaise, got: rpOrder.amount });
