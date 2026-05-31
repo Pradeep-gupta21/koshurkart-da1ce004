@@ -1,41 +1,90 @@
-# Vendors column-level security
+# Vendor Security Regression Test Suite
 
-Goal: Prevent any non-owner / non-admin from reading KYC, bank, financial, and private contact fields on `public.vendors`. Today RLS allows `SELECT *` to everyone, exposing PII, bank details, balances, and audit reasons.
+Add an automated test suite that locks in the column-level vendor security model: only the correct role can read KYC / financial fields, and only through the right RPC.
 
-## Sensitive columns to lock down
-- **KYC**: `kyc_status`, `kyc_doc_business`, `kyc_doc_address`, `kyc_doc_pan`, `kyc_submitted_at`, `kyc_reviewed_at`, `kyc_rejection_reason`, `pan_number`, `gstin`, `aadhaar_last4`, `business_type`, `business_name`
-- **Bank**: `bank_account_holder`, `bank_account_number_masked`, `bank_ifsc`, `bank_verified`
-- **Financial**: `total_earnings`, `withdrawable_balance`
-- **Private contact / address**: `phone`, `phone_verified_at`, `pickup_address_line1`, `pickup_address_line2`, `pickup_pincode`
-- **Internal moderation**: `verification_rejection_reason`
+## Where it lives
 
-Public-safe columns remain readable: `id, user_id, store_name, store_slug, description, logo, banner, tagline, category, rating, review_rating, trust_score, is_verified, verification_status, pickup_city, pickup_state, pickup_country, delivery_rate, cancellation_rate, return_rate, total_sales, created_at`.
+Reuse the existing Deno test runner under `supabase/functions/_tests/` (already wired into `supabase--test_edge_functions`). Tests hit the live Supabase REST + RPC endpoints with real role JWTs — this exercises Postgres GRANTs and RLS exactly as production does, which a Vitest/jsdom suite cannot.
 
-## Database changes (single migration)
+```
+supabase/functions/
+  _test-bootstrap/index.ts        (new) seed + token-mint helper, gated by TEST_BOOTSTRAP_SECRET
+  _tests/
+    vendor_security_test.ts       (new) the regression suite
+```
 
-1. `REVOKE SELECT (<sensitive cols>) ON public.vendors FROM anon, authenticated;` (service_role keeps full access).
-2. Create SECURITY DEFINER RPCs returning full vendor row, gated in-function:
-   - `get_my_vendor()` — returns the caller's own vendor row.
-   - `get_vendor_admin(_vendor_id uuid)` — admin only (`has_role(auth.uid(),'admin')`); errors otherwise.
-   - `list_vendors_admin(_search text, _status text, _limit int, _offset int)` — admin only; powers `AdminVendors`.
-   - `get_vendor_financials(_vendor_id uuid)` — returns `total_earnings, withdrawable_balance, total_sales` for owner or admin.
-3. `GRANT EXECUTE` of those RPCs to `authenticated` only.
+## Bootstrap helper (`_test-bootstrap`)
 
-## Frontend refactor (call sites swap from direct selects to RPCs)
+A single edge function used only by tests. Guarded by header `x-test-secret` matching new secret `TEST_BOOTSTRAP_SECRET`. Uses service-role client to:
 
-- `src/hooks/useVendor.tsx` and `src/services/vendorService.ts#getVendor` → `supabase.rpc('get_my_vendor')`.
-- `src/pages/admin/AdminVendors.tsx` (`select('*')`) → `supabase.rpc('list_vendors_admin', ...)` plus `get_vendor_admin` for the KYC review sheet.
-- `src/components/vendor/KYCReviewSheet.tsx` (if reading sensitive cols) → use `get_vendor_admin`.
-- `src/pages/vendor/VendorOverview.tsx`, `src/pages/vendor/VendorPayments.tsx`, `src/services/paymentService.ts` (lines reading `total_earnings`, `withdrawable_balance`, `total_sales`) → use `get_vendor_financials` or `get_my_vendor`.
-- `src/pages/ProductDetailPage.tsx` (`select('*, profiles(name)')`) → narrow to public column allowlist (drop sensitive columns from the projection).
-- `src/services/vendorService.ts#updateVendor` and KYC submit paths keep using direct `update` (UPDATE policy unchanged; column REVOKEs only affect SELECT).
-- Calls that already select only public columns (ProductCard `is_verified`, AdminOverview count, analyticsService created_at, ProductDetailPage trust card) stay as-is.
+1. Upsert three deterministic test accounts via `auth.admin.createUser` (idempotent, `email_confirm: true`):
+   - `sec-buyer@test.koshurkart.local`
+   - `sec-vendor@test.koshurkart.local`
+   - `sec-admin@test.koshurkart.local`
+2. Upsert a `vendors` row owned by the vendor user with known KYC/financial values (`pan_number`, `total_earnings`, `withdrawable_balance`, `kyc_status='approved'`, etc.). Capture its `id` as `TARGET_VENDOR_ID`.
+3. Insert `user_roles` row `{user_id: admin, role: 'admin'}` (idempotent).
+4. Sign in each user with `signInWithPassword` (fixed password) and return `{ buyerToken, vendorToken, adminToken, vendorId }`.
 
-## Verification
-- Re-run security scan; confirm vendor exposure findings clear.
-- Smoke test: owner can see own KYC/bank/financials in vendor dashboard; admin can see all in AdminVendors; anonymous storefront still loads vendor cards and product detail page; non-owner authenticated user querying another vendor's row gets only public columns.
+Config: add `[functions._test-bootstrap]` block in `supabase/config.toml` with `verify_jwt = false`. Add `TEST_BOOTSTRAP_SECRET` via `add_secret`.
+
+## Test cases (`vendor_security_test.ts`)
+
+Setup: one `Deno.test` step calls bootstrap once, stores tokens + `vendorId` in module scope. A `client(token)` helper builds fetch headers (`apikey: ANON`, `Authorization: Bearer <token>`).
+
+### A. Column-level REVOKE on `vendors` table
+
+For each sensitive column group, run a direct REST query `GET /rest/v1/vendors?id=eq.{vendorId}&select=<col>` and assert it fails (HTTP 401/403 or PostgREST permission error) for **anon, buyer, vendor (self), admin** — REVOKE applies to all non-service roles. Columns sampled: `pan_number`, `gstin`, `aadhaar_last4`, `bank_account_number_masked`, `bank_ifsc`, `total_earnings`, `withdrawable_balance`, `phone`, `pickup_address_line1`, `kyc_doc_pan`, `verification_rejection_reason`.
+
+Also assert the **public allow-list** still works for anon: `select=id,store_name,store_slug,logo,trust_score,is_verified,rating` returns 200 with data.
+
+### B. `get_my_vendor()` RPC
+
+- **anon** → 401/empty.
+- **buyer** (no vendor row) → `null`/empty result, not an error.
+- **vendor** → full row with `pan_number`, `total_earnings`, `kyc_status`, bank fields populated and matching seed values.
+- **admin** (no vendor row of own) → null, not other vendors' data.
+
+### C. `get_vendor_admin(_vendor_id)` RPC
+
+- **anon, buyer, vendor (target's own id)** → error or empty (function should require admin role).
+- **admin** → returns full sensitive row for the target vendor.
+
+### D. `get_vendor_financials(_vendor_id)` RPC
+
+- **anon, buyer** → denied/empty.
+- **vendor** with own id → returns `total_earnings`, `withdrawable_balance`, `total_sales`.
+- **vendor** with *another* vendor id → denied/empty.
+- **admin** with any vendor id → returns financials.
+
+### E. `list_vendors_admin()` RPC (if present from prior migration)
+
+- **anon, buyer, vendor** → denied/empty.
+- **admin** → array contains the seeded vendor with sensitive columns populated.
+
+### F. Negative regression: ensure no fallback path
+
+Direct REST `GET /rest/v1/vendors?select=*` as vendor token must NOT return KYC columns (PostgREST should error on `*` because of the REVOKE, or strip — assert the response either errors or, if 200, does not contain any revoked key). This guards against future migrations that re-grant by accident.
+
+Each assertion uses a clear message so failures point to the exact role × field combination.
+
+## Running
+
+```
+supabase--test_edge_functions { functions: ["_tests"], pattern: "vendor_security" }
+```
+
+Tests are self-cleaning enough to be idempotent (bootstrap upserts, no DELETEs needed between runs).
 
 ## Out of scope
-- `profiles` email/phone exposure (separate follow-up).
-- Realtime channel auth.
-- Generic Supabase linter warnings unrelated to this change.
+
+- Profiles email/phone exposure tests (separate follow-up finding).
+- Storage bucket upload policy tests.
+- Vitest UI-layer mocking — covered indirectly because services call these same RPCs.
+
+## Technical notes
+
+- Deno test file pattern matches existing `*_test.ts` convention picked up by the test runner.
+- `auth.admin.createUser` returns 422 if user exists; treat as success and fetch via `listUsers` filter.
+- Password constant lives only in the bootstrap function; tests never see it.
+- Bootstrap returns short-lived access tokens (default 1h) — fine for a test run.
+- If `TEST_BOOTSTRAP_SECRET` is missing in the env, the test suite skips with a clear message rather than failing, so CI without the secret stays green.
