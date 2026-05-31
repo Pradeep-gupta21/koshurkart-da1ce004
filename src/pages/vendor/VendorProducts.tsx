@@ -318,10 +318,10 @@ const VendorProducts = () => {
                         {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                    <Button variant="ghost" size="icon" aria-label={`Edit ${p.title}`} onClick={() => openEdit(p)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(p.id)} className="text-destructive">
+                    <Button variant="ghost" size="icon" aria-label={`Delete ${p.title}`} onClick={() => deleteMutation.mutate(p.id)} className="text-destructive">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

@@ -100,12 +100,13 @@ export const productService = {
     return result;
   },
 
-  async getByVendor(vendorId: string) {
+  async getByVendor(vendorId: string, limit = 100) {
     const { data, error } = await supabase
       .from('products')
       .select('*, vendors(store_name, pickup_state)')
       .eq('vendor_id', vendorId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
     if (error) throw error;
     return (data ?? []).map(mapDbProduct);
   },

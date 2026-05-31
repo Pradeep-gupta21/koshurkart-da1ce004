@@ -31,12 +31,13 @@ export const orderService = {
   },
 
 
-  async getUserOrders(userId: string) {
+  async getUserOrders(userId: string, limit = 50) {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('id, user_id, total_amount, order_status, payment_status, shipping_status, shipping_provider, tracking_id, estimated_delivery, created_at, order_items(id, product_id, vendor_id, title, image, price, quantity)')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
     if (error) throw error;
     return data ?? [];
   },

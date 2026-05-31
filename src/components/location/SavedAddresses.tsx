@@ -165,6 +165,7 @@ const SavedAddresses = () => {
                             onClick={() => startEdit(loc.id, loc.label)}
                             className="text-muted-foreground hover:text-foreground"
                             title="Edit label"
+                            aria-label={`Edit label for ${loc.label}`}
                           >
                             <Pencil className="h-3 w-3" />
                           </button>

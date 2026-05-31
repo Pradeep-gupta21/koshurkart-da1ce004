@@ -12,8 +12,9 @@ export const CACHE_TTL = {
   PRODUCT_DETAIL: 600,
   SEARCH: 120,
   SUGGESTIONS: 120,
-  SIMILAR: 300,
-  FBT: 300,
+  // Similar/FBT lists rarely change per product — keep cached for an hour
+  SIMILAR: 3600,
+  FBT: 3600,
 } as const;
 
 export const cacheService = {

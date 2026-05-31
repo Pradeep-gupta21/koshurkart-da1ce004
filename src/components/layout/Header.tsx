@@ -71,7 +71,13 @@ const Header = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-1 shrink-0">
-              <Button variant="ghost" size="icon" onClick={toggleTheme} className={`hidden sm:inline-flex ${actionBtn}`}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+                className={`hidden sm:inline-flex ${actionBtn}`}
+              >
                 {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
               </Button>
               <NotificationBell />

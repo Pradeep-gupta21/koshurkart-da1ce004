@@ -1441,6 +1441,20 @@ export type Database = {
           view_count: number
         }[]
       }
+      get_my_profile: {
+        Args: never
+        Returns: {
+          avatar: string
+          country: string
+          created_at: string
+          default_pincode: string
+          email: string
+          id: string
+          name: string
+          phone: string
+          preferred_currency: string
+        }[]
+      }
       get_my_vendor: {
         Args: never
         Returns: {

@@ -48,7 +48,7 @@ const LocalDeals = () => {
         <div className="-mx-4 px-4 overflow-x-auto snap-x snap-mandatory scroll-smooth">
           <div className="flex gap-4 pb-2">
             {products.map((p) => (
-              <div key={p.id} className="snap-start shrink-0 w-[220px] sm:w-[240px] md:w-[260px]">
+              <div key={p.id} className="snap-start shrink-0 w-[min(78vw,220px)] sm:w-[240px] md:w-[260px]">
                 <ProductCard product={p} />
               </div>
             ))}
