@@ -27,3 +27,6 @@ verify_jwt = false
 [functions.log-auth-event]
 verify_jwt = false
 
+[functions.simulate-razorpay-webhook]
+verify_jwt = false
+
