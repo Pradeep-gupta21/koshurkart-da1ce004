@@ -21,15 +21,15 @@ const VendorPayments = () => {
     if (!vendorId) return;
     const fetchData = async () => {
       setLoading(true);
-      const [payoutRes, vendorRes, campaignsRes] = await Promise.all([
+      const [payoutRes, financials, campaignsRes] = await Promise.all([
         supabase.from("payouts").select("*").eq("vendor_id", vendorId).order("requested_at", { ascending: false }),
-        supabase.from("vendors").select("total_earnings, withdrawable_balance").eq("id", vendorId).single(),
+        vendorService.getFinancials(vendorId),
         supabase.from("ad_campaigns").select("budget").eq("vendor_id", vendorId),
       ]);
 
       setPayouts(payoutRes.data ?? []);
-      setTotalEarnings(Number(vendorRes.data?.total_earnings ?? 0));
-      setWithdrawableBalance(Number(vendorRes.data?.withdrawable_balance ?? 0));
+      setTotalEarnings(financials.totalEarnings);
+      setWithdrawableBalance(financials.withdrawableBalance);
 
       const spend = (campaignsRes.data ?? []).reduce(
         (sum: number, c: any) => sum + Number(c.budget), 0
