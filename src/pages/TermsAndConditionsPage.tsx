@@ -151,16 +151,17 @@ const sections = [
 ];
 
 const TermsAndConditionsPage = () => {
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = "Terms & Conditions — Koshur Kart";
+    return () => {
+      document.title = prevTitle;
+    };
+  }, []);
+
   return (
     <>
-      <Helmet>
-        <title>Terms & Conditions — Koshur Kart</title>
-        <meta
-          name="description"
-          content="Read the Terms & Conditions for using Koshur Kart — accounts, orders, payments, vendor responsibilities, returns, and more."
-        />
-        <link rel="canonical" href="/terms-and-conditions" />
-      </Helmet>
+
 
       <div className="bg-muted/30 border-b border-border">
         <div className="container mx-auto px-4 py-10 md:py-14 max-w-5xl">
