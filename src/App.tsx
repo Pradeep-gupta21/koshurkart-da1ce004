@@ -100,6 +100,7 @@ const App = () => (
                       <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
                       <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
                       <Route path="/refund-return-policy" element={<RefundReturnPolicyPage />} />
+                      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                       <Route path="/about-us" element={<AboutUsPage />} />
 
                       {/* Authenticated routes */}
