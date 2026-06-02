@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, Store, ShieldAlert } from "lucide-react";
+import { Mail, Lock, User, Store, ShieldAlert, MailCheck, AlertCircle } from "lucide-react";
 import { loginSchema, signupSchema } from "@/lib/validators/securitySchema";
 import { sanitizeEmail, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
@@ -26,6 +26,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
+type SignupPanelState =
+  | { kind: "sent"; email: string }
+  | { kind: "repeated"; email: string }
+  | null;
+
+const RESEND_COOLDOWN_SECONDS = 60;
+
 const AuthPage = () => {
   const [loading, setLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -40,8 +47,69 @@ const AuthPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rateLimitMsg, setRateLimitMsg] = useState("");
+  const [signupPanel, setSignupPanel] = useState<SignupPanelState>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  const cooldownTimer = useRef<number | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    cooldownTimer.current = window.setTimeout(
+      () => setResendCooldown((s) => s - 1),
+      1000
+    );
+    return () => {
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+    };
+  }, [resendCooldown]);
+
+  const resetSignupPanel = () => {
+    setSignupPanel(null);
+    setResendCooldown(0);
+  };
+
+  const handleResendVerification = async (email: string) => {
+    if (resendCooldown > 0 || resending) return;
+    const rateCheck = checkRateLimit(`resend:${email}`, RATE_LIMIT_RULES.otpSend);
+    if (!rateCheck.allowed) {
+      toast({
+        title: "Please wait",
+        description: `Try again in ${formatRetryTime(rateCheck.retryAfterMs)}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setResending(false);
+    if (error) {
+      toast({
+        title: "Couldn't resend",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    await logAuthEvent("signup_success", { email, metadata: { resend: true } });
+    toast({
+      title: "Verification email resent",
+      description: `Sent to ${email}. Check your inbox (and spam folder).`,
+    });
+  };
+
+  const switchToLoginWithEmail = (email: string) => {
+    setLoginEmail(email);
+    setActiveTab("login");
+    resetSignupPanel();
+  };
 
   const routeAfterLogin = async () => {
     const { data: userRes } = await supabase.auth.getUser();
