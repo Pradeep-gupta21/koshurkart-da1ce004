@@ -43,6 +43,7 @@ const VendorKYCPage = lazy(() => import("@/pages/vendor/VendorKYCPage"));
 const VendorSettings = lazy(() => import("@/pages/vendor/VendorSettings"));
 const TermsAndConditionsPage = lazy(() => import("@/pages/TermsAndConditionsPage"));
 const RefundReturnPolicyPage = lazy(() => import("@/pages/RefundReturnPolicyPage"));
+const PrivacyPolicyPage = lazy(() => import("@/pages/PrivacyPolicyPage"));
 const AboutUsPage = lazy(() => import("@/pages/AboutUsPage"));
 
 const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
@@ -99,6 +100,7 @@ const App = () => (
                       <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
                       <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
                       <Route path="/refund-return-policy" element={<RefundReturnPolicyPage />} />
+                      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                       <Route path="/about-us" element={<AboutUsPage />} />
 
                       {/* Authenticated routes */}
