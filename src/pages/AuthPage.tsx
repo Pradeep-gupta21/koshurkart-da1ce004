@@ -203,7 +203,7 @@ const AuthPage = () => {
         .replace(/(^-|-$)/g, "");
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: sanitizedEmail,
       password: signupPassword,
       options: { data: metadata, emailRedirectTo: window.location.origin },
@@ -214,11 +214,26 @@ const AuthPage = () => {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
       return;
     }
+
+    // Detect repeated signup: Supabase returns 200 with an empty identities array
+    // when the email is already registered (no new verification email is sent).
+    const isRepeatedSignup =
+      !!data.user && (data.user.identities?.length ?? 0) === 0;
+
+    if (isRepeatedSignup) {
+      await logAuthEvent("signup_failure", {
+        email: sanitizedEmail,
+        success: false,
+        metadata: { reason: "email_already_registered" },
+      });
+      setSignupPanel({ kind: "repeated", email: sanitizedEmail });
+      setResendCooldown(0);
+      return;
+    }
+
     await logAuthEvent("signup_success", { email: sanitizedEmail, metadata: { is_vendor: isVendorSignup } });
-    toast({
-      title: "Account created!",
-      description: "Please check your email to verify your account.",
-    });
+    setSignupPanel({ kind: "sent", email: sanitizedEmail });
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
   };
 
   const handleGoogle = async () => {
