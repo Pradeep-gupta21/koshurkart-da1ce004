@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, Store, ShieldAlert } from "lucide-react";
+import { Mail, Lock, User, Store, ShieldAlert, MailCheck, AlertCircle } from "lucide-react";
 import { loginSchema, signupSchema } from "@/lib/validators/securitySchema";
 import { sanitizeEmail, sanitizeText } from "@/lib/sanitize";
 import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
@@ -26,6 +26,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
+type SignupPanelState =
+  | { kind: "sent"; email: string }
+  | { kind: "repeated"; email: string }
+  | null;
+
+const RESEND_COOLDOWN_SECONDS = 60;
+
 const AuthPage = () => {
   const [loading, setLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -40,8 +47,69 @@ const AuthPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rateLimitMsg, setRateLimitMsg] = useState("");
+  const [signupPanel, setSignupPanel] = useState<SignupPanelState>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+  const [activeTab, setActiveTab] = useState("login");
+  const cooldownTimer = useRef<number | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    cooldownTimer.current = window.setTimeout(
+      () => setResendCooldown((s) => s - 1),
+      1000
+    );
+    return () => {
+      if (cooldownTimer.current) window.clearTimeout(cooldownTimer.current);
+    };
+  }, [resendCooldown]);
+
+  const resetSignupPanel = () => {
+    setSignupPanel(null);
+    setResendCooldown(0);
+  };
+
+  const handleResendVerification = async (email: string) => {
+    if (resendCooldown > 0 || resending) return;
+    const rateCheck = checkRateLimit(`resend:${email}`, RATE_LIMIT_RULES.otpSend);
+    if (!rateCheck.allowed) {
+      toast({
+        title: "Please wait",
+        description: `Try again in ${formatRetryTime(rateCheck.retryAfterMs)}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setResending(false);
+    if (error) {
+      toast({
+        title: "Couldn't resend",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    await logAuthEvent("signup_success", { email, metadata: { resend: true } });
+    toast({
+      title: "Verification email resent",
+      description: `Sent to ${email}. Check your inbox (and spam folder).`,
+    });
+  };
+
+  const switchToLoginWithEmail = (email: string) => {
+    setLoginEmail(email);
+    setActiveTab("login");
+    resetSignupPanel();
+  };
 
   const routeAfterLogin = async () => {
     const { data: userRes } = await supabase.auth.getUser();
@@ -135,7 +203,7 @@ const AuthPage = () => {
         .replace(/(^-|-$)/g, "");
     }
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: sanitizedEmail,
       password: signupPassword,
       options: { data: metadata, emailRedirectTo: window.location.origin },
@@ -146,11 +214,26 @@ const AuthPage = () => {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
       return;
     }
+
+    // Detect repeated signup: Supabase returns 200 with an empty identities array
+    // when the email is already registered (no new verification email is sent).
+    const isRepeatedSignup =
+      !!data.user && (data.user.identities?.length ?? 0) === 0;
+
+    if (isRepeatedSignup) {
+      await logAuthEvent("signup_failure", {
+        email: sanitizedEmail,
+        success: false,
+        metadata: { reason: "email_already_registered" },
+      });
+      setSignupPanel({ kind: "repeated", email: sanitizedEmail });
+      setResendCooldown(0);
+      return;
+    }
+
     await logAuthEvent("signup_success", { email: sanitizedEmail, metadata: { is_vendor: isVendorSignup } });
-    toast({
-      title: "Account created!",
-      description: "Please check your email to verify your account.",
-    });
+    setSignupPanel({ kind: "sent", email: sanitizedEmail });
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
   };
 
   const handleGoogle = async () => {
@@ -210,7 +293,7 @@ const AuthPage = () => {
         <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">or</span></div>
       </div>
 
-      <Tabs defaultValue="login">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="login">Sign In</TabsTrigger>
           <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -255,7 +338,93 @@ const AuthPage = () => {
         </TabsContent>
 
         <TabsContent value="signup">
-          <form onSubmit={handleSignup} className="space-y-4 mt-4">
+          {signupPanel?.kind === "sent" ? (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <MailCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">Check your inbox</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We've sent a verification link to{" "}
+                    <span className="font-medium text-foreground">{signupPanel.email}</span>.
+                    Click the link to activate your account. Don't forget to check spam/promotions.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={resendCooldown > 0 || resending}
+                onClick={() => handleResendVerification(signupPanel.email)}
+              >
+                {resending
+                  ? "Resending..."
+                  : resendCooldown > 0
+                  ? `Resend in ${resendCooldown}s`
+                  : "Resend verification email"}
+              </Button>
+              <button
+                type="button"
+                onClick={resetSignupPanel}
+                className="w-full text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : signupPanel?.kind === "repeated" ? (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">This email is already registered</h3>
+                  <p className="text-sm text-muted-foreground">
+                    An account with{" "}
+                    <span className="font-medium text-foreground">{signupPanel.email}</span>{" "}
+                    already exists. Sign in instead, reset your password, or resend the
+                    verification email if you never confirmed it.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => switchToLoginWithEmail(signupPanel.email)}
+                >
+                  Sign In
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    navigate(`/auth/forgot-password?email=${encodeURIComponent(signupPanel.email)}`)
+                  }
+                >
+                  Reset password
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                disabled={resendCooldown > 0 || resending}
+                onClick={() => handleResendVerification(signupPanel.email)}
+              >
+                {resending
+                  ? "Resending..."
+                  : resendCooldown > 0
+                  ? `Resend verification in ${resendCooldown}s`
+                  : "Resend verification email"}
+              </Button>
+              <button
+                type="button"
+                onClick={resetSignupPanel}
+                className="w-full text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSignup} className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label htmlFor="signup-name">Full Name</Label>
               <div className="relative">
@@ -324,7 +493,8 @@ const AuthPage = () => {
             <Button type="submit" className="w-full" disabled={loading || !agreedToTerms}>
               {loading ? "Creating account..." : "Create Account"}
             </Button>
-          </form>
+            </form>
+          )}
         </TabsContent>
 
 
