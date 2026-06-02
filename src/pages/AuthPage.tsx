@@ -293,7 +293,7 @@ const AuthPage = () => {
         <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">or</span></div>
       </div>
 
-      <Tabs defaultValue="login">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="login">Sign In</TabsTrigger>
           <TabsTrigger value="signup">Sign Up</TabsTrigger>
