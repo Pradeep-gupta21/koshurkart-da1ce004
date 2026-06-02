@@ -1,32 +1,25 @@
 project_id = "xlqzbomiuuadxcygnsal"
 
-[functions.razorpay-webhook]
-verify_jwt = false
-
-[functions.admin-resync-payment]
-verify_jwt = true
-
-[functions.location]
-verify_jwt = false
-
-[functions.verify-upi-payment]
-verify_jwt = false
-
-[functions.confirm-upi-payment]
-verify_jwt = false
-
-[functions.create-checkout]
-verify_jwt = false
-
-[functions.quote-checkout]
-verify_jwt = false
-
-[functions.test-bootstrap]
-verify_jwt = false
-
-[functions.log-auth-event]
-verify_jwt = false
-
-
-[functions.process-email-queue]
-verify_jwt = true
+[functions]
+  [functions.admin-resync-payment]
+    verify_jwt = true
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.confirm-upi-payment]
+    verify_jwt = false
+  [functions.create-checkout]
+    verify_jwt = false
+  [functions.location]
+    verify_jwt = false
+  [functions.log-auth-event]
+    verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = true
+  [functions.quote-checkout]
+    verify_jwt = false
+  [functions.razorpay-webhook]
+    verify_jwt = false
+  [functions.test-bootstrap]
+    verify_jwt = false
+  [functions.verify-upi-payment]
+    verify_jwt = false
