@@ -32,6 +32,7 @@ export const SignupEmail = ({
     <Preview>Confirm your email for {siteName}</Preview>
     <Body style={main}>
       <Container style={container}>
+        <Text style={brand}>KOSHUR KART</Text>
         <Heading style={h1}>Confirm your email</Heading>
         <Text style={text}>
           Thanks for signing up for{' '}
@@ -60,27 +61,11 @@ export const SignupEmail = ({
 
 export default SignupEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
-const h1 = {
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  color: '#000000',
-  margin: '0 0 20px',
-}
-const text = {
-  fontSize: '14px',
-  color: '#55575d',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
-}
-const link = { color: 'inherit', textDecoration: 'underline' }
-const button = {
-  backgroundColor: '#000000',
-  color: '#ffffff',
-  fontSize: '14px',
-  borderRadius: '8px',
-  padding: '12px 20px',
-  textDecoration: 'none',
-}
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const main = { backgroundColor: '#ffffff', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif", color: '#0F172A', padding: '32px 0' }
+const container = { maxWidth: '560px', margin: '0 auto', padding: '32px', backgroundColor: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '12px' }
+const h1 = { fontSize: '24px', fontWeight: '700' as const, color: '#0F172A', margin: '0 0 16px', letterSpacing: '-0.01em' }
+const text = { fontSize: '15px', color: '#475569', lineHeight: '1.6', margin: '0 0 20px' }
+const link = { color: '#0F172A', textDecoration: 'underline', fontWeight: '600' as const }
+const button = { backgroundColor: '#0F172A', color: '#F8FAFC', fontSize: '15px', fontWeight: '600' as const, borderRadius: '10px', padding: '14px 28px', textDecoration: 'none', display: 'inline-block' }
+const footer = { fontSize: '13px', color: '#94A3B8', margin: '32px 0 0', paddingTop: '20px', borderTop: '1px solid #E2E8F0' }
+const brand = { fontSize: '18px', fontWeight: '700' as const, color: '#F59E0B', letterSpacing: '0.02em', margin: '0 0 24px', textTransform: 'uppercase' as const }
