@@ -338,7 +338,93 @@ const AuthPage = () => {
         </TabsContent>
 
         <TabsContent value="signup">
-          <form onSubmit={handleSignup} className="space-y-4 mt-4">
+          {signupPanel?.kind === "sent" ? (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <MailCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">Check your inbox</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We've sent a verification link to{" "}
+                    <span className="font-medium text-foreground">{signupPanel.email}</span>.
+                    Click the link to activate your account. Don't forget to check spam/promotions.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={resendCooldown > 0 || resending}
+                onClick={() => handleResendVerification(signupPanel.email)}
+              >
+                {resending
+                  ? "Resending..."
+                  : resendCooldown > 0
+                  ? `Resend in ${resendCooldown}s`
+                  : "Resend verification email"}
+              </Button>
+              <button
+                type="button"
+                onClick={resetSignupPanel}
+                className="w-full text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : signupPanel?.kind === "repeated" ? (
+            <div className="space-y-4 mt-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-sm">This email is already registered</h3>
+                  <p className="text-sm text-muted-foreground">
+                    An account with{" "}
+                    <span className="font-medium text-foreground">{signupPanel.email}</span>{" "}
+                    already exists. Sign in instead, reset your password, or resend the
+                    verification email if you never confirmed it.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => switchToLoginWithEmail(signupPanel.email)}
+                >
+                  Sign In
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    navigate(`/auth/forgot-password?email=${encodeURIComponent(signupPanel.email)}`)
+                  }
+                >
+                  Reset password
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                disabled={resendCooldown > 0 || resending}
+                onClick={() => handleResendVerification(signupPanel.email)}
+              >
+                {resending
+                  ? "Resending..."
+                  : resendCooldown > 0
+                  ? `Resend verification in ${resendCooldown}s`
+                  : "Resend verification email"}
+              </Button>
+              <button
+                type="button"
+                onClick={resetSignupPanel}
+                className="w-full text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSignup} className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label htmlFor="signup-name">Full Name</Label>
               <div className="relative">
@@ -407,7 +493,8 @@ const AuthPage = () => {
             <Button type="submit" className="w-full" disabled={loading || !agreedToTerms}>
               {loading ? "Creating account..." : "Create Account"}
             </Button>
-          </form>
+            </form>
+          )}
         </TabsContent>
 
 
