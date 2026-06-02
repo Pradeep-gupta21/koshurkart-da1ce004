@@ -78,6 +78,7 @@ export const shopperNav: NavSection[] = [
     label: "Help & Settings",
     items: [
       { id: "help", label: "Customer Service", to: "/help", icon: HelpCircle },
+      { id: "privacy", label: "Privacy Policy", to: "/privacy-policy", icon: FileText },
     ],
   },
 ];
