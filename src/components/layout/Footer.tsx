@@ -41,6 +41,7 @@ const Footer = () => (
             <span>Contact Us</span>
             <Link to="/about-us" className="hover:text-accent hover:opacity-100 transition-colors">About Us</Link>
             <Link to="/refund-return-policy" className="hover:text-accent hover:opacity-100 transition-colors">Returns &amp; Refunds</Link>
+            <Link to="/privacy-policy" className="hover:text-accent hover:opacity-100 transition-colors">Privacy Policy</Link>
             <Link to="/terms-and-conditions" className="hover:text-accent hover:opacity-100 transition-colors">Terms &amp; Conditions</Link>
           </nav>
         </div>
