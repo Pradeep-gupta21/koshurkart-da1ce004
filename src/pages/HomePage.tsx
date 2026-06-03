@@ -10,7 +10,11 @@ import { adService } from "@/services/adService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
-import heroBanner from "@/assets/hero-banner.jpg";
+import hero640 from "@/assets/hero-banner-640.jpg.asset.json";
+import hero960 from "@/assets/hero-banner-960.jpg.asset.json";
+import hero1280 from "@/assets/hero-banner-1280.jpg.asset.json";
+import hero1600 from "@/assets/hero-banner-1600.jpg.asset.json";
+import hero1796 from "@/assets/hero-banner-1796.jpg.asset.json";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
 import RegionRecommendations from "@/components/home/RegionRecommendations";
@@ -87,15 +91,17 @@ const HomePage = () => {
       <section className="relative overflow-hidden rounded-2xl mx-4 mt-4 lg:mx-0">
         <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
           <img
-            src={heroBanner}
-            alt="Koshur Kart — crafts from the valley"
-            width={1920}
-            height={460}
+            src={hero1280.url}
+            srcSet={`${hero640.url} 640w, ${hero960.url} 960w, ${hero1280.url} 1280w, ${hero1600.url} 1600w, ${hero1796.url} 1796w`}
+            sizes="(min-width: 1024px) 1280px, (min-width: 768px) 100vw, 100vw"
+            alt="Authentic Kashmiri crafts — pashmina shawl, samovar, walnut wood box and dry fruits."
+            width={1796}
+            height={876}
             loading="eager"
             decoding="async"
             // @ts-expect-error fetchpriority is a valid HTML attribute not yet typed in React
             fetchpriority="high"
-            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
+            className="absolute inset-0 w-full h-full object-cover opacity-70"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[hsl(222_47%_8%)]/80 via-[hsl(222_47%_8%)]/40 to-transparent" />
           <div className="relative z-10 flex flex-col justify-center h-full px-8 md:px-14 max-w-2xl">
