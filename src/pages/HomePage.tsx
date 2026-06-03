@@ -10,11 +10,11 @@ import { adService } from "@/services/adService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
-import hero640 from "@/assets/hero-banner-640.jpg.asset.json";
-import hero960 from "@/assets/hero-banner-960.jpg.asset.json";
-import hero1280 from "@/assets/hero-banner-1280.jpg.asset.json";
-import hero1600 from "@/assets/hero-banner-1600.jpg.asset.json";
-import hero1796 from "@/assets/hero-banner-1796.jpg.asset.json";
+import hero640 from "@/assets/hero/hero-banner-640.jpg";
+import hero960 from "@/assets/hero/hero-banner-960.jpg";
+import hero1280 from "@/assets/hero/hero-banner-1280.jpg";
+import hero1600 from "@/assets/hero/hero-banner-1600.jpg";
+import hero1796 from "@/assets/hero/hero-banner-1796.jpg";
 import type { Product } from "@/types";
 import LocalDeals from "@/components/home/LocalDeals";
 import RegionRecommendations from "@/components/home/RegionRecommendations";
@@ -91,8 +91,8 @@ const HomePage = () => {
       <section className="relative overflow-hidden rounded-2xl mx-4 mt-4 lg:mx-0">
         <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
           <img
-            src={hero1280.url}
-            srcSet={`${hero640.url} 640w, ${hero960.url} 960w, ${hero1280.url} 1280w, ${hero1600.url} 1600w, ${hero1796.url} 1796w`}
+            src={hero1280}
+            srcSet={`${hero640} 640w, ${hero960} 960w, ${hero1280} 1280w, ${hero1600} 1600w, ${hero1796} 1796w`}
             sizes="(min-width: 1024px) 1280px, (min-width: 768px) 100vw, 100vw"
             alt="Authentic Kashmiri crafts — pashmina shawl, samovar, walnut wood box and dry fruits."
             width={1796}
