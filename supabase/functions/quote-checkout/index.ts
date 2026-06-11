@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       hint: (prodErr as any).hint,
       productIds,
     });
-    return json({ error: "Failed to load products", details: prodErr.message }, 500);
+    return json({ error: "Failed to load products" }, 500);
   }
   if (!products || products.length !== productIds.length) {
     return json({ error: "One or more products not found" }, 404);

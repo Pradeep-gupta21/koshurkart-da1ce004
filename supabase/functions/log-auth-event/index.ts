@@ -29,17 +29,27 @@ Deno.serve(async (req) => {
       req.headers.get("cf-connecting-ip") ??
       null;
 
-    // Optional bearer token — if present, capture user_id (don't require it)
+    // Require authentication — prevents anonymous audit-log pollution
     let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    {
       const supabaseAuth = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
         { global: { headers: { Authorization: authHeader } } }
       );
       const token = authHeader.replace("Bearer ", "");
-      const { data } = await supabaseAuth.auth.getClaims(token);
+      const { data, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
+      if (claimsErr || !data?.claims?.sub) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       userId = data?.claims?.sub ?? null;
     }
 
@@ -65,7 +75,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("log-auth-event error:", msg);
-    return new Response(JSON.stringify({ error: msg }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
