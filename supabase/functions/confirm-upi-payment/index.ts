@@ -48,6 +48,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validate proofUrl: must be a Supabase Storage URL for the payment-proofs bucket.
+    if (proofUrl !== undefined && proofUrl !== null && proofUrl !== "") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      const allowedPrefix = `${supabaseUrl}/storage/v1/object/`;
+      let ok = false;
+      try {
+        const u = new URL(proofUrl);
+        ok =
+          (u.protocol === "https:" || u.protocol === "http:") &&
+          proofUrl.startsWith(allowedPrefix) &&
+          u.pathname.includes("/payment-proofs/");
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        return new Response(JSON.stringify({ error: "Invalid proofUrl" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+
     const service = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
