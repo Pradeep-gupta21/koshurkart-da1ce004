@@ -55,12 +55,12 @@ export function useAdminBadges(): BadgeMap {
     queryFn: async (): Promise<BadgeMap> => {
       const [vendors, reviews, payments] = await Promise.all([
         supabase.from("vendors").select("id", { count: "exact", head: true }).eq("verification_status", "pending"),
-        supabase.from("reviews").select("id", { count: "exact", head: true }).eq("is_suspicious", true).eq("moderation_status", "pending"),
+        supabase.rpc("count_suspicious_reviews"),
         supabase.from("payments").select("id", { count: "exact", head: true }).eq("payment_status", "pending_verification"),
       ]);
       return {
         pendingVendors: vendors.count ?? 0,
-        suspiciousReviews: reviews.count ?? 0,
+        suspiciousReviews: Number(reviews.data ?? 0),
         pendingPayments: payments.count ?? 0,
       };
     },

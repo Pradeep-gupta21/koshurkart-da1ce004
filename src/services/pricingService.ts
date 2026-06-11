@@ -71,7 +71,9 @@ export const pricingService = {
 
 
   async recalculatePrices() {
-    const { error } = await supabase.rpc('calculate_dynamic_prices');
+    // Routed through the admin-gated edge function — direct RPC is now revoked
+    // from anon/authenticated roles for security.
+    const { error } = await supabase.functions.invoke('recalculate-prices');
     if (error) throw error;
   },
 

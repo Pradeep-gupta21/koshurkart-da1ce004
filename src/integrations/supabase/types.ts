@@ -1482,6 +1482,7 @@ export type Database = {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
       }
+      count_suspicious_reviews: { Args: never; Returns: number }
       create_notification: {
         Args: {
           _entity_id?: string
