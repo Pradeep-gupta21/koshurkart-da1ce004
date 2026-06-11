@@ -297,7 +297,7 @@ const AdminPayments = () => {
       <Dialog open={!!proofUrl} onOpenChange={() => setProofUrl(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Payment Proof</DialogTitle></DialogHeader>
-          {proofUrl && <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg" />}
+          {proofUrl && <img src={proofUrl} alt="Payment proof" referrerPolicy="no-referrer" className="w-full rounded-lg" />}
         </DialogContent>
       </Dialog>
 
