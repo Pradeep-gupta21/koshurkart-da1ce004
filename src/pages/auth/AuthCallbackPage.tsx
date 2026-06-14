@@ -51,7 +51,8 @@ const AuthCallbackPage = () => {
       try {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
-        const tokenHash = url.searchParams.get("token_hash");
+        const tokenHash =
+          url.searchParams.get("token_hash") || url.searchParams.get("token");
         const hashParams = new URLSearchParams(
           window.location.hash.replace(/^#/, ""),
         );
