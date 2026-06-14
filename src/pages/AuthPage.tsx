@@ -16,6 +16,7 @@ import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
 import PhoneInput, { toE164 } from "@/components/auth/PhoneInput";
 import { sendOtp } from "@/lib/otpClient";
+import { AUTH_CALLBACK_URL } from "@/lib/authConfig";
 
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
