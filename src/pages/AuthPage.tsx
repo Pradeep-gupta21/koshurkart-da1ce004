@@ -86,7 +86,7 @@ const AuthPage = () => {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: AUTH_CALLBACK_URL },
     });
     setResending(false);
     if (error) {
@@ -206,7 +206,7 @@ const AuthPage = () => {
     const { data, error } = await supabase.auth.signUp({
       email: sanitizedEmail,
       password: signupPassword,
-      options: { data: metadata, emailRedirectTo: window.location.origin },
+      options: { data: metadata, emailRedirectTo: AUTH_CALLBACK_URL },
     });
     setLoading(false);
     if (error) {
@@ -239,7 +239,7 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: AUTH_CALLBACK_URL,
     });
     if (result.error) {
       setLoading(false);
