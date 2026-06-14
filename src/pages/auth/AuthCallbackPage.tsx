@@ -16,14 +16,32 @@ const AuthCallbackPage = () => {
     const { data: userRes } = await supabase.auth.getUser();
     const userId = userRes.user?.id;
     if (!userId) return navigate("/auth", { replace: true });
-    const { data: rolesData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
+
+    const [{ data: rolesData }, { data: vendorData }] = await Promise.all([
+      supabase.from("user_roles").select("role").eq("user_id", userId),
+      supabase.rpc("get_my_vendor"),
+    ]);
+
     const userRoles = rolesData?.map((r: { role: string }) => r.role) ?? [];
-    if (userRoles.includes("admin")) navigate("/admin", { replace: true });
-    else if (userRoles.includes("vendor")) navigate("/vendor", { replace: true });
-    else navigate("/", { replace: true });
+    const vendorRow = (vendorData as Array<{ verification_status?: string }> | null)?.[0];
+
+    if (userRoles.includes("admin")) {
+      navigate("/admin", { replace: true });
+    } else if (userRoles.includes("vendor")) {
+      if (!vendorRow) {
+        navigate("/vendor/apply", { replace: true });
+      } else if (
+        vendorRow.verification_status === "verified" ||
+        vendorRow.verification_status === "approved"
+      ) {
+        navigate("/vendor", { replace: true });
+      } else {
+        // Pending/rejected/suspended — VendorStatusGate will show the right screen.
+        navigate("/vendor", { replace: true });
+      }
+    } else {
+      navigate("/", { replace: true });
+    }
   };
 
   useEffect(() => {
@@ -33,11 +51,12 @@ const AuthCallbackPage = () => {
       try {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
+        const hashParams = new URLSearchParams(
+          window.location.hash.replace(/^#/, ""),
+        );
         const errorDescription =
           url.searchParams.get("error_description") ||
-          new URLSearchParams(window.location.hash.replace(/^#/, "")).get(
-            "error_description",
-          );
+          hashParams.get("error_description");
 
         if (errorDescription) {
           throw new Error(decodeURIComponent(errorDescription));
@@ -46,22 +65,24 @@ const AuthCallbackPage = () => {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-        } else {
-          // Hash-based flows: give Supabase a tick to pick up tokens from the URL hash.
-          await new Promise((r) => setTimeout(r, 250));
+        } else if (hashParams.get("access_token")) {
+          // Hash-based token flow: supabase-js picks tokens up from the URL hash
+          // when detectSessionInUrl is enabled. Give it a tick to persist.
+          await new Promise((r) => setTimeout(r, 300));
         }
 
-        const { data: sessionRes } = await supabase.auth.getSession();
-        if (!sessionRes.session) {
+        // Validate with the auth server, not just local storage.
+        const { data: userRes, error: userErr } = await supabase.auth.getUser();
+        if (userErr || !userRes.user) {
           throw new Error(
-            "We couldn't confirm your email. The link may have expired.",
+            "We couldn't confirm your email. The link may have expired or already been used.",
           );
         }
 
         if (cancelled) return;
-        setStatus("success");
-        // Clean sensitive params from the URL bar
+        // Strip sensitive params from the URL bar.
         window.history.replaceState({}, document.title, "/auth/callback");
+        setStatus("success");
         setTimeout(() => {
           if (!cancelled) routeAuthenticatedUser();
         }, 2000);
@@ -102,18 +123,19 @@ const AuthCallbackPage = () => {
   if (status === "success") {
     return (
       <AuthShell
-        title="Email verified"
+        title="Email Verified Successfully"
         description="Welcome to Koshur Kart"
         footer={
           <Link to="/" className="text-accent hover:underline">
-            Continue to home
+            Continue to Koshur Kart
           </Link>
         }
       >
         <div className="flex flex-col items-center gap-4 py-4 text-center">
           <CheckCircle2 className="h-12 w-12 text-accent" />
           <p className="text-sm text-muted-foreground">
-            Your email is confirmed. Taking you to your dashboard…
+            Your email is confirmed and you're signed in. Taking you to your
+            dashboard…
           </p>
           <Button className="w-full" onClick={routeAuthenticatedUser}>
             Continue
