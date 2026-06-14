@@ -84,17 +84,19 @@ function productionAuthUrl(rawUrl?: string): string {
   try {
     const url = new URL(rawUrl)
     const redirectParamNames = ['redirect_to', 'redirectTo', 'emailRedirectTo']
-    let hasRedirectParam = false
+
+    if (url.pathname.includes('/auth/v1/verify')) {
+      const callback = new URL(PRODUCTION_AUTH_CALLBACK_URL)
+      url.searchParams.forEach((value, key) => {
+        if (!redirectParamNames.includes(key)) callback.searchParams.set(key, value)
+      })
+      return callback.toString()
+    }
 
     for (const param of redirectParamNames) {
       if (url.searchParams.has(param)) {
         url.searchParams.set(param, PRODUCTION_AUTH_CALLBACK_URL)
-        hasRedirectParam = true
       }
-    }
-
-    if (url.pathname.includes('/auth/v1/verify') && !hasRedirectParam) {
-      url.searchParams.set('redirect_to', PRODUCTION_AUTH_CALLBACK_URL)
     }
 
     if (
