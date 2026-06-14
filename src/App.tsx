@@ -23,6 +23,7 @@ import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
+const AuthCallbackPage = lazy(() => import("@/pages/auth/AuthCallbackPage"));
 const AccountSecurityPage = lazy(() => import("@/pages/account/AccountSecurityPage"));
 
 import { SidebarProvider } from "@/contexts/SidebarContext";
@@ -98,6 +99,7 @@ const App = () => (
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
                       <Route path="/auth/verify-otp" element={<OtpVerifyPage />} />
+                      <Route path="/auth/callback" element={<AuthCallbackPage />} />
                       <Route path="/terms-and-conditions" element={<TermsAndConditionsPage />} />
                       <Route path="/refund-return-policy" element={<RefundReturnPolicyPage />} />
                       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />

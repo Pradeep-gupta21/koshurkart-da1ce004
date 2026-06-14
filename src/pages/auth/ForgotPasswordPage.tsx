@@ -10,6 +10,7 @@ import { sanitizeEmail } from "@/lib/sanitize";
 import { checkRateLimit, RATE_LIMIT_RULES, formatRetryTime } from "@/lib/rateLimiter";
 import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
+import { PASSWORD_RESET_URL } from "@/lib/authConfig";
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
@@ -32,7 +33,7 @@ const ForgotPasswordPage = () => {
 
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(clean, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: PASSWORD_RESET_URL,
     });
     setLoading(false);
     await logAuthEvent("password_reset_request", { email: clean, success: !error });

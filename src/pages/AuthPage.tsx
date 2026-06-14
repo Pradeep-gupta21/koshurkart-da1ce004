@@ -16,6 +16,7 @@ import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
 import PhoneInput, { toE164 } from "@/components/auth/PhoneInput";
 import { sendOtp } from "@/lib/otpClient";
+import { AUTH_CALLBACK_URL } from "@/lib/authConfig";
 
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -86,7 +87,7 @@ const AuthPage = () => {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: AUTH_CALLBACK_URL },
     });
     setResending(false);
     if (error) {
@@ -206,7 +207,7 @@ const AuthPage = () => {
     const { data, error } = await supabase.auth.signUp({
       email: sanitizedEmail,
       password: signupPassword,
-      options: { data: metadata, emailRedirectTo: window.location.origin },
+      options: { data: metadata, emailRedirectTo: AUTH_CALLBACK_URL },
     });
     setLoading(false);
     if (error) {
@@ -239,7 +240,7 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: AUTH_CALLBACK_URL,
     });
     if (result.error) {
       setLoading(false);
