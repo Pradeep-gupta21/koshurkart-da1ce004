@@ -54,6 +54,7 @@ const AuthCallbackPage = () => {
         const hashParams = new URLSearchParams(
           window.location.hash.replace(/^#/, ""),
         );
+        const flowType = url.searchParams.get("type") || hashParams.get("type");
         const errorDescription =
           url.searchParams.get("error_description") ||
           hashParams.get("error_description");
@@ -80,6 +81,12 @@ const AuthCallbackPage = () => {
         }
 
         if (cancelled) return;
+        if (flowType === "recovery") {
+          window.history.replaceState({}, document.title, "/auth/reset-password");
+          navigate("/auth/reset-password", { replace: true });
+          return;
+        }
+
         // Strip sensitive params from the URL bar.
         window.history.replaceState({}, document.title, "/auth/callback");
         setStatus("success");

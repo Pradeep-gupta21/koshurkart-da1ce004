@@ -40,6 +40,7 @@ const SITE_NAME = "Koshur Kart"
 const SENDER_DOMAIN = "notify.notify.koshurkart.shop"
 const ROOT_DOMAIN = "notify.koshurkart.shop"
 const FROM_DOMAIN = "notify.notify.koshurkart.shop" // Domain shown in From address (may be root or sender subdomain)
+const PRODUCTION_AUTH_CALLBACK_URL = "https://koshurkart.shop/auth/callback"
 
 // Sample data for preview mode ONLY (not used in actual email sending).
 // Uses the production site URL so previews never expose dev/preview domains.
@@ -75,6 +76,43 @@ const SAMPLE_DATA: Record<string, object> = {
   reauthentication: {
     token: '123456',
   },
+}
+
+function productionAuthUrl(rawUrl?: string): string {
+  if (!rawUrl) return PRODUCTION_AUTH_CALLBACK_URL
+
+  try {
+    const url = new URL(rawUrl)
+    const redirectParamNames = ['redirect_to', 'redirectTo', 'emailRedirectTo']
+    let hasRedirectParam = false
+
+    for (const param of redirectParamNames) {
+      if (url.searchParams.has(param)) {
+        url.searchParams.set(param, PRODUCTION_AUTH_CALLBACK_URL)
+        hasRedirectParam = true
+      }
+    }
+
+    if (url.pathname.includes('/auth/v1/verify') && !hasRedirectParam) {
+      url.searchParams.set('redirect_to', PRODUCTION_AUTH_CALLBACK_URL)
+    }
+
+    if (
+      url.hostname.endsWith('.lovable.app') ||
+      url.hostname.endsWith('.lovableproject.com') ||
+      url.hostname === 'localhost' ||
+      url.pathname === '/auth/callback'
+    ) {
+      const callback = new URL(PRODUCTION_AUTH_CALLBACK_URL)
+      callback.search = url.search
+      callback.hash = url.hash
+      return callback.toString()
+    }
+
+    return url.toString()
+  } catch (_error) {
+    return PRODUCTION_AUTH_CALLBACK_URL
+  }
 }
 
 // Preview endpoint handler - returns rendered HTML without sending email
@@ -220,7 +258,7 @@ async function handleWebhook(req: Request): Promise<Response> {
     siteName: SITE_NAME,
     siteUrl: 'https://koshurkart.shop',
     recipient: payload.data.email,
-    confirmationUrl: payload.data.url,
+    confirmationUrl: productionAuthUrl(payload.data.url),
     token: payload.data.token,
     email: payload.data.email,
     oldEmail: payload.data.old_email,
