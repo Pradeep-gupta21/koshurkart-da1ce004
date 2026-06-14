@@ -51,9 +51,12 @@ const AuthCallbackPage = () => {
       try {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
+        const tokenHash =
+          url.searchParams.get("token_hash") || url.searchParams.get("token");
         const hashParams = new URLSearchParams(
           window.location.hash.replace(/^#/, ""),
         );
+        const flowType = url.searchParams.get("type") || hashParams.get("type");
         const errorDescription =
           url.searchParams.get("error_description") ||
           hashParams.get("error_description");
@@ -64,6 +67,12 @@ const AuthCallbackPage = () => {
 
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        } else if (tokenHash && flowType) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: flowType as "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email",
+          });
           if (error) throw error;
         } else if (hashParams.get("access_token")) {
           // Hash-based token flow: supabase-js picks tokens up from the URL hash
@@ -80,6 +89,12 @@ const AuthCallbackPage = () => {
         }
 
         if (cancelled) return;
+        if (flowType === "recovery") {
+          window.history.replaceState({}, document.title, "/auth/reset-password");
+          navigate("/auth/reset-password", { replace: true });
+          return;
+        }
+
         // Strip sensitive params from the URL bar.
         window.history.replaceState({}, document.title, "/auth/callback");
         setStatus("success");
