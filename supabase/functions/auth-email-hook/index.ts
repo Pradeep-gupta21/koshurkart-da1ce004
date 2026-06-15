@@ -273,7 +273,10 @@ async function handleWebhook(req: Request): Promise<Response> {
     plainText: true,
   })
 
-  // Send DIRECTLY via Resend — bypasses Lovable email pipeline (auth.lovable.cloud).
+  // Multi-provider fallback chain:
+  //   1) Resend (direct API) — primary, uses verified koshurkart.shop domain
+  //   2) Lovable email queue (pgmq auth_emails -> process-email-queue) — backup
+  // If both fail, return 502 so Supabase Auth retries the hook.
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -290,74 +293,120 @@ async function handleWebhook(req: Request): Promise<Response> {
     status: 'pending',
   })
 
+  // --- Provider 1: Resend (direct) ---
   const resendApiKey = Deno.env.get('RESEND_API_KEY')
-  if (!resendApiKey) {
-    console.error('RESEND_API_KEY not configured', { run_id })
-    await supabase.from('email_send_log').insert({
-      message_id: messageId,
-      template_name: emailType,
-      recipient_email: payload.data.email,
-      status: 'failed',
-      error_message: 'RESEND_API_KEY not configured',
-    })
-    return new Response(JSON.stringify({ error: 'Email provider not configured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+  let resendError: string | null = null
+
+  if (resendApiKey) {
+    try {
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [payload.data.email],
+          subject,
+          html,
+          text,
+          headers: { 'X-Entity-Ref-ID': messageId },
+        }),
+      })
+
+      if (resendRes.ok) {
+        const resendData = await resendRes.json().catch(() => ({} as any))
+        await supabase.from('email_send_log').insert({
+          message_id: messageId,
+          template_name: emailType,
+          recipient_email: payload.data.email,
+          status: 'sent',
+        })
+        console.log('Auth email sent via Resend', {
+          emailType, email: payload.data.email, run_id, resendId: resendData?.id, from: fromAddress,
+        })
+        return new Response(
+          JSON.stringify({ success: true, sent: true, provider: 'resend', id: resendData?.id }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const errText = await resendRes.text()
+      resendError = `Resend ${resendRes.status}: ${errText.slice(0, 400)}`
+      console.error('Resend send failed, will try fallback', { status: resendRes.status, errText, run_id, emailType })
+    } catch (err) {
+      resendError = `Resend exception: ${err instanceof Error ? err.message : String(err)}`
+      console.error('Resend threw, will try fallback', { err, run_id })
+    }
+  } else {
+    resendError = 'RESEND_API_KEY not configured'
+    console.warn('RESEND_API_KEY missing, falling back to Lovable queue', { run_id })
   }
 
-  const resendRes = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromAddress,
-      to: [payload.data.email],
-      subject,
-      html,
-      text,
-      headers: { 'X-Entity-Ref-ID': messageId },
-    }),
-  })
-
-  if (!resendRes.ok) {
-    const errText = await resendRes.text()
-    console.error('Resend send failed', { status: resendRes.status, errText, run_id, emailType })
-    await supabase.from('email_send_log').insert({
-      message_id: messageId,
-      template_name: emailType,
-      recipient_email: payload.data.email,
-      status: 'failed',
-      error_message: `Resend ${resendRes.status}: ${errText.slice(0, 500)}`,
-    })
-    return new Response(JSON.stringify({ error: 'Failed to send email via Resend' }), {
-      status: 502,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const resendData = await resendRes.json().catch(() => ({} as any))
   await supabase.from('email_send_log').insert({
     message_id: messageId,
     template_name: emailType,
     recipient_email: payload.data.email,
-    status: 'sent',
+    status: 'failed',
+    error_message: resendError,
   })
 
-  console.log('Auth email sent via Resend', {
-    emailType,
-    email: payload.data.email,
-    run_id,
-    resendId: resendData?.id,
-    from: fromAddress,
-  })
+  // --- Provider 2: Lovable email queue (backup) ---
+  const fallbackMessageId = crypto.randomUUID()
+  try {
+    const { error: enqueueError } = await supabase.rpc('enqueue_email', {
+      queue_name: 'auth_emails',
+      payload: {
+        run_id,
+        message_id: fallbackMessageId,
+        to: payload.data.email,
+        from: fromAddress,
+        sender_domain: SENDER_DOMAIN,
+        subject,
+        html,
+        text,
+        purpose: 'auth',
+        label: emailType,
+        idempotency_key: `auth-${emailType}-${run_id}`,
+        queued_at: new Date().toISOString(),
+      },
+    })
 
-  return new Response(
-    JSON.stringify({ success: true, sent: true, provider: 'resend', id: resendData?.id }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
+    if (enqueueError) throw enqueueError
+
+    console.log('Auth email enqueued to Lovable backup queue', {
+      emailType, email: payload.data.email, run_id, fallbackMessageId,
+    })
+    return new Response(
+      JSON.stringify({
+        success: true,
+        sent: false,
+        queued: true,
+        provider: 'lovable-queue',
+        primary_error: resendError,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  } catch (err) {
+    const fallbackError = err instanceof Error ? err.message : String(err)
+    console.error('Both Resend and Lovable queue failed', { resendError, fallbackError, run_id })
+    await supabase.from('email_send_log').insert({
+      message_id: fallbackMessageId,
+      template_name: emailType,
+      recipient_email: payload.data.email,
+      status: 'failed',
+      error_message: `Fallback enqueue failed: ${fallbackError.slice(0, 400)}`,
+    })
+    return new Response(
+      JSON.stringify({
+        error: 'All email providers failed',
+        resend_error: resendError,
+        fallback_error: fallbackError,
+      }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
 }
 
 Deno.serve(async (req) => {
