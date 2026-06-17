@@ -29,6 +29,7 @@ type Payment = {
   qr_code_url: string | null;
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
+  webhook_confirmed_at?: string | null;
   created_at: string;
 };
 
