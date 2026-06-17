@@ -301,12 +301,26 @@ const AdminPayments = () => {
           <TabsTrigger value="success">Success <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.success.length}</Badge></TabsTrigger>
           <TabsTrigger value="pending">Pending <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.pending.length}</Badge></TabsTrigger>
           <TabsTrigger value="failed">Failed <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.failed.length}</Badge></TabsTrigger>
+          <TabsTrigger value="unreconciled">Unreconciled <Badge variant={buckets.unreconciled.length ? "destructive" : "secondary"} className="ml-1.5 h-5 px-1.5 text-xs">{buckets.unreconciled.length}</Badge></TabsTrigger>
+          <TabsTrigger value="stuck">Stuck Pending <Badge variant={buckets.stuck.length ? "destructive" : "secondary"} className="ml-1.5 h-5 px-1.5 text-xs">{buckets.stuck.length}</Badge></TabsTrigger>
           <TabsTrigger value="refunded">Refunded <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.refunded.length}</Badge></TabsTrigger>
         </TabsList>
         <TabsContent value="all">{renderTable(buckets.all)}</TabsContent>
         <TabsContent value="success">{renderTable(buckets.success)}</TabsContent>
         <TabsContent value="pending">{renderTable(buckets.pending)}</TabsContent>
         <TabsContent value="failed">{renderTable(buckets.failed)}</TabsContent>
+        <TabsContent value="unreconciled">
+          <p className="text-xs text-muted-foreground mb-2">
+            Razorpay payments marked success but no webhook captured within 1 hour. Re-sync to reconcile against Razorpay.
+          </p>
+          {renderTable(buckets.unreconciled)}
+        </TabsContent>
+        <TabsContent value="stuck">
+          <p className="text-xs text-muted-foreground mb-2">
+            Razorpay orders created but never captured or failed (likely abandoned at checkout modal). Re-sync to fetch terminal state.
+          </p>
+          {renderTable(buckets.stuck)}
+        </TabsContent>
         <TabsContent value="refunded">{renderTable(buckets.refunded)}</TabsContent>
       </Tabs>
 
