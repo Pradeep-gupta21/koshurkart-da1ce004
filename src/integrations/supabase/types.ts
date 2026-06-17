@@ -440,6 +440,9 @@ export type Database = {
           idempotency_key: string | null
           order_status: string
           payment_status: string
+          reconciliation_flagged: boolean
+          reconciliation_flagged_at: string | null
+          reconciliation_reason: string | null
           shipping_provider: string | null
           shipping_status: string
           total_amount: number
@@ -454,6 +457,9 @@ export type Database = {
           idempotency_key?: string | null
           order_status?: string
           payment_status?: string
+          reconciliation_flagged?: boolean
+          reconciliation_flagged_at?: string | null
+          reconciliation_reason?: string | null
           shipping_provider?: string | null
           shipping_status?: string
           total_amount?: number
@@ -468,6 +474,9 @@ export type Database = {
           idempotency_key?: string | null
           order_status?: string
           payment_status?: string
+          reconciliation_flagged?: boolean
+          reconciliation_flagged_at?: string | null
+          reconciliation_reason?: string | null
           shipping_provider?: string | null
           shipping_status?: string
           total_amount?: number
@@ -558,6 +567,7 @@ export type Database = {
           upi_id: string | null
           user_id: string
           vendor_earnings: number | null
+          webhook_confirmed_at: string | null
         }
         Insert: {
           amount?: number
@@ -580,6 +590,7 @@ export type Database = {
           upi_id?: string | null
           user_id: string
           vendor_earnings?: number | null
+          webhook_confirmed_at?: string | null
         }
         Update: {
           amount?: number
@@ -602,6 +613,7 @@ export type Database = {
           upi_id?: string | null
           user_id?: string
           vendor_earnings?: number | null
+          webhook_confirmed_at?: string | null
         }
         Relationships: [
           {
@@ -1449,7 +1461,51 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      admin_stuck_pending_razorpay_payments: {
+        Row: {
+          amount: number | null
+          order_id: string | null
+          order_status: string | null
+          payment_created_at: string | null
+          payment_id: string | null
+          payment_status: string | null
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_unreconciled_payments: {
+        Row: {
+          amount: number | null
+          order_id: string | null
+          order_status: string | null
+          payment_created_at: string | null
+          payment_id: string | null
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+          reconciliation_flagged: boolean | null
+          reconciliation_flagged_at: string | null
+          reconciliation_reason: string | null
+          webhook_confirmed_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_dynamic_prices: { Args: never; Returns: undefined }
@@ -1512,6 +1568,7 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      flag_unreconciled_razorpay_orders: { Args: never; Returns: number }
       get_auction_winners: {
         Args: { p_limit?: number; p_placement: string }
         Returns: {

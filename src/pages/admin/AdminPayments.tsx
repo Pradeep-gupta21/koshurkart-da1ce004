@@ -29,6 +29,7 @@ type Payment = {
   qr_code_url: string | null;
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
+  webhook_confirmed_at?: string | null;
   created_at: string;
 };
 
@@ -182,12 +183,27 @@ const AdminPayments = () => {
     );
   }, [payments, search]);
 
+  const isStuckPending = (p: Payment) =>
+    p.payment_method === "razorpay"
+    && (p.payment_status === "pending" || p.payment_status === "pending_verification")
+    && !!p.razorpay_order_id
+    && !p.razorpay_payment_id
+    && (Date.now() - new Date(p.created_at).getTime()) > 30 * 60 * 1000;
+
+  const isUnreconciled = (p: Payment) =>
+    p.payment_method === "razorpay"
+    && p.payment_status === "success"
+    && !p.webhook_confirmed_at
+    && (Date.now() - new Date(p.created_at).getTime()) > 60 * 60 * 1000;
+
   const buckets = useMemo(() => ({
     all: filtered,
     success: filtered.filter((p) => p.payment_status === "success"),
     pending: filtered.filter((p) => p.payment_status === "pending" || p.payment_status === "pending_verification"),
     failed: filtered.filter((p) => p.payment_status === "failed"),
     refunded: filtered.filter((p) => p.payment_status === "refunded" || p.payment_status === "reversed"),
+    unreconciled: filtered.filter(isUnreconciled),
+    stuck: filtered.filter(isStuckPending),
   }), [filtered]);
 
   const renderTable = (list: Payment[]) => {
@@ -285,12 +301,26 @@ const AdminPayments = () => {
           <TabsTrigger value="success">Success <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.success.length}</Badge></TabsTrigger>
           <TabsTrigger value="pending">Pending <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.pending.length}</Badge></TabsTrigger>
           <TabsTrigger value="failed">Failed <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.failed.length}</Badge></TabsTrigger>
+          <TabsTrigger value="unreconciled">Unreconciled <Badge variant={buckets.unreconciled.length ? "destructive" : "secondary"} className="ml-1.5 h-5 px-1.5 text-xs">{buckets.unreconciled.length}</Badge></TabsTrigger>
+          <TabsTrigger value="stuck">Stuck Pending <Badge variant={buckets.stuck.length ? "destructive" : "secondary"} className="ml-1.5 h-5 px-1.5 text-xs">{buckets.stuck.length}</Badge></TabsTrigger>
           <TabsTrigger value="refunded">Refunded <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{buckets.refunded.length}</Badge></TabsTrigger>
         </TabsList>
         <TabsContent value="all">{renderTable(buckets.all)}</TabsContent>
         <TabsContent value="success">{renderTable(buckets.success)}</TabsContent>
         <TabsContent value="pending">{renderTable(buckets.pending)}</TabsContent>
         <TabsContent value="failed">{renderTable(buckets.failed)}</TabsContent>
+        <TabsContent value="unreconciled">
+          <p className="text-xs text-muted-foreground mb-2">
+            Razorpay payments marked success but no webhook captured within 1 hour. Re-sync to reconcile against Razorpay.
+          </p>
+          {renderTable(buckets.unreconciled)}
+        </TabsContent>
+        <TabsContent value="stuck">
+          <p className="text-xs text-muted-foreground mb-2">
+            Razorpay orders created but never captured or failed (likely abandoned at checkout modal). Re-sync to fetch terminal state.
+          </p>
+          {renderTable(buckets.stuck)}
+        </TabsContent>
         <TabsContent value="refunded">{renderTable(buckets.refunded)}</TabsContent>
       </Tabs>
 
