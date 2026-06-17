@@ -1,66 +1,60 @@
-I’ll fix only authentication redirects, the verification callback, and production branding.
+# Switch Razorpay from Test → Live
 
-## Plan
+## Key insight
+The Razorpay key/secret are **not in source code** — they're read from edge function secrets (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`). Switching to live is a **secrets rotation**, not a code change. Order creation, verification, and webhook handling already pull these from `Deno.env.get(...)` and will use live keys automatically once rotated.
 
-1. **Centralize production auth destinations**
-   - Keep all auth redirect URLs in `src/lib/authConfig.ts`.
-   - Ensure email verification, magic links, Google callback, and any OTP/email auth redirect target use:
-     - `https://koshurkart.shop/auth/callback`
-   - Ensure password reset uses the production reset route:
-     - `https://koshurkart.shop/auth/reset-password`
-   - Remove `window.location.origin`, `localhost`, preview, editor, and `lovable.app` redirect usage from auth code.
+## Steps
 
-2. **Harden `/auth/callback` session creation**
-   - Update `src/pages/auth/AuthCallbackPage.tsx` so it reliably creates an authenticated session after verification:
-     - Exchange `?code=` links with `supabase.auth.exchangeCodeForSession(code)`.
-     - Handle token/hash callback links after the auth client stores the session.
-     - Verify the session with `supabase.auth.getUser()` before declaring success.
-     - Clean sensitive URL params after successful verification.
-   - Avoid relying on a race-prone `getSession()` check alone.
+### 1. Rotate the three secrets (you enter values in the secure form)
+- `RAZORPAY_KEY_ID` → live `rzp_live_...` Key ID
+- `RAZORPAY_KEY_SECRET` → live Key Secret (paired with the live Key ID)
+- `RAZORPAY_WEBHOOK_SECRET` → the secret you set when creating the **live** webhook in the Razorpay Dashboard (see step 2)
 
-3. **Create a professional post-verification success experience**
-   - Update the callback success state to display:
-     - `Email Verified Successfully`
-     - Koshur Kart-only branding.
-     - No development or Lovable references.
-   - Keep an automatic redirect after a short delay plus a clear `Continue` button.
+I'll trigger `update_secret` for these three; you paste values in the popup. Do **not** mix test and live (live Key ID with test Secret = signature failures).
 
-4. **Redirect verified users to the correct destination**
-   - Customer: `/`
-   - Vendor with an approved/verified vendor profile: `/vendor`
-   - Vendor without completed setup/vendor row: `/vendor/apply`
-   - Vendor needing KYC/setup attention: `/vendor/apply/kyc` or `/vendor` where the existing vendor gate shows the right status screen.
-   - Admin route behavior remains unchanged only where existing roles already allow it; no role/schema changes.
+### 2. Create the live webhook in Razorpay Dashboard
+Razorpay Dashboard → **Settings → Webhooks** → switch to **Live mode** → Add webhook:
+- **URL:** `https://xlqzbomiuuadxcygnsal.supabase.co/functions/v1/razorpay-webhook`
+- **Secret:** generate a strong random string; use the same value in `RAZORPAY_WEBHOOK_SECRET` above
+- **Active events:** `payment.captured`, `payment.failed`
+- Save
 
-5. **Remove Lovable branding from production**
-   - Hide the published “Edit with Lovable” badge using the project publish setting.
-   - Remove preview/editor sample URLs from auth-email code where safe, replacing sample preview values with `https://koshurkart.shop` so auth-related scans no longer surface Lovable URLs.
-   - Keep internal package imports if required by the platform, because they are not user-facing redirects.
+### 3. Verify end-to-end (after rotation)
+I'll run these checks and report back:
 
-6. **Audit every auth call site**
-   - Search and verify:
-     - `emailRedirectTo`
-     - `redirectTo`
-     - `signUp()`
-     - `signInWithOtp()`
-     - `resetPasswordForEmail()`
-     - OAuth redirect usage
-   - Confirm no auth route redirects to `lovable.app`, preview domains, editor domains, localhost, or `window.location.origin`.
+| Requirement | How it's verified | Code reference |
+|---|---|---|
+| Order creation uses live creds | `create-razorpay-order` reads `RAZORPAY_KEY_ID/SECRET` from env, calls `api.razorpay.com/v1/orders` | `supabase/functions/create-razorpay-order/index.ts` |
+| Payment verification uses live creds | `verify-razorpay-payment` HMAC-validates with `RAZORPAY_KEY_SECRET` + re-fetches order from Razorpay API | `supabase/functions/verify-razorpay-payment/index.ts` |
+| Successful payments create/confirm orders | On verified capture → `payments.status='success'` + `orders.status='confirmed'` | verify-razorpay-payment + razorpay-webhook |
+| Failed payments do not create orders | Order row is created on checkout (pending). On `payment.failed` → `payments.status='failed'`, `orders.payment_status='failed'`. Order is **not promoted to confirmed**. Existing behavior — no change needed. | razorpay-webhook |
+| Webhook signature validation | `verifyWebhookSignature()` does constant-time HMAC-SHA256 compare against `RAZORPAY_WEBHOOK_SECRET`; rejects with 401 on mismatch; dedupes via `webhook_events` table | `supabase/functions/razorpay-webhook/index.ts` |
 
-7. **Deploy changed auth email function if modified**
-   - If `supabase/functions/auth-email-hook/index.ts` changes, deploy `auth-email-hook` so production emails use the updated branding/link behavior.
+Verification commands I'll run:
+- `supabase--curl_edge_functions` GET-style probe on `create-razorpay-order` (auth required, will return 401 without a session — confirms function is up)
+- `supabase--edge_function_logs` for `create-razorpay-order` and `razorpay-webhook` after you run a real ₹1 test transaction
+- Check that `keyId` returned from `create-razorpay-order` to the client starts with `rzp_live_`
 
-8. **Final report**
-   - List files changed.
-   - List previous redirect URLs replaced, including any prior `window.location.origin` and sample Lovable project URLs.
-   - List new production redirect URLs.
-   - Summarize the final authentication flow after fixes.
+### 4. Clarify "failed payments do not create orders"
+Current architecture creates the `orders` row **before** payment (status `pending`), then promotes to `confirmed` only on verified capture. Failed payments leave the order in `pending`/`failed` state — they're never confirmed and don't appear as completed orders.
 
-## Important production setting to verify
+**Question:** Is that acceptable, or do you want failed payments to **hard-delete** the pending order row? (I'd recommend leaving it for audit/retry; you already have `RetryPaymentPanel`.)
 
-The backend auth URL allowlist must include:
+## Files / secrets touched
 
-- `https://koshurkart.shop/auth/callback`
-- `https://koshurkart.shop/auth/reset-password`
+**Secrets rotated** (no code changes):
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
 
-If those are missing, the backend may still rewrite links to its configured site URL before they reach users. I’ll surface this clearly after the code and badge fixes.
+**Files inspected, not modified:**
+- `supabase/functions/create-razorpay-order/index.ts`
+- `supabase/functions/verify-razorpay-payment/index.ts`
+- `supabase/functions/razorpay-webhook/index.ts`
+
+**Edge functions redeployed:** none (secret rotation is picked up on next invocation; no redeploy needed).
+
+## Before you approve
+1. Have your **live** Razorpay Key ID + Key Secret ready (Razorpay Dashboard → Account & Settings → API Keys → Live mode → Generate)
+2. Decide on the webhook secret string (or let Razorpay generate one when you create the webhook)
+3. Answer the failed-order question above (default: leave as `failed`, don't delete)
