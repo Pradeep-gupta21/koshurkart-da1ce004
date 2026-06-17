@@ -148,6 +148,7 @@ Deno.serve(async (req) => {
           payment_status: "success",
           razorpay_payment_id: razorpayPaymentId,
           transaction_id: razorpayPaymentId,
+          webhook_confirmed_at: new Date().toISOString(),
         }).eq("id", paymentRow.id);
 
         // 23505 = client verify already won the race; safe to ignore
@@ -158,6 +159,8 @@ Deno.serve(async (req) => {
         await service.from("orders").update({
           payment_status: "completed",
           order_status: "confirmed",
+          reconciliation_flagged: false,
+          reconciliation_reason: null,
         }).eq("id", paymentRow.order_id);
 
         await service.rpc("log_payment_event", {
@@ -167,6 +170,15 @@ Deno.serve(async (req) => {
           p_metadata: { razorpay_payment_id: razorpayPaymentId, amount_paise: paidAmount },
         });
       } else {
+        // Client verify already won the race — stamp confirmation + clear any flag
+        await service.from("payments")
+          .update({ webhook_confirmed_at: new Date().toISOString() })
+          .eq("id", paymentRow.id)
+          .is("webhook_confirmed_at", null);
+        await service.from("orders")
+          .update({ reconciliation_flagged: false, reconciliation_reason: null })
+          .eq("id", paymentRow.order_id)
+          .eq("reconciliation_flagged", true);
         await service.rpc("log_payment_event", {
           p_payment_id: paymentRow.id,
           p_event_type: "webhook_captured_noop",
