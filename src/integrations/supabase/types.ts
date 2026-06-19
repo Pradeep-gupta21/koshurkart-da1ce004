@@ -1824,6 +1824,18 @@ export type Database = {
           withdrawable_balance: number
         }[]
       }
+      get_vendor_payments: {
+        Args: { _limit?: number; _since?: string; _vendor_id: string }
+        Returns: {
+          amount: number
+          created_at: string
+          id: string
+          order_id: string
+          payment_method: string
+          payment_status: string
+          vendor_earnings: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
