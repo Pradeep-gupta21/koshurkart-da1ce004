@@ -59,12 +59,11 @@ const VendorOverview = () => {
 
     const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
 
-    const [prodRes, financials, orderItemsRes, allOrderItemsRes, paymentsRes] = await Promise.all([
+    const [prodRes, financials, orderItemsRes, paymentsRes] = await Promise.all([
       supabase.from("products").select("id, title, stock, reserved_stock, low_stock_threshold, status").eq("vendor_id", vendorId),
       vendorService.getFinancials(vendorId),
       supabase.from("order_items").select("*, order_id").eq("vendor_id", vendorId).order("id", { ascending: false }).limit(5),
-      supabase.from("order_items").select("id, price, quantity, order_id, vendor_id").eq("vendor_id", vendorId),
-      supabase.from("payments").select("*").gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }),
+      supabase.rpc("get_vendor_payments", { _vendor_id: vendorId, _since: thirtyDaysAgo, _limit: 5 }),
     ]);
 
     const products = prodRes.data ?? [];
@@ -84,10 +83,7 @@ const VendorOverview = () => {
     );
     setLowStockProducts(lowStock);
 
-    // Filter payments that belong to this vendor's orders
-    const vendorOrderIds = new Set((allOrderItemsRes.data ?? []).map((oi: any) => oi.order_id));
-    const vendorPayments = (paymentsRes.data ?? []).filter((p: any) => vendorOrderIds.has(p.order_id));
-    setRecentPayments(vendorPayments.slice(0, 5));
+    setRecentPayments(paymentsRes.data ?? []);
 
     // Aggregate earnings chart data (last 30 days)
     const earningsByDay: Record<string, number> = {};
