@@ -59,12 +59,11 @@ const VendorOverview = () => {
 
     const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
 
-    const [prodRes, financials, orderItemsRes, allOrderItemsRes, paymentsRes] = await Promise.all([
+    const [prodRes, financials, orderItemsRes, paymentsRes] = await Promise.all([
       supabase.from("products").select("id, title, stock, reserved_stock, low_stock_threshold, status").eq("vendor_id", vendorId),
       vendorService.getFinancials(vendorId),
       supabase.from("order_items").select("*, order_id").eq("vendor_id", vendorId).order("id", { ascending: false }).limit(5),
-      supabase.from("order_items").select("id, price, quantity, order_id, vendor_id").eq("vendor_id", vendorId),
-      supabase.from("payments").select("*").gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }),
+      supabase.rpc("get_vendor_payments", { _vendor_id: vendorId, _since: thirtyDaysAgo, _limit: 500 }),
     ]);
 
     const products = prodRes.data ?? [];
@@ -84,9 +83,7 @@ const VendorOverview = () => {
     );
     setLowStockProducts(lowStock);
 
-    // Filter payments that belong to this vendor's orders
-    const vendorOrderIds = new Set((allOrderItemsRes.data ?? []).map((oi: any) => oi.order_id));
-    const vendorPayments = (paymentsRes.data ?? []).filter((p: any) => vendorOrderIds.has(p.order_id));
+    const vendorPayments = paymentsRes.data ?? [];
     setRecentPayments(vendorPayments.slice(0, 5));
 
     // Aggregate earnings chart data (last 30 days)
@@ -101,10 +98,6 @@ const VendorOverview = () => {
     vendorPayments.filter((p: any) => p.payment_status === "success").forEach((p: any) => {
       const key = format(parseISO(p.created_at), "MMM dd");
       if (earningsByDay[key] !== undefined) earningsByDay[key] += Number(p.vendor_earnings ?? p.amount ?? 0);
-    });
-
-    (allOrderItemsRes.data ?? []).forEach((oi: any) => {
-      // We don't have created_at on order_items, so we'll use payments as proxy for orders chart too
     });
 
     // Use payments dates for orders chart (one payment = one order)
