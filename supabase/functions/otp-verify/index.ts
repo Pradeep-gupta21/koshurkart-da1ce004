@@ -111,10 +111,19 @@ Deno.serve(async (req) => {
         email_confirm: true,
         phone,
         phone_confirm: true,
+        user_metadata: {
+          terms_accepted: true,
+          signup_method: "phone_otp",
+          phone,
+        },
       });
-      if (createErr || !created?.user) throw new Error(`createUser: ${createErr?.message ?? "failed"}`);
+      if (createErr || !created?.user) {
+        console.error("otp-verify createUser failed:", JSON.stringify(createErr), "status:", (createErr as any)?.status);
+        throw new Error(`createUser: ${createErr?.message || (createErr as any)?.code || "unknown error"}`);
+      }
       userId = created.user.id;
     }
+
 
     // Generate a magic-link token; client converts it to a session via verifyOtp({ token_hash, type: 'magiclink' })
     const { data: link, error: linkErr } = await supabase.auth.admin.generateLink({
@@ -137,9 +146,11 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    console.error("otp-verify error:", msg);
-    return new Response(JSON.stringify({ error: "Verification failed. Please try again." }), {
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("otp-verify error:", msg, stack);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+
 });
