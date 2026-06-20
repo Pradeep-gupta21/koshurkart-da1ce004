@@ -241,7 +241,7 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: AUTH_CALLBACK_URL,
+      redirect_uri: getAuthCallbackUrl(),
     });
     if (result.error) {
       setLoading(false);
