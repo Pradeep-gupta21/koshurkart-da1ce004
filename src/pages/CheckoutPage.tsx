@@ -163,10 +163,25 @@ const CheckoutPage = () => {
     rzp.open();
   };
 
+  const buildShippingPayload = () => ({
+    recipient_name: `${shipping.firstName} ${shipping.lastName}`.trim(),
+    recipient_phone: shipping.phone.trim(),
+    recipient_email: shipping.email.trim() || undefined,
+    address: shipping.address.trim(),
+    city: shipping.city.trim(),
+    state: shipping.state.trim() || undefined,
+    pincode: shipping.zip.trim(),
+    notes: shipping.notes.trim() || undefined,
+  });
+
   const handlePlaceOrder = async () => {
     if (!user) return;
-    if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
-      toast({ title: "Missing shipping info", description: "Please fill in all shipping fields.", variant: "destructive" });
+    if (!shipping.firstName || !shipping.lastName || !shipping.phone || !shipping.address || !shipping.city || !shipping.zip) {
+      toast({ title: "Missing shipping info", description: "Please fill in name, phone, address, city, and pincode.", variant: "destructive" });
+      return;
+    }
+    if (!/^\d{6}$/.test(shipping.zip.trim())) {
+      toast({ title: "Invalid pincode", description: "Pincode must be 6 digits.", variant: "destructive" });
       return;
     }
     if (hasUnserviceableItem) {
@@ -182,7 +197,6 @@ const CheckoutPage = () => {
     setFailureError(null);
 
     try {
-      // Single backend call — server re-prices, reserves stock, creates order + payment.
       const itemsPayload = items.map(({ product, quantity }) => ({
         product_id: product.id,
         quantity,
@@ -194,6 +208,7 @@ const CheckoutPage = () => {
         paymentMethod as 'cod' | 'upi' | 'razorpay',
         shipping.zip,
         quote?.subtotal,
+        buildShippingPayload(),
       );
 
       setOrderId(result.orderId);
