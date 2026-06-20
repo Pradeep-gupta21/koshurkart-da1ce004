@@ -74,6 +74,16 @@ export const paymentService = {
     paymentMethod: 'cod' | 'upi' | 'razorpay',
     pincode?: string,
     clientQuotedTotal?: number,
+    shipping?: {
+      recipient_name: string;
+      recipient_phone: string;
+      recipient_email?: string;
+      address: string;
+      city: string;
+      state?: string;
+      pincode: string;
+      notes?: string;
+    },
   ): Promise<CheckoutResult> {
     const idempotencyKey = getOrCreateIdempotencyKey(items, paymentMethod);
 
@@ -86,11 +96,11 @@ export const paymentService = {
             shipping_pincode: pincode,
             client_quoted_total: clientQuotedTotal,
             idempotency_key: idempotencyKey,
+            shipping,
           },
         });
         if (error) throw error;
         if (data?.error) {
-          // App-level error — non-transient, do not retry.
           const e = new Error(data.error) as Error & { status?: number };
           e.status = 400;
           throw e;
