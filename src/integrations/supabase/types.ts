@@ -438,12 +438,20 @@ export type Database = {
           estimated_delivery: string | null
           id: string
           idempotency_key: string | null
+          order_notes: string | null
           order_status: string
           payment_status: string
+          recipient_email: string | null
+          recipient_name: string | null
+          recipient_phone: string | null
           reconciliation_flagged: boolean
           reconciliation_flagged_at: string | null
           reconciliation_reason: string | null
+          shipping_address: string | null
+          shipping_city: string | null
+          shipping_pincode: string | null
           shipping_provider: string | null
+          shipping_state: string | null
           shipping_status: string
           total_amount: number
           tracking_id: string | null
@@ -455,12 +463,20 @@ export type Database = {
           estimated_delivery?: string | null
           id?: string
           idempotency_key?: string | null
+          order_notes?: string | null
           order_status?: string
           payment_status?: string
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
           reconciliation_flagged?: boolean
           reconciliation_flagged_at?: string | null
           reconciliation_reason?: string | null
+          shipping_address?: string | null
+          shipping_city?: string | null
+          shipping_pincode?: string | null
           shipping_provider?: string | null
+          shipping_state?: string | null
           shipping_status?: string
           total_amount?: number
           tracking_id?: string | null
@@ -472,12 +488,20 @@ export type Database = {
           estimated_delivery?: string | null
           id?: string
           idempotency_key?: string | null
+          order_notes?: string | null
           order_status?: string
           payment_status?: string
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
           reconciliation_flagged?: boolean
           reconciliation_flagged_at?: string | null
           reconciliation_reason?: string | null
+          shipping_address?: string | null
+          shipping_city?: string | null
+          shipping_pincode?: string | null
           shipping_provider?: string | null
+          shipping_state?: string | null
           shipping_status?: string
           total_amount?: number
           tracking_id?: string | null
@@ -1822,6 +1846,28 @@ export type Database = {
           total_earnings: number
           total_sales: number
           withdrawable_balance: number
+        }[]
+      }
+      get_vendor_order_details: {
+        Args: { _order_id: string }
+        Returns: {
+          created_at: string
+          estimated_delivery: string
+          id: string
+          order_notes: string
+          order_status: string
+          payment_status: string
+          recipient_email: string
+          recipient_name: string
+          recipient_phone: string
+          shipping_address: string
+          shipping_city: string
+          shipping_pincode: string
+          shipping_provider: string
+          shipping_state: string
+          shipping_status: string
+          total_amount: number
+          tracking_id: string
         }[]
       }
       get_vendor_payments: {
