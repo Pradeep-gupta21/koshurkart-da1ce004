@@ -287,6 +287,9 @@ const VendorOrders = () => {
                 </div>
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
+                  <Button size="sm" variant="secondary" onClick={() => setDetailsOrderId(orderId)}>
+                    <Eye className="h-3 w-3 mr-1" /> View Details
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => startEditing(order)}>
                     <MapPin className="h-3 w-3 mr-1" /> Edit Shipment
                   </Button>
