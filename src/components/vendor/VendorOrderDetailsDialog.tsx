@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, User, Phone, Mail, MapPin, StickyNote, Package, IndianRupee } from "lucide-react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { logger } from "@/lib/logger";
 
 interface Props {
   orderId: string | null;
@@ -63,9 +64,25 @@ export const VendorOrderDetailsDialog = ({ orderId, vendorItems, open, onOpenCha
       // containing their own items (or admin).
       const { data, error } = await supabase.rpc("get_vendor_order_details", { _order_id: orderId });
       if (cancelled) return;
-      if (error) setError(error.message);
-      else if (data && data.length) setDetails(data[0] as OrderDetails);
-      else setError("Order not found");
+      if (error) {
+        // Structured log so authorization failures + RPC errors surface in analytics.
+        logger.error("vendor.order_details_rpc", error.message, {
+          order_id: orderId,
+          code: (error as { code?: string }).code,
+          details: (error as { details?: string }).details,
+          hint: (error as { hint?: string }).hint,
+        });
+        setError(
+          error.message?.includes("Not authorized")
+            ? "You don't have access to this order."
+            : `Failed to load order details: ${error.message}`,
+        );
+      } else if (data && data.length) {
+        setDetails(data[0] as OrderDetails);
+      } else {
+        logger.error("vendor.order_details_rpc", "empty_result", { order_id: orderId });
+        setError("Order not found");
+      }
       setLoading(false);
     })();
     return () => { cancelled = true; };

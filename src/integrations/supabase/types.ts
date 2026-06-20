@@ -441,6 +441,7 @@ export type Database = {
           order_notes: string | null
           order_status: string
           payment_status: string
+          recipient_backfilled_at: string | null
           recipient_email: string | null
           recipient_name: string | null
           recipient_phone: string | null
@@ -466,6 +467,7 @@ export type Database = {
           order_notes?: string | null
           order_status?: string
           payment_status?: string
+          recipient_backfilled_at?: string | null
           recipient_email?: string | null
           recipient_name?: string | null
           recipient_phone?: string | null
@@ -491,6 +493,7 @@ export type Database = {
           order_notes?: string | null
           order_status?: string
           payment_status?: string
+          recipient_backfilled_at?: string | null
           recipient_email?: string | null
           recipient_name?: string | null
           recipient_phone?: string | null
