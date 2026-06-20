@@ -12,12 +12,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation } from "lucide-react";
+import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { VendorOrderDetailsDialog } from "@/components/vendor/VendorOrderDetailsDialog";
 
 interface VendorOrderItem {
   id: string;
