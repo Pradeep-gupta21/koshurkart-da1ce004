@@ -4,7 +4,7 @@ export const platformSettings = {
   commissionEnabled: false,
   commissionPercentage: 0,
   merchantUpiId: 'merchant@upi',
-  merchantName: 'Marketplace',
+  merchantName: 'KoshurKart',
 };
 
 export interface CommissionSettings {

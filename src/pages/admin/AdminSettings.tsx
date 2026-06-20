@@ -20,7 +20,7 @@ const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   razorpayEnabled: true,
   upiEnabled: true,
   merchantUpiId: "merchant@upi",
-  merchantName: "Marketplace",
+  merchantName: "KoshurKart",
 };
 
 const AdminSettings = () => {
@@ -49,7 +49,7 @@ const AdminSettings = () => {
               razorpayEnabled: row.value.razorpayEnabled ?? true,
               upiEnabled: row.value.upiEnabled ?? true,
               merchantUpiId: row.value.merchantUpiId ?? "merchant@upi",
-              merchantName: row.value.merchantName ?? "Marketplace",
+              merchantName: row.value.merchantName ?? "KoshurKart",
             });
           }
         }

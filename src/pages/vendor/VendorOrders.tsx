@@ -12,12 +12,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation } from "lucide-react";
+import { Package, Truck, CheckCircle2, Loader2, CalendarIcon, MapPin, Navigation, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { VendorOrderDetailsDialog } from "@/components/vendor/VendorOrderDetailsDialog";
 
 interface VendorOrderItem {
   id: string;
@@ -81,6 +82,7 @@ const VendorOrders = () => {
   const [trackingInput, setTrackingInput] = useState("");
   const [providerInput, setProviderInput] = useState("");
   const [estDelivery, setEstDelivery] = useState<Date | undefined>();
+  const [detailsOrderId, setDetailsOrderId] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -285,6 +287,9 @@ const VendorOrders = () => {
                 </div>
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
+                  <Button size="sm" variant="secondary" onClick={() => setDetailsOrderId(orderId)}>
+                    <Eye className="h-3 w-3 mr-1" /> View Details
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => startEditing(order)}>
                     <MapPin className="h-3 w-3 mr-1" /> Edit Shipment
                   </Button>
@@ -352,8 +357,22 @@ const VendorOrders = () => {
           <TabsContent key={s} value={s} className="mt-4">{renderOrders(filterOrders(s))}</TabsContent>
         ))}
       </Tabs>
+
+      <VendorOrderDetailsDialog
+        orderId={detailsOrderId}
+        vendorItems={
+          detailsOrderId
+            ? (orderMap.get(detailsOrderId)?.items ?? []).map((i) => ({
+                id: i.id, title: i.title, price: i.price, quantity: i.quantity, image: i.image,
+              }))
+            : []
+        }
+        open={!!detailsOrderId}
+        onOpenChange={(o) => !o && setDetailsOrderId(null)}
+      />
     </div>
   );
 };
+
 
 export default VendorOrders;

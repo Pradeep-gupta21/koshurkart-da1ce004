@@ -79,8 +79,16 @@ const CheckoutPage = () => {
   const [, setPendingOrderId] = useState<string | null>(null);
 
   const [shipping, setShipping] = useState({
-    firstName: "", lastName: "", address: "", city: "", zip: "",
+    firstName: "", lastName: "", phone: "", email: user?.email ?? "",
+    address: "", city: "", state: "", zip: "", notes: "",
   });
+
+  useEffect(() => {
+    if (user?.email && !shipping.email) {
+      setShipping((s) => ({ ...s, email: user.email ?? "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
 
   const openRazorpayCheckout = async (
     razorpayOrderId: string,
@@ -97,14 +105,25 @@ const CheckoutPage = () => {
       return;
     }
 
+    const logoUrl = `${window.location.origin}/favicon.png`;
+
     const options = {
       key: razorpayKeyId,
-      // Display amount only — actual charge is determined by razorpay order_id on Razorpay's side.
       amount: Math.round(serverTotal * 100),
       currency: "INR",
-      name: pmSettings?.merchantName ?? "Marketplace",
+      name: "KoshurKart",
       description: `Order #${currentOrderId.slice(0, 8)}`,
+      image: logoUrl,
       order_id: razorpayOrderId,
+      prefill: {
+        name: `${shipping.firstName} ${shipping.lastName}`.trim() || user?.user_metadata?.name || "",
+        email: shipping.email || user?.email || "",
+        contact: shipping.phone || "",
+      },
+      notes: {
+        order_id: currentOrderId,
+        recipient: `${shipping.firstName} ${shipping.lastName}`.trim(),
+      },
       handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
         try {
           setFlowState("processing");
@@ -132,23 +151,37 @@ const CheckoutPage = () => {
       },
       modal: {
         ondismiss: async () => {
-          // Server-side stale-order sweep will release the reservation if not paid.
           await paymentService.updatePaymentStatus(payment.id, 'failed');
           const reason = encodeURIComponent("Payment was cancelled.");
           navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         },
       },
-      theme: { color: "#6366f1" },
+      theme: { color: "#0F172A" },
     };
 
     const rzp = new window.Razorpay(options);
     rzp.open();
   };
 
+  const buildShippingPayload = () => ({
+    recipient_name: `${shipping.firstName} ${shipping.lastName}`.trim(),
+    recipient_phone: shipping.phone.trim(),
+    recipient_email: shipping.email.trim() || undefined,
+    address: shipping.address.trim(),
+    city: shipping.city.trim(),
+    state: shipping.state.trim() || undefined,
+    pincode: shipping.zip.trim(),
+    notes: shipping.notes.trim() || undefined,
+  });
+
   const handlePlaceOrder = async () => {
     if (!user) return;
-    if (!shipping.firstName || !shipping.lastName || !shipping.address || !shipping.city || !shipping.zip) {
-      toast({ title: "Missing shipping info", description: "Please fill in all shipping fields.", variant: "destructive" });
+    if (!shipping.firstName || !shipping.lastName || !shipping.phone || !shipping.address || !shipping.city || !shipping.zip) {
+      toast({ title: "Missing shipping info", description: "Please fill in name, phone, address, city, and pincode.", variant: "destructive" });
+      return;
+    }
+    if (!/^\d{6}$/.test(shipping.zip.trim())) {
+      toast({ title: "Invalid pincode", description: "Pincode must be 6 digits.", variant: "destructive" });
       return;
     }
     if (hasUnserviceableItem) {
@@ -164,7 +197,6 @@ const CheckoutPage = () => {
     setFailureError(null);
 
     try {
-      // Single backend call — server re-prices, reserves stock, creates order + payment.
       const itemsPayload = items.map(({ product, quantity }) => ({
         product_id: product.id,
         quantity,
@@ -176,6 +208,7 @@ const CheckoutPage = () => {
         paymentMethod as 'cod' | 'upi' | 'razorpay',
         shipping.zip,
         quote?.subtotal,
+        buildShippingPayload(),
       );
 
       setOrderId(result.orderId);
@@ -272,6 +305,7 @@ const CheckoutPage = () => {
         paymentMethod as 'cod' | 'upi' | 'razorpay',
         shipping.zip,
         quote?.subtotal,
+        buildShippingPayload(),
       );
 
       setOrderId(result.orderId);
@@ -471,17 +505,33 @@ const CheckoutPage = () => {
                 <Label>Last Name</Label>
                 <Input placeholder="Doe" value={shipping.lastName} onChange={e => setShipping(s => ({ ...s, lastName: e.target.value }))} />
               </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input type="tel" placeholder="+91 98765 43210" value={shipping.phone} onChange={e => setShipping(s => ({ ...s, phone: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Email (optional)</Label>
+                <Input type="email" placeholder="you@example.com" value={shipping.email} onChange={e => setShipping(s => ({ ...s, email: e.target.value }))} />
+              </div>
               <div className="col-span-2 space-y-2">
                 <Label>Address</Label>
-                <Input placeholder="123 Main Street" value={shipping.address} onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
+                <Input placeholder="House / Street / Landmark" value={shipping.address} onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>City</Label>
-                <Input placeholder="New York" value={shipping.city} onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
+                <Input placeholder="Srinagar" value={shipping.city} onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Zip Code</Label>
-                <Input placeholder="10001" value={shipping.zip} onChange={e => setShipping(s => ({ ...s, zip: e.target.value }))} />
+                <Label>State</Label>
+                <Input placeholder="Jammu & Kashmir" value={shipping.state} onChange={e => setShipping(s => ({ ...s, state: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Pincode</Label>
+                <Input placeholder="190001" inputMode="numeric" maxLength={6} value={shipping.zip} onChange={e => setShipping(s => ({ ...s, zip: e.target.value.replace(/\D/g, '') }))} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Order Notes (optional)</Label>
+                <Input placeholder="Delivery instructions for the vendor" value={shipping.notes} onChange={e => setShipping(s => ({ ...s, notes: e.target.value }))} />
               </div>
             </div>
           </div>
