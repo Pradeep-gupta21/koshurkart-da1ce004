@@ -56,6 +56,23 @@ const AuthPage = () => {
   const cooldownTimer = useRef<number | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err === "oauth_vendor_restricted") {
+      toast({
+        title: "Access Restricted",
+        description:
+          "Vendor and Admin accounts cannot sign in using Google. Please use your Email/Password or Phone Authentication.",
+        variant: "destructive",
+      });
+      const next = new URLSearchParams(searchParams);
+      next.delete("error");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
