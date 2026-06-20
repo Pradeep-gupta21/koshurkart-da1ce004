@@ -17,31 +17,54 @@ const AuthCallbackPage = () => {
     const userId = userRes.user?.id;
     if (!userId) return navigate("/auth", { replace: true });
 
-    const [{ data: rolesData }, { data: vendorData }] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", userId),
-      supabase.rpc("get_my_vendor"),
-    ]);
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
 
     const userRoles = rolesData?.map((r: { role: string }) => r.role) ?? [];
-    const vendorRow = (vendorData as Array<{ verification_status?: string }> | null)?.[0];
 
+    // Customer flow only — vendors/admins are blocked above before reaching here.
     if (userRoles.includes("admin")) {
       navigate("/admin", { replace: true });
     } else if (userRoles.includes("vendor")) {
-      if (!vendorRow) {
-        navigate("/vendor/apply", { replace: true });
-      } else if (
-        vendorRow.verification_status === "verified" ||
-        vendorRow.verification_status === "approved"
-      ) {
-        navigate("/vendor", { replace: true });
-      } else {
-        // Pending/rejected/suspended — VendorStatusGate will show the right screen.
-        navigate("/vendor", { replace: true });
-      }
+      navigate("/vendor", { replace: true });
     } else {
       navigate("/", { replace: true });
     }
+  };
+
+  /**
+   * For OAuth (Google) flows only: block vendors and admins from completing
+   * sign-in. Google auth is reserved for buyer/customer accounts.
+   * Returns true when the user was blocked (caller should stop).
+   */
+  const enforceBuyerOnlyOAuth = async (isOAuth: boolean): Promise<boolean> => {
+    if (!isOAuth) return false;
+    const { data: userRes } = await supabase.auth.getUser();
+    const userId = userRes.user?.id;
+    if (!userId) return false;
+
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    const userRoles = rolesData?.map((r: { role: string }) => r.role) ?? [];
+
+    if (userRoles.includes("vendor") || userRoles.includes("admin")) {
+      await supabase.auth.signOut({ scope: "global" });
+      try {
+        // Best-effort cleanup of any stale auth tokens.
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith("sb-") && k.includes("-auth-token"))
+          .forEach((k) => localStorage.removeItem(k));
+      } catch {
+        /* noop */
+      }
+      navigate("/auth?error=oauth_vendor_restricted", { replace: true });
+      return true;
+    }
+    return false;
   };
 
   useEffect(() => {
