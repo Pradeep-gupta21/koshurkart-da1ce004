@@ -505,17 +505,33 @@ const CheckoutPage = () => {
                 <Label>Last Name</Label>
                 <Input placeholder="Doe" value={shipping.lastName} onChange={e => setShipping(s => ({ ...s, lastName: e.target.value }))} />
               </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input type="tel" placeholder="+91 98765 43210" value={shipping.phone} onChange={e => setShipping(s => ({ ...s, phone: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Email (optional)</Label>
+                <Input type="email" placeholder="you@example.com" value={shipping.email} onChange={e => setShipping(s => ({ ...s, email: e.target.value }))} />
+              </div>
               <div className="col-span-2 space-y-2">
                 <Label>Address</Label>
-                <Input placeholder="123 Main Street" value={shipping.address} onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
+                <Input placeholder="House / Street / Landmark" value={shipping.address} onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>City</Label>
-                <Input placeholder="New York" value={shipping.city} onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
+                <Input placeholder="Srinagar" value={shipping.city} onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Zip Code</Label>
-                <Input placeholder="10001" value={shipping.zip} onChange={e => setShipping(s => ({ ...s, zip: e.target.value }))} />
+                <Label>State</Label>
+                <Input placeholder="Jammu & Kashmir" value={shipping.state} onChange={e => setShipping(s => ({ ...s, state: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Pincode</Label>
+                <Input placeholder="190001" inputMode="numeric" maxLength={6} value={shipping.zip} onChange={e => setShipping(s => ({ ...s, zip: e.target.value.replace(/\D/g, '') }))} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>Order Notes (optional)</Label>
+                <Input placeholder="Delivery instructions for the vendor" value={shipping.notes} onChange={e => setShipping(s => ({ ...s, notes: e.target.value }))} />
               </div>
             </div>
           </div>
