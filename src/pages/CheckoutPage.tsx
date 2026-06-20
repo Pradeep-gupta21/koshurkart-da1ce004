@@ -105,14 +105,25 @@ const CheckoutPage = () => {
       return;
     }
 
+    const logoUrl = `${window.location.origin}/favicon.png`;
+
     const options = {
       key: razorpayKeyId,
-      // Display amount only — actual charge is determined by razorpay order_id on Razorpay's side.
       amount: Math.round(serverTotal * 100),
       currency: "INR",
-      name: pmSettings?.merchantName ?? "Marketplace",
+      name: "KoshurKart",
       description: `Order #${currentOrderId.slice(0, 8)}`,
+      image: logoUrl,
       order_id: razorpayOrderId,
+      prefill: {
+        name: `${shipping.firstName} ${shipping.lastName}`.trim() || user?.user_metadata?.name || "",
+        email: shipping.email || user?.email || "",
+        contact: shipping.phone || "",
+      },
+      notes: {
+        order_id: currentOrderId,
+        recipient: `${shipping.firstName} ${shipping.lastName}`.trim(),
+      },
       handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
         try {
           setFlowState("processing");
@@ -140,13 +151,12 @@ const CheckoutPage = () => {
       },
       modal: {
         ondismiss: async () => {
-          // Server-side stale-order sweep will release the reservation if not paid.
           await paymentService.updatePaymentStatus(payment.id, 'failed');
           const reason = encodeURIComponent("Payment was cancelled.");
           navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
         },
       },
-      theme: { color: "#6366f1" },
+      theme: { color: "#0F172A" },
     };
 
     const rzp = new window.Razorpay(options);
