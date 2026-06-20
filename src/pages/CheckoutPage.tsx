@@ -18,6 +18,8 @@ import { useCheckoutQuote } from "@/hooks/useCheckoutQuote";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, Loader2, CreditCard, Banknote, XCircle, Upload, QrCode, Check, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
+import koshurkartLogoAsset from "@/assets/koshurkart-logo-256.png.asset.json";
 
 const ALL_PAYMENT_METHODS = [
   { value: "razorpay", label: "Pay via Razorpay", description: "UPI, Cards, Netbanking & Wallets", icon: CreditCard, iconBg: "bg-primary/10 text-primary", recommended: true },
@@ -105,7 +107,8 @@ const CheckoutPage = () => {
       return;
     }
 
-    const logoUrl = `${window.location.origin}/favicon.png`;
+    // 256×256 PNG served from the Lovable CDN — Razorpay requires an absolute URL.
+    const logoUrl = `${window.location.origin}${koshurkartLogoAsset.url}`;
 
     const options = {
       key: razorpayKeyId,
