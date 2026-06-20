@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
   }
-  const { items, payment_method, client_quoted_total, idempotency_key } = parsed.data;
+  const { items, payment_method, client_quoted_total, idempotency_key, shipping } = parsed.data;
 
   const service = createClient(
     Deno.env.get("SUPABASE_URL")!,
