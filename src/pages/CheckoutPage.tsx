@@ -79,8 +79,16 @@ const CheckoutPage = () => {
   const [, setPendingOrderId] = useState<string | null>(null);
 
   const [shipping, setShipping] = useState({
-    firstName: "", lastName: "", address: "", city: "", zip: "",
+    firstName: "", lastName: "", phone: "", email: user?.email ?? "",
+    address: "", city: "", state: "", zip: "", notes: "",
   });
+
+  useEffect(() => {
+    if (user?.email && !shipping.email) {
+      setShipping((s) => ({ ...s, email: user.email ?? "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
 
   const openRazorpayCheckout = async (
     razorpayOrderId: string,
