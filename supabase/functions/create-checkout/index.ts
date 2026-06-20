@@ -316,6 +316,16 @@ Deno.serve(async (req) => {
     order_status: "processing",
   };
   if (idempotency_key) orderInsert.idempotency_key = idempotency_key;
+  if (shipping) {
+    orderInsert.recipient_name = shipping.recipient_name;
+    orderInsert.recipient_phone = shipping.recipient_phone;
+    orderInsert.recipient_email = shipping.recipient_email || null;
+    orderInsert.shipping_address = shipping.address;
+    orderInsert.shipping_city = shipping.city;
+    orderInsert.shipping_state = shipping.state || null;
+    orderInsert.shipping_pincode = shipping.pincode;
+    orderInsert.order_notes = shipping.notes || null;
+  }
 
   let { data: order, error: orderErr } = await service
     .from("orders")
