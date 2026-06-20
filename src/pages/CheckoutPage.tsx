@@ -305,6 +305,7 @@ const CheckoutPage = () => {
         paymentMethod as 'cod' | 'upi' | 'razorpay',
         shipping.zip,
         quote?.subtotal,
+        buildShippingPayload(),
       );
 
       setOrderId(result.orderId);
