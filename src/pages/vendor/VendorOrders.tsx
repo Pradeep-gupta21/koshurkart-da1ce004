@@ -82,6 +82,7 @@ const VendorOrders = () => {
   const [trackingInput, setTrackingInput] = useState("");
   const [providerInput, setProviderInput] = useState("");
   const [estDelivery, setEstDelivery] = useState<Date | undefined>();
+  const [detailsOrderId, setDetailsOrderId] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     setLoading(true);
