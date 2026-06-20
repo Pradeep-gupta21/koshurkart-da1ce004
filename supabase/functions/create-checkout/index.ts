@@ -36,12 +36,21 @@ const BodySchema = z.object({
     .max(50),
   payment_method: z.enum(["razorpay", "upi", "cod"]),
   shipping_pincode: z.string().regex(/^\d{6}$/).optional(),
-  // Optional — what the client *thought* the total was. Used only for
-  // tampering/drift telemetry; the server total is always authoritative.
   client_quoted_total: z.number().nonnegative().optional(),
-  // Optional but RECOMMENDED. Stable per checkout attempt — retries with the
-  // same key are idempotent (no duplicate orders, no duplicate gateway calls).
   idempotency_key: z.string().min(16).max(64).optional(),
+  // Recipient & delivery details — persisted on the order so vendors can fulfill.
+  shipping: z
+    .object({
+      recipient_name: z.string().trim().min(1).max(200),
+      recipient_phone: z.string().trim().min(7).max(20),
+      recipient_email: z.string().trim().email().max(200).optional().or(z.literal("")),
+      address: z.string().trim().min(1).max(500),
+      city: z.string().trim().min(1).max(120),
+      state: z.string().trim().max(120).optional().or(z.literal("")),
+      pincode: z.string().trim().regex(/^\d{6}$/),
+      notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    })
+    .optional(),
 });
 
 function modeFromKey(keyId: string | undefined): "test" | "live" {
