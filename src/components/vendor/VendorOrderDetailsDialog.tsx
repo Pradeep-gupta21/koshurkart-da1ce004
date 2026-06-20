@@ -58,17 +58,16 @@ export const VendorOrderDetailsDialog = ({ orderId, vendorItems, open, onOpenCha
     setLoading(true);
     setError(null);
     setDetails(null);
-    // SECURITY: server-side function enforces that vendor can only read orders
-    // containing their own items (or admin).
-    supabase
-      .rpc("get_vendor_order_details", { _order_id: orderId })
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) setError(error.message);
-        else if (data && data.length) setDetails(data[0] as OrderDetails);
-        else setError("Order not found");
-      })
-      .finally(() => !cancelled && setLoading(false));
+    (async () => {
+      // SECURITY: server-side function enforces that vendor can only read orders
+      // containing their own items (or admin).
+      const { data, error } = await supabase.rpc("get_vendor_order_details", { _order_id: orderId });
+      if (cancelled) return;
+      if (error) setError(error.message);
+      else if (data && data.length) setDetails(data[0] as OrderDetails);
+      else setError("Order not found");
+      setLoading(false);
+    })();
     return () => { cancelled = true; };
   }, [open, orderId]);
 
