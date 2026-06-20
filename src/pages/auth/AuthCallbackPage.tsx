@@ -118,6 +118,15 @@ const AuthCallbackPage = () => {
           return;
         }
 
+        // Detect OAuth (social) sign-in via the auth provider on the user.
+        const provider =
+          (userRes.user.app_metadata as { provider?: string } | null)?.provider;
+        const isOAuth = !!provider && provider !== "email" && provider !== "phone";
+
+        // Buyer-only enforcement: block vendors/admins from completing OAuth.
+        const blocked = await enforceBuyerOnlyOAuth(isOAuth);
+        if (blocked || cancelled) return;
+
         // Strip sensitive params from the URL bar.
         window.history.replaceState({}, document.title, "/auth/callback");
         setStatus("success");
