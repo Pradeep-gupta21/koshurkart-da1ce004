@@ -357,8 +357,22 @@ const VendorOrders = () => {
           <TabsContent key={s} value={s} className="mt-4">{renderOrders(filterOrders(s))}</TabsContent>
         ))}
       </Tabs>
+
+      <VendorOrderDetailsDialog
+        orderId={detailsOrderId}
+        vendorItems={
+          detailsOrderId
+            ? (orderMap.get(detailsOrderId)?.items ?? []).map((i) => ({
+                id: i.id, title: i.title, price: i.price, quantity: i.quantity, image: i.image,
+              }))
+            : []
+        }
+        open={!!detailsOrderId}
+        onOpenChange={(o) => !o && setDetailsOrderId(null)}
+      />
     </div>
   );
 };
+
 
 export default VendorOrders;
