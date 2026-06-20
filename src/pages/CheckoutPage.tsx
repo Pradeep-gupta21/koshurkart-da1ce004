@@ -252,6 +252,12 @@ const CheckoutPage = () => {
       const msg = isMismatch
         ? 'Pricing mismatch detected. Please refresh the page and try again.'
         : (err?.message ?? "Something went wrong.");
+      logger.error('checkout.place_order', msg, {
+        status: err?.status,
+        code: err?.code,
+        payment_method: paymentMethod,
+        item_count: items.length,
+      });
       toast({ title: "Order failed", description: msg, variant: "destructive" });
       setFailureError(msg);
       setFlowState("form");
