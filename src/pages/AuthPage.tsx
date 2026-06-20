@@ -16,7 +16,8 @@ import { logAuthEvent } from "@/lib/authLog";
 import AuthShell from "@/components/auth/AuthShell";
 import PhoneInput, { toE164 } from "@/components/auth/PhoneInput";
 import { sendOtp } from "@/lib/otpClient";
-import { AUTH_CALLBACK_URL } from "@/lib/authConfig";
+import { AUTH_CALLBACK_URL, getAuthCallbackUrl } from "@/lib/authConfig";
+import { useSearchParams } from "react-router-dom";
 
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -55,6 +56,23 @@ const AuthPage = () => {
   const cooldownTimer = useRef<number | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err === "oauth_vendor_restricted") {
+      toast({
+        title: "Access Restricted",
+        description:
+          "Vendor and Admin accounts cannot sign in using Google. Please use your Email/Password or Phone Authentication.",
+        variant: "destructive",
+      });
+      const next = new URLSearchParams(searchParams);
+      next.delete("error");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -240,7 +258,7 @@ const AuthPage = () => {
   const handleGoogle = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: AUTH_CALLBACK_URL,
+      redirect_uri: getAuthCallbackUrl(),
     });
     if (result.error) {
       setLoading(false);
