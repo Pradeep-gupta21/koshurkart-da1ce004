@@ -399,6 +399,20 @@ const ProfilePage = () => {
           )}
         </CardContent>
       </Card>
+
+      <ReturnRequestModal
+        item={returnItem}
+        open={!!returnItem}
+        onOpenChange={(o) => { if (!o) setReturnItem(null); }}
+        onSubmitted={(itemId) => {
+          setOrders((prev) => prev.map((o) => ({
+            ...o,
+            order_items: o.order_items?.map((it: any) =>
+              it.id === itemId ? { ...it, return_status: "requested" } : it
+            ),
+          })));
+        }}
+      />
     </div>
   );
 };
