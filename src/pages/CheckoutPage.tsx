@@ -249,6 +249,9 @@ const CheckoutPage = () => {
         });
       }
       clearCart();
+      supabase.functions
+        .invoke("send-transactional-email", { body: { type: "order_confirmation", orderId: result.orderId } })
+        .catch((e) => console.warn("order email failed", e));
       navigate(`/payment/success?orderId=${result.orderId}&paymentId=${result.paymentId}&method=cod`, { replace: true });
       return;
     } catch (err: any) {
