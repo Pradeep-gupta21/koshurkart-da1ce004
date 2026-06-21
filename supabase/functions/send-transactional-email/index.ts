@@ -103,6 +103,12 @@ function returnRequestEmail(order: any, item: any) {
 const ORDER_CONFIRMATION_TEMPLATE_ID = Number(
   Deno.env.get("BREVO_ORDER_CONFIRMATION_TEMPLATE_ID") ?? "5",
 );
+const CUSTOMER_WELCOME_TEMPLATE_ID = Number(
+  Deno.env.get("BREVO_CUSTOMER_WELCOME_TEMPLATE_ID") ?? "1",
+);
+const VENDOR_KYC_WELCOME_TEMPLATE_ID = Number(
+  Deno.env.get("BREVO_VENDOR_KYC_WELCOME_TEMPLATE_ID") ?? "2",
+);
 
 async function brevoSend(payload: Record<string, unknown>) {
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
