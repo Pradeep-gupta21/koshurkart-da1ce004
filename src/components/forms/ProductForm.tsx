@@ -69,7 +69,7 @@ const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductForm
           <Label>Category</Label>
           <select className="w-full h-10 rounded-md border bg-background px-3 text-sm"
             value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
           </select>
         </div>
       </div>
