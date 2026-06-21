@@ -143,6 +143,17 @@ const ProfilePage = () => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [payments, setPayments] = useState<Record<string, any>>({});
+  const [returnItem, setReturnItem] = useState<ReturnItem | null>(null);
+
+  const isReturnEligible = (order: any) => {
+    const status = (order.shipping_status ?? order.order_status ?? "").toLowerCase();
+    if (status !== "delivered" && status !== "completed") return false;
+    const deliveredAt = order.estimated_delivery
+      ? new Date(order.estimated_delivery).getTime()
+      : new Date(order.created_at).getTime();
+    const ageDays = (Date.now() - deliveredAt) / (1000 * 60 * 60 * 24);
+    return ageDays <= 7;
+  };
 
   useEffect(() => {
     if (!user) return;
