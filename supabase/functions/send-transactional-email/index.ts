@@ -181,13 +181,50 @@ Deno.serve(async (req) => {
       }
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
-      const { subject, html } = orderConfirmationEmail(order, order.order_items ?? []);
-      const result = await sendViaBrevo(to, order.recipient_name, subject, html);
-      console.log("email.sent", { type: args.type, orderId: args.orderId, to });
+
+      const items = (order.order_items ?? []) as Array<{ title: string; price: number; quantity: number }>;
+      const totalQty = items.reduce((sum, i) => sum + Number(i.quantity ?? 0), 0);
+      const itemNames = items.map((i) => `${i.title} × ${i.quantity}`).join(", ");
+      const purchaseDate = new Date(order.created_at).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      const customerName =
+        order.recipient_name ??
+        (userData.user.user_metadata as Record<string, unknown> | null)?.full_name ??
+        to.split("@")[0];
+
+      const params = {
+        ORDER_ID: order.id.slice(0, 8).toUpperCase(),
+        CUSTOMER_NAME: customerName,
+        PURCHASE_DATE: purchaseDate,
+        ITEM_NAME: itemNames,
+        QUANTITY: totalQty,
+        TOTAL_AMOUNT: `₹${Number(order.total_amount).toFixed(2)}`,
+        ITEMS: items.map((i) => ({
+          name: i.title,
+          quantity: i.quantity,
+          price: `₹${Number(i.price).toFixed(2)}`,
+          total: `₹${(Number(i.price) * Number(i.quantity)).toFixed(2)}`,
+        })),
+      };
+
+      const result = await brevoSend({
+        templateId: ORDER_CONFIRMATION_TEMPLATE_ID,
+        to: [{ email: to, name: customerName }],
+        params,
+      });
+      console.log("email.sent", {
+        type: args.type,
+        orderId: args.orderId,
+        templateId: ORDER_CONFIRMATION_TEMPLATE_ID,
+        to,
+      });
       return new Response(JSON.stringify({ ok: true, result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     if (args.type === "return_requested") {
       if (!args.orderItemId) throw new Error("orderItemId required");
