@@ -15,8 +15,10 @@ import { productService } from "@/services/productService";
 import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { MARKETPLACE_CATEGORIES, formatCategoryLabel } from "@/config/categories";
 
-const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const categories = MARKETPLACE_CATEGORIES;
+const DEFAULT_CATEGORY = categories[0].slug;
 const statusOptions = [
   { value: "active", label: "Active", variant: "default" as const },
   { value: "draft", label: "Draft", variant: "secondary" as const },
