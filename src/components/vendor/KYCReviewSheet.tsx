@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { vendorService } from "@/services/vendorService";
-import { CheckCircle, ExternalLink, History, Loader2, Pause, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle, ExternalLink, FileText, History, Loader2, Pause, ShieldCheck, XCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 
 interface Props {
@@ -47,6 +48,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
   const [verificationReason, setVerificationReason] = useState("");
   const [acting, setActing] = useState(false);
   const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [profile, setProfile] = useState<{ email?: string | null; phone?: string | null; name?: string | null } | null>(null);
 
   const loadAudit = async (id: string) => {
     try {
@@ -62,6 +64,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
     setLoading(true);
     setKycReason("");
     setVerificationReason("");
+    setProfile(null);
     vendorService.getKYC(vendorId).then(async (v) => {
       setData(v);
       const urls: Record<string, string> = {};
@@ -71,6 +74,16 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
         }
       }
       setDocUrls(urls);
+      if (v?.user_id) {
+        try {
+          const { data: p } = await supabase
+            .from("profiles")
+            .select("email, phone, name")
+            .eq("id", v.user_id)
+            .maybeSingle();
+          setProfile(p ?? null);
+        } catch { setProfile(null); }
+      }
       setLoading(false);
     });
     loadAudit(vendorId);
@@ -145,68 +158,100 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
               </Badge>
             </div>
 
-            <section>
-              <h3 className="text-sm font-semibold mb-1">Business</h3>
-              <Field label="Business name" value={data.business_name} />
-              <Field label="Type" value={data.business_type} />
-              <Field label="PAN" value={data.pan_number} />
-              <Field label="GSTIN" value={data.gstin} />
-              <Field label="Aadhaar (last 4)" value={data.aadhaar_last4} />
+            <section className="rounded-lg border bg-muted/30 p-3">
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-primary" /> Core KYC Details
+              </h3>
+              <div className="grid sm:grid-cols-2 gap-x-4">
+                <Field label="Full Legal Name" value={data.business_name || profile?.name} />
+                <Field label="Registered Store" value={data.store_name} />
+                <Field label="Email" value={profile?.email} />
+                <Field label="Phone" value={data.phone || profile?.phone} />
+                <Field label="Aadhaar (last 4)" value={data.aadhaar_last4 ? `XXXX-XXXX-${data.aadhaar_last4}` : null} />
+                <Field label="PAN Number" value={data.pan_number} />
+                <Field label="Business Type" value={data.business_type} />
+                <Field label="GSTIN" value={data.gstin} />
+              </div>
             </section>
 
             <section>
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold">Bank</h3>
-                <div className="flex items-center gap-2">
-                  <Badge variant={data.bank_verified ? "default" : "secondary"}>
-                    {data.bank_verified ? "Verified" : "Unverified"}
-                  </Badge>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={acting}
-                    onClick={async () => {
-                      if (!vendorId) return;
-                      setActing(true);
-                      try {
-                        await vendorService.setBankVerified(vendorId, !data.bank_verified);
-                        setData({ ...data, bank_verified: !data.bank_verified });
-                        toast({ title: data.bank_verified ? "Bank marked unverified" : "Bank marked verified" });
-                        onChanged?.();
-                        await loadAudit(vendorId);
-                      } catch (e: any) {
-                        toast({ title: "Failed", description: e.message, variant: "destructive" });
-                      } finally { setActing(false); }
-                    }}
-                  >
-                    {data.bank_verified ? "Unmark" : "Mark verified"}
-                  </Button>
-                </div>
+              <h3 className="text-sm font-semibold mb-2">Verification Documents</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {([
+                  { key: "address" as const, label: "Aadhaar Card Document" },
+                  { key: "pan" as const, label: "PAN Card Document" },
+                ]).map(({ key, label }) => (
+                  <div key={key} className="rounded-lg border bg-card p-3 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      {label}
+                    </div>
+                    {docUrls[key] ? (
+                      <>
+                        <a
+                          href={docUrls[key]}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block rounded-md overflow-hidden border bg-muted aspect-[4/3]"
+                        >
+                          <img
+                            src={docUrls[key]}
+                            alt={label}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </a>
+                        <div className="flex gap-2">
+                          <Button asChild size="sm" variant="outline" className="flex-1">
+                            <a href={docUrls[key]} target="_blank" rel="noreferrer">
+                              View <ExternalLink className="h-3 w-3 ml-1" />
+                            </a>
+                          </Button>
+                          <Button asChild size="sm" variant="outline" className="flex-1">
+                            <a href={docUrls[key]} download>Download</a>
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground py-6 text-center">Not uploaded</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold mb-1">Bank</h3>
+              <div className="flex items-center justify-between mb-2">
+                <Badge variant={data.bank_verified ? "default" : "secondary"}>
+                  {data.bank_verified ? "Bank Verified" : "Bank Unverified"}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={acting}
+                  onClick={async () => {
+                    if (!vendorId) return;
+                    setActing(true);
+                    try {
+                      await vendorService.setBankVerified(vendorId, !data.bank_verified);
+                      setData({ ...data, bank_verified: !data.bank_verified });
+                      toast({ title: data.bank_verified ? "Bank marked unverified" : "Bank marked verified" });
+                      onChanged?.();
+                      await loadAudit(vendorId);
+                    } catch (e: any) {
+                      toast({ title: "Failed", description: e.message, variant: "destructive" });
+                    } finally { setActing(false); }
+                  }}
+                >
+                  {data.bank_verified ? "Unmark" : "Mark verified"}
+                </Button>
               </div>
               <Field label="Holder" value={data.bank_account_holder} />
               <Field label="Account" value={data.bank_account_number_masked} />
               <Field label="IFSC" value={data.bank_ifsc} />
             </section>
 
-            <section>
-              <h3 className="text-sm font-semibold mb-2">Documents</h3>
-              <div className="space-y-2">
-                {(["pan", "address", "business"] as const).map((k) => (
-                  <div key={k} className="flex items-center justify-between border rounded-md p-2">
-                    <span className="text-sm capitalize">{k}</span>
-                    {docUrls[k] ? (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={docUrls[k]} target="_blank" rel="noreferrer">
-                          View <ExternalLink className="h-3 w-3 ml-1" />
-                        </a>
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Not uploaded</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
 
             <section className="space-y-2 border-t pt-4">
               <h3 className="text-sm font-semibold">KYC Decision</h3>
