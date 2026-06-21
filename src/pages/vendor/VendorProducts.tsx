@@ -90,6 +90,7 @@ const VendorProducts = () => {
       lowStockThreshold: String(p.lowStockThreshold ?? 5),
       category: p.category,
       status: p.status || "active",
+      allowCod: p.allowCod ?? true,
     });
     setImageUrls(p.images || []);
     setOpen(true);
