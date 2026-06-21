@@ -1970,6 +1970,24 @@ export type Database = {
         Args: { _order_id: string; _user_id: string }
         Returns: boolean
       }
+      list_reviews_admin: {
+        Args: { _limit?: number }
+        Returns: {
+          comment: string
+          created_at: string
+          flagged_reason: string
+          helpful_count: number
+          id: string
+          images: string[]
+          is_suspicious: boolean
+          is_verified_purchase: boolean
+          moderation_status: string
+          order_id: string
+          product_id: string
+          rating: number
+          user_id: string
+        }[]
+      }
       list_vendors_admin: {
         Args: {
           _limit?: number
