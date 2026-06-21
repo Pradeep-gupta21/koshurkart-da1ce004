@@ -29,12 +29,32 @@ const AdminReviews = () => {
   const { toast } = useToast();
 
   const fetchReviews = async () => {
-    const { data } = await supabase
-      .from("reviews")
-      .select("*, profiles:user_id(name, email), products:product_id(title)")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    setReviews((data as unknown as ReviewRow[]) ?? []);
+    const { data: base } = await supabase.rpc("list_reviews_admin", { _limit: 200 } as any);
+    const rows = (base as any[]) ?? [];
+
+    // Hydrate profile + product info using separate queries (RPC returns plain columns).
+    const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)));
+    const productIds = Array.from(new Set(rows.map((r) => r.product_id).filter(Boolean)));
+
+    const [{ data: profiles }, { data: products }] = await Promise.all([
+      userIds.length
+        ? supabase.from("profiles").select("id, name, email").in("id", userIds)
+        : Promise.resolve({ data: [] as any[] }),
+      productIds.length
+        ? supabase.from("products").select("id, title").in("id", productIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    const productMap = new Map((products ?? []).map((p: any) => [p.id, p]));
+
+    setReviews(
+      rows.map((r) => ({
+        ...r,
+        profiles: profileMap.get(r.user_id) ?? null,
+        products: productMap.get(r.product_id) ?? null,
+      })) as ReviewRow[],
+    );
     setLoading(false);
   };
 
