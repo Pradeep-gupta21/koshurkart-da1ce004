@@ -146,6 +146,9 @@ const CheckoutPage = () => {
           }
 
           clearCart();
+          supabase.functions
+            .invoke("send-transactional-email", { body: { type: "order_confirmation", orderId: currentOrderId } })
+            .catch((e) => console.warn("order email failed", e));
           navigate(`/payment/success?orderId=${currentOrderId}&paymentId=${payment.id}&txn=${response.razorpay_payment_id}`, { replace: true });
         } catch (err: any) {
           const reason = encodeURIComponent(err?.message ?? "Payment confirmation failed.");
