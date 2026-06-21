@@ -135,6 +135,7 @@ const VendorProducts = () => {
           category: form.category,
           images: imageUrls,
           status: form.status,
+          allow_cod: form.allowCod,
         },
       });
     } else {
