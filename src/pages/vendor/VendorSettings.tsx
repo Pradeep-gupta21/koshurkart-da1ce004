@@ -40,20 +40,35 @@ const VendorSettings = () => {
   }, [vendorId]);
 
   const handleSave = async () => {
-    if (!vendorId) return;
+    if (!vendorId) {
+      toast({ title: "Not signed in", description: "Your vendor session is missing. Please sign in again.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      let logoUrl = logo ?? undefined;
+      let logoUrl: string | undefined = logo ?? undefined;
       if (logoFile) {
+        console.log('[VendorSettings] uploading logo', { name: logoFile.name, size: logoFile.size });
         logoUrl = await vendorService.uploadLogo(vendorId, logoFile);
+        console.log('[VendorSettings] logo uploaded', logoUrl);
       }
-      await vendorService.update(vendorId, { store_name: storeName, description, logo: logoUrl });
+      // Only string URLs reach the DB — never the raw File object.
+      await vendorService.update(vendorId, {
+        store_name: storeName.trim(),
+        description: description.trim(),
+        logo: logoUrl,
+      });
       await refreshVendor();
       setLogo(logoUrl ?? null);
       setLogoFile(null);
       toast({ title: "Store updated" });
     } catch (e: any) {
-      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+      console.error('[VendorSettings] save failed', e);
+      toast({
+        title: "Save failed",
+        description: e?.message || e?.error_description || "Unknown error — check console for details.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
