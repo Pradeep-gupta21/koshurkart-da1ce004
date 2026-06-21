@@ -172,6 +172,9 @@ const VendorOnboardingPage = () => {
 
       await draft.clearDraft();
       await refreshVendor();
+      supabase.functions
+        .invoke("send-transactional-email", { body: { type: "vendor_kyc_welcome" } })
+        .catch((e) => console.warn("vendor welcome email failed", e));
       toast({ title: "Application submitted", description: "We'll review and get back to you shortly." });
       navigate("/vendor", { replace: true });
     } catch (e: any) {

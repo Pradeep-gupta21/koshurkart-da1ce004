@@ -127,6 +127,23 @@ const AuthCallbackPage = () => {
         const blocked = await enforceBuyerOnlyOAuth(isOAuth);
         if (blocked || cancelled) return;
 
+        // First-time OAuth sign-in → fire welcome email (Brevo template 1).
+        if (isOAuth && userRes.user.email) {
+          const createdAt = new Date(userRes.user.created_at).getTime();
+          if (Date.now() - createdAt < 10 * 60 * 1000) {
+            const meta = (userRes.user.user_metadata ?? {}) as Record<string, unknown>;
+            const name =
+              (typeof meta.full_name === "string" && meta.full_name) ||
+              (typeof meta.name === "string" && meta.name) ||
+              userRes.user.email.split("@")[0];
+            supabase.functions
+              .invoke("send-transactional-email", {
+                body: { type: "customer_welcome", email: userRes.user.email, name },
+              })
+              .catch((e) => console.warn("welcome email failed", e));
+          }
+        }
+
         // Strip sensitive params from the URL bar.
         window.history.replaceState({}, document.title, "/auth/callback");
         setStatus("success");

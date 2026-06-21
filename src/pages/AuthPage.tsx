@@ -251,6 +251,12 @@ const AuthPage = () => {
     }
 
     await logAuthEvent("signup_success", { email: sanitizedEmail, metadata: { is_vendor: isVendorSignup } });
+    // Fire welcome email (Brevo template 1) — fire-and-forget, no session needed.
+    supabase.functions
+      .invoke("send-transactional-email", {
+        body: { type: "customer_welcome", email: sanitizedEmail, name: sanitizedName },
+      })
+      .catch((e) => console.warn("welcome email failed", e));
     setSignupPanel({ kind: "sent", email: sanitizedEmail });
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
   };
