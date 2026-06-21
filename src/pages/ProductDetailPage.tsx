@@ -9,6 +9,7 @@ import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
+import { formatCategoryLabel } from "@/config/categories";
 import { adService } from "@/services/adService";
 import { recommendationService } from "@/services/recommendationService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
@@ -169,7 +170,7 @@ const ProductDetailPage = () => {
       <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
         <Link to="/" className="hover:text-foreground transition-colors">Home</Link>
         <ChevronRight className="h-3 w-3" />
-        <Link to={`/search?category=${product.category}`} className="hover:text-foreground transition-colors">{product.category}</Link>
+        <Link to={`/search?category=${encodeURIComponent(product.category)}`} className="hover:text-foreground transition-colors">{formatCategoryLabel(product.category)}</Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-foreground truncate max-w-[200px]">{product.title}</span>
       </nav>

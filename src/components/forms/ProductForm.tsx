@@ -4,8 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { sanitizeText } from "@/lib/sanitize";
+import { MARKETPLACE_CATEGORIES } from "@/config/categories";
 
-const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const categories = MARKETPLACE_CATEGORIES;
 
 export interface ProductFormValues {
   title: string;
@@ -24,7 +25,7 @@ interface ProductFormProps {
 }
 
 const defaultValues: ProductFormValues = {
-  title: "", description: "", price: "", discountPrice: "", stock: "", category: "Electronics", images: "",
+  title: "", description: "", price: "", discountPrice: "", stock: "", category: categories[0].slug, images: "",
 };
 
 const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductFormProps) => {
@@ -68,7 +69,7 @@ const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductForm
           <Label>Category</Label>
           <select className="w-full h-10 rounded-md border bg-background px-3 text-sm"
             value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c.slug} value={c.slug}>{c.label}</option>)}
           </select>
         </div>
       </div>

@@ -15,8 +15,10 @@ import { productService } from "@/services/productService";
 import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { MARKETPLACE_CATEGORIES, formatCategoryLabel } from "@/config/categories";
 
-const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const categories = MARKETPLACE_CATEGORIES;
+const DEFAULT_CATEGORY = categories[0].slug;
 const statusOptions = [
   { value: "active", label: "Active", variant: "default" as const },
   { value: "draft", label: "Draft", variant: "secondary" as const },
@@ -36,7 +38,7 @@ const VendorProducts = () => {
   const [uploading, setUploading] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [form, setForm] = useState({
-    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true,
+    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: DEFAULT_CATEGORY, status: "active", allowCod: true,
   });
 
   const { data: products = [], isLoading } = useQuery({
@@ -76,7 +78,7 @@ const VendorProducts = () => {
   const closeDialog = () => {
     setOpen(false);
     setEditing(null);
-    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true });
+    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: DEFAULT_CATEGORY, status: "active", allowCod: true });
     setImageUrls([]);
   };
 
@@ -210,7 +212,7 @@ const VendorProducts = () => {
                   <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      {categories.map(c => <SelectItem key={c.slug} value={c.slug}>{c.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -323,7 +325,7 @@ const VendorProducts = () => {
                           </>
                         );
                       })()}
-                      <Badge variant="secondary" className="text-xs">{p.category}</Badge>
+                      <Badge variant="secondary" className="text-xs">{formatCategoryLabel(p.category)}</Badge>
                       <Badge variant={statusOpt?.variant || "secondary"} className="text-xs">{statusOpt?.label || p.status}</Badge>
                       {(() => {
                         const avail = p.stock - (p.reservedStock ?? 0);

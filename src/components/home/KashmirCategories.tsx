@@ -5,11 +5,11 @@ import { Gem, Shirt, Apple, Flame, Palette } from "lucide-react";
 // to optimize. Aspect-ratio is locked via padding utilities, so no CLS risk.
 
 const categories = [
-  { label: "Handicrafts", slug: "Handicrafts", Icon: Gem, tint: "from-accent/20 to-transparent" },
-  { label: "Pashmina Shawls", slug: "Pashmina", Icon: Shirt, tint: "from-wood/25 to-transparent" },
-  { label: "Dry Fruits", slug: "Dry Fruits", Icon: Apple, tint: "from-secondary/25 to-transparent" },
-  { label: "Saffron", slug: "Saffron", Icon: Flame, tint: "from-accent/30 to-transparent" },
-  { label: "Local Art", slug: "Art", Icon: Palette, tint: "from-primary/15 to-transparent" },
+  { label: "Pashmina Shawls", slug: "pashmina", Icon: Shirt, tint: "from-wood/25 to-transparent" },
+  { label: "Saffron", slug: "saffron", Icon: Flame, tint: "from-accent/30 to-transparent" },
+  { label: "Dry Fruits", slug: "dry_fruits", Icon: Apple, tint: "from-secondary/25 to-transparent" },
+  { label: "Handicrafts", slug: "handicrafts", Icon: Gem, tint: "from-accent/20 to-transparent" },
+  { label: "Papier-mâché", slug: "papier_mache", Icon: Palette, tint: "from-primary/15 to-transparent" },
 ];
 
 const KashmirCategories = () => (

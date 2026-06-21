@@ -10,6 +10,7 @@ import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
+import { CATEGORY_SLUGS, formatCategoryLabel } from "@/config/categories";
 import { productService } from "@/services/productService";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
@@ -19,7 +20,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
-const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const defaultCategories = CATEGORY_SLUGS;
 
 const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
   campaignId: c.campaign_id,
@@ -202,7 +203,7 @@ const SearchPage = () => {
                   onClick={() => setSelectedCategory(cat)}
                   className="h-8 text-xs"
                 >
-                  {cat}
+                  {cat === "All" ? "All" : formatCategoryLabel(cat)}
                 </Button>
               ))}
             </div>
