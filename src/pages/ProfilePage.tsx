@@ -373,9 +373,28 @@ const ProfilePage = () => {
                               <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
                             </div>
                             {alreadyRequested ? (
-                              <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 capitalize">
-                                Return {returnStatus}
-                              </Badge>
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 capitalize">
+                                  Return {returnStatus}
+                                </Badge>
+                                <UIButton
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                                  onClick={() => openReturnSlip({
+                                    orderId: o.id,
+                                    itemTitle: item.title,
+                                    quantity: item.quantity,
+                                    reason: item.return_reason ?? "Not specified",
+                                    description: item.return_description,
+                                    requestedAt: item.return_requested_at ?? new Date().toISOString(),
+                                    customerName: user?.user_metadata?.name ?? null,
+                                    customerEmail: user?.email ?? null,
+                                  })}
+                                >
+                                  <Printer className="h-3.5 w-3.5 mr-2" /> Download Return Slip
+                                </UIButton>
+                              </div>
                             ) : eligible ? (
                               <UIButton
                                 size="sm"
