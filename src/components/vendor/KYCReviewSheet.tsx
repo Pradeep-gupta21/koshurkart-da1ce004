@@ -48,6 +48,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
   const [verificationReason, setVerificationReason] = useState("");
   const [acting, setActing] = useState(false);
   const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [profile, setProfile] = useState<{ email?: string | null; phone?: string | null; full_name?: string | null } | null>(null);
 
   const loadAudit = async (id: string) => {
     try {
@@ -63,6 +64,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
     setLoading(true);
     setKycReason("");
     setVerificationReason("");
+    setProfile(null);
     vendorService.getKYC(vendorId).then(async (v) => {
       setData(v);
       const urls: Record<string, string> = {};
@@ -72,6 +74,16 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
         }
       }
       setDocUrls(urls);
+      if (v?.user_id) {
+        try {
+          const { data: p } = await supabase
+            .from("profiles")
+            .select("email, phone, full_name")
+            .eq("id", v.user_id)
+            .maybeSingle();
+          setProfile(p ?? null);
+        } catch { setProfile(null); }
+      }
       setLoading(false);
     });
     loadAudit(vendorId);
