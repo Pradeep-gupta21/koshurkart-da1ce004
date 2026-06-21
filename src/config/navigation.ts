@@ -15,7 +15,7 @@ export interface NavItem {
   icon?: LucideIcon;
   roles?: NavRole[]; // undefined = visible to everyone
   children?: NavItem[];
-  badgeKey?: "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications";
+  badgeKey?: "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications" | "pendingReturns";
   end?: boolean;
   external?: boolean;
 }
