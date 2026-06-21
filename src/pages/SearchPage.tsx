@@ -20,7 +20,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { Truck } from "lucide-react";
 import type { Product } from "@/types";
 
-const defaultCategories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const defaultCategories = CATEGORY_SLUGS;
 
 const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
   campaignId: c.campaign_id,
