@@ -29,9 +29,9 @@ export interface NavSection {
 
 /* ------------------------------ SHOPPER NAV ------------------------------ */
 
-export const SHOPPER_CATEGORIES = [
-  "Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books",
-];
+import { MARKETPLACE_CATEGORIES } from "./categories";
+
+export const SHOPPER_CATEGORIES = MARKETPLACE_CATEGORIES.map((c) => c.label);
 
 export const shopperNav: NavSection[] = [
   {
@@ -46,10 +46,10 @@ export const shopperNav: NavSection[] = [
   {
     id: "departments",
     label: "Shop by Department",
-    items: SHOPPER_CATEGORIES.map((cat) => ({
-      id: `cat-${cat}`,
-      label: cat,
-      to: `/search?category=${encodeURIComponent(cat)}`,
+    items: MARKETPLACE_CATEGORIES.map((cat) => ({
+      id: `cat-${cat.slug}`,
+      label: cat.label,
+      to: `/search?category=${encodeURIComponent(cat.slug)}`,
     })),
   },
   {
