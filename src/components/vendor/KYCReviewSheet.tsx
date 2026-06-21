@@ -78,7 +78,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
         try {
           const { data: p } = await supabase
             .from("profiles")
-            .select("email, phone, full_name")
+            .select("email, phone, name")
             .eq("id", v.user_id)
             .maybeSingle();
           setProfile(p ?? null);
