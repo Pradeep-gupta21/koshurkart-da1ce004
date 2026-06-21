@@ -18,16 +18,9 @@ import ShopSidebarTrigger from "@/components/navigation/ShopSidebarTrigger";
 import LocationPill from "@/components/location/LocationPill";
 
 
-const jkCategories = [
-  "Pashmina",
-  "Saffron",
-  "Dry Fruits",
-  "Walnut Wood",
-  "Papier-mâché",
-  "Kahwa",
-  "Handicrafts",
-  "Carpets",
-];
+import { MARKETPLACE_CATEGORIES } from "@/config/categories";
+
+const jkCategories = MARKETPLACE_CATEGORIES;
 
 const actionBtn =
   "hover:bg-accent/10 hover:text-accent transition-all duration-200 hover:-translate-y-0.5";
