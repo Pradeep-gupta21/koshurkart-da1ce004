@@ -325,7 +325,7 @@ const VendorProducts = () => {
                           </>
                         );
                       })()}
-                      <Badge variant="secondary" className="text-xs">{p.category}</Badge>
+                      <Badge variant="secondary" className="text-xs">{formatCategoryLabel(p.category)}</Badge>
                       <Badge variant={statusOpt?.variant || "secondary"} className="text-xs">{statusOpt?.label || p.status}</Badge>
                       {(() => {
                         const avail = p.stock - (p.reservedStock ?? 0);
