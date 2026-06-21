@@ -8,9 +8,10 @@ import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2, Printer } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2, Printer, Receipt } from "lucide-react";
 import ReturnRequestModal, { type ReturnItem } from "@/components/orders/ReturnRequestModal";
 import { openReturnSlip } from "@/lib/printReturnSlip";
+import { openInvoice } from "@/lib/printInvoice";
 import { Button as UIButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
@@ -317,6 +318,40 @@ const ProfilePage = () => {
                     <div className="border-t bg-muted/30 p-4 space-y-3">
                       {/* Delivery progress tracker */}
                       <DeliveryProgressTracker currentStatus={o.shipping_status ?? "pending"} />
+
+                      {/* Invoice download — available once order is confirmed */}
+                      {(() => {
+                        const s = (o.shipping_status ?? o.order_status ?? "").toLowerCase();
+                        const eligible = ["delivered", "completed", "shipped", "in_transit", "out_for_delivery"].includes(s)
+                          || (payments[o.id]?.payment_status === "success");
+                        if (!eligible) return null;
+                        return (
+                          <div className="flex justify-end">
+                            <UIButton
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                              onClick={() => openInvoice({
+                                orderId: o.id,
+                                createdAt: o.created_at,
+                                paymentMethod: payments[o.id]?.payment_method ?? o.payment_method ?? "—",
+                                paymentStatus: payments[o.id]?.payment_status ?? o.payment_status,
+                                totalAmount: Number(o.total_amount),
+                                items: (o.order_items ?? []).map((it: any) => ({
+                                  title: it.title,
+                                  quantity: it.quantity,
+                                  price: Number(it.price),
+                                })),
+                                customerName: profile?.name ?? user?.user_metadata?.name ?? null,
+                                customerEmail: profile?.email ?? user?.email ?? null,
+                              })}
+                            >
+                              <Receipt className="h-3.5 w-3.5 mr-2" /> Download Invoice
+                            </UIButton>
+                          </div>
+                        );
+                      })()}
+
 
                       {/* Payment info */}
                       {payments[o.id] && (
