@@ -1943,6 +1943,30 @@ export type Database = {
           tracking_id: string
         }[]
       }
+      get_vendor_order_items_summary: {
+        Args: { _vendor_id: string }
+        Returns: {
+          estimated_delivery: string
+          image: string
+          item_id: string
+          order_created_at: string
+          order_id: string
+          order_status: string
+          payment_status: string
+          price: number
+          product_id: string
+          quantity: number
+          return_description: string
+          return_reason: string
+          return_requested_at: string
+          return_status: string
+          shipping_provider: string
+          shipping_status: string
+          title: string
+          total_amount: number
+          tracking_id: string
+        }[]
+      }
       get_vendor_payments: {
         Args: { _limit?: number; _since?: string; _vendor_id: string }
         Returns: {
