@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { vendorService } from "@/services/vendorService";
-import { CheckCircle, ExternalLink, History, Loader2, Pause, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle, ExternalLink, FileText, History, Loader2, Pause, ShieldCheck, XCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO } from "date-fns";
 
 interface Props {
