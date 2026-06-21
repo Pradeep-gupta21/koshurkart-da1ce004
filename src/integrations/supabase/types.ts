@@ -384,6 +384,11 @@ export type Database = {
           price: number
           product_id: string | null
           quantity: number
+          return_description: string | null
+          return_photos: string[]
+          return_reason: string | null
+          return_requested_at: string | null
+          return_status: string
           title: string
           vendor_id: string | null
         }
@@ -394,6 +399,11 @@ export type Database = {
           price: number
           product_id?: string | null
           quantity?: number
+          return_description?: string | null
+          return_photos?: string[]
+          return_reason?: string | null
+          return_requested_at?: string | null
+          return_status?: string
           title: string
           vendor_id?: string | null
         }
@@ -404,6 +414,11 @@ export type Database = {
           price?: number
           product_id?: string | null
           quantity?: number
+          return_description?: string | null
+          return_photos?: string[]
+          return_reason?: string | null
+          return_requested_at?: string | null
+          return_status?: string
           title?: string
           vendor_id?: string | null
         }

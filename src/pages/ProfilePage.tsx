@@ -8,7 +8,9 @@ import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2 } from "lucide-react";
+import ReturnRequestModal, { type ReturnItem } from "@/components/orders/ReturnRequestModal";
+import { Button as UIButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
 import type { AppNotification } from "@/types/notification";
@@ -141,6 +143,17 @@ const ProfilePage = () => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [payments, setPayments] = useState<Record<string, any>>({});
+  const [returnItem, setReturnItem] = useState<ReturnItem | null>(null);
+
+  const isReturnEligible = (order: any) => {
+    const status = (order.shipping_status ?? order.order_status ?? "").toLowerCase();
+    if (status !== "delivered" && status !== "completed") return false;
+    const deliveredAt = order.estimated_delivery
+      ? new Date(order.estimated_delivery).getTime()
+      : new Date(order.created_at).getTime();
+    const ageDays = (Date.now() - deliveredAt) / (1000 * 60 * 60 * 24);
+    return ageDays <= 7;
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -342,18 +355,39 @@ const ProfilePage = () => {
                       </div>
 
                       {/* Order items */}
-                      {o.order_items && o.order_items.map((item: any) => (
-                        <div key={item.id} className="flex items-center gap-3">
-                          {item.image && (
-                            <img src={item.image} alt={item.title} className="h-10 w-10 rounded object-cover" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{item.title}</p>
-                            <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                      {o.order_items && o.order_items.map((item: any) => {
+                        const eligible = isReturnEligible(o);
+                        const returnStatus = item.return_status ?? "none";
+                        const alreadyRequested = returnStatus !== "none";
+                        return (
+                          <div key={item.id} className="bg-card rounded-lg border p-3 space-y-2">
+                            <div className="flex items-center gap-3">
+                              {item.image && (
+                                <img src={item.image} alt={item.title} className="h-12 w-12 rounded object-cover" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{item.title}</p>
+                                <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                              </div>
+                              <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
+                            </div>
+                            {alreadyRequested ? (
+                              <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 capitalize">
+                                Return {returnStatus}
+                              </Badge>
+                            ) : eligible ? (
+                              <UIButton
+                                size="sm"
+                                variant="outline"
+                                className="w-full border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                                onClick={() => setReturnItem({ id: item.id, title: item.title, orderId: o.id })}
+                              >
+                                <Undo2 className="h-3.5 w-3.5 mr-2" /> Request Return
+                              </UIButton>
+                            ) : null}
                           </div>
-                          <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
 
                       {/* Tracking history timeline */}
                       <TrackingTimeline orderId={o.id} />
@@ -365,6 +399,20 @@ const ProfilePage = () => {
           )}
         </CardContent>
       </Card>
+
+      <ReturnRequestModal
+        item={returnItem}
+        open={!!returnItem}
+        onOpenChange={(o) => { if (!o) setReturnItem(null); }}
+        onSubmitted={(itemId) => {
+          setOrders((prev) => prev.map((o) => ({
+            ...o,
+            order_items: o.order_items?.map((it: any) =>
+              it.id === itemId ? { ...it, return_status: "requested" } : it
+            ),
+          })));
+        }}
+      />
     </div>
   );
 };
