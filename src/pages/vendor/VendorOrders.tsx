@@ -86,15 +86,38 @@ const VendorOrders = () => {
 
   const fetchOrders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("order_items")
-      .select("*, order:orders(*)")
-      .eq("vendor_id", vendorId)
-      .order("id", { ascending: false });
+    const { data, error } = await supabase.rpc("get_vendor_order_items_summary", {
+      _vendor_id: vendorId,
+    });
     if (error) {
       toast({ title: "Error loading orders", description: error.message, variant: "destructive" });
     } else {
-      setItems((data as any) ?? []);
+      const mapped = ((data as any[]) ?? []).map((r) => ({
+        id: r.item_id,
+        order_id: r.order_id,
+        product_id: r.product_id,
+        title: r.title,
+        image: r.image,
+        price: r.price,
+        quantity: r.quantity,
+        return_status: r.return_status,
+        return_reason: r.return_reason,
+        return_description: r.return_description,
+        return_requested_at: r.return_requested_at,
+        order: {
+          id: r.order_id,
+          created_at: r.order_created_at,
+          order_status: r.order_status,
+          payment_status: r.payment_status,
+          total_amount: r.total_amount,
+          user_id: "",
+          shipping_provider: r.shipping_provider,
+          tracking_id: r.tracking_id,
+          shipping_status: r.shipping_status,
+          estimated_delivery: r.estimated_delivery,
+        },
+      }));
+      setItems(mapped as any);
     }
     setLoading(false);
   };
