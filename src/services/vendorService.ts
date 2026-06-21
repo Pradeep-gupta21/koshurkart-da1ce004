@@ -234,31 +234,47 @@ export const vendorService = {
     if (error) throw error;
   },
 
-  /** Upload vendor logo to existing public product-images bucket. */
+  /** Upload vendor logo to existing public product-images bucket.
+   *  Path MUST start with auth.uid() to satisfy storage RLS on product-images. */
   async uploadLogo(vendorId: string, file: File): Promise<string> {
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    const userId = userRes.user?.id;
+    if (!userId) throw new Error('You must be signed in to upload a logo.');
     const blob = await compressImage(file, { maxDim: 600, quality: 0.85 });
-    const path = `vendors/${vendorId}/logo-${Date.now()}.jpg`;
+    const path = `${userId}/vendor-${vendorId}-logo-${Date.now()}.jpg`;
     return withRetry(async () => {
       const { error } = await supabase.storage.from('product-images').upload(path, blob, {
         upsert: true,
         contentType: 'image/jpeg',
       });
-      if (error) throw error;
+      if (error) {
+        console.error('[uploadLogo] storage upload failed', { path, error });
+        throw new Error(error.message || 'Logo upload failed');
+      }
       const { data } = supabase.storage.from('product-images').getPublicUrl(path);
       return data.publicUrl;
     }, { scope: 'uploadLogo' });
   },
 
-  /** Upload vendor banner image. Wider crop, public bucket. */
+  /** Upload vendor banner image. Wider crop, public bucket.
+   *  Path MUST start with auth.uid() to satisfy storage RLS on product-images. */
   async uploadBanner(vendorId: string, file: File): Promise<string> {
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    const userId = userRes.user?.id;
+    if (!userId) throw new Error('You must be signed in to upload a banner.');
     const blob = await compressImage(file, { maxDim: 1600, quality: 0.82 });
-    const path = `vendors/${vendorId}/banner-${Date.now()}.jpg`;
+    const path = `${userId}/vendor-${vendorId}-banner-${Date.now()}.jpg`;
     return withRetry(async () => {
       const { error } = await supabase.storage.from('product-images').upload(path, blob, {
         upsert: true,
         contentType: 'image/jpeg',
       });
-      if (error) throw error;
+      if (error) {
+        console.error('[uploadBanner] storage upload failed', { path, error });
+        throw new Error(error.message || 'Banner upload failed');
+      }
       const { data } = supabase.storage.from('product-images').getPublicUrl(path);
       return data.publicUrl;
     }, { scope: 'uploadBanner' });
