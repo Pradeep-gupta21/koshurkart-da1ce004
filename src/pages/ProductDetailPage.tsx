@@ -9,6 +9,7 @@ import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
 import { productService } from "@/services/productService";
+import { formatCategoryLabel } from "@/config/categories";
 import { adService } from "@/services/adService";
 import { recommendationService } from "@/services/recommendationService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
