@@ -1330,6 +1330,61 @@ export type Database = {
           },
         ]
       }
+      vendor_wallet_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          order_id: string | null
+          order_item_id: string | null
+          type: string
+          vendor_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          order_item_id?: string | null
+          type: string
+          vendor_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          order_item_id?: string | null
+          type?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_wallet_ledger_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_wallet_ledger_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_wallet_ledger_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendors: {
         Row: {
           aadhaar_last4: string | null
@@ -2091,6 +2146,14 @@ export type Database = {
           _store_slug: string
         }
         Returns: string
+      }
+      vendor_approve_return: {
+        Args: { _order_item_id: string }
+        Returns: undefined
+      }
+      vendor_reject_return: {
+        Args: { _order_item_id: string }
+        Returns: undefined
       }
     }
     Enums: {
