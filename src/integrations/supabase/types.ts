@@ -803,6 +803,7 @@ export type Database = {
       }
       products: {
         Row: {
+          allow_cod: boolean
           base_price: number | null
           category: string
           created_at: string
@@ -830,6 +831,7 @@ export type Database = {
           view_count: number
         }
         Insert: {
+          allow_cod?: boolean
           base_price?: number | null
           category?: string
           created_at?: string
@@ -857,6 +859,7 @@ export type Database = {
           view_count?: number
         }
         Update: {
+          allow_cod?: boolean
           base_price?: number | null
           category?: string
           created_at?: string
