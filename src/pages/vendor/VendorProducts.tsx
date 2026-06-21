@@ -38,7 +38,7 @@ const VendorProducts = () => {
   const [uploading, setUploading] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [form, setForm] = useState({
-    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true,
+    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: DEFAULT_CATEGORY, status: "active", allowCod: true,
   });
 
   const { data: products = [], isLoading } = useQuery({
