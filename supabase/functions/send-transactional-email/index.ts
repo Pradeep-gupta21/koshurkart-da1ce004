@@ -98,7 +98,11 @@ function returnRequestEmail(order: any, item: any) {
   };
 }
 
-async function sendViaBrevo(to: string, name: string | null, subject: string, html: string) {
+const ORDER_CONFIRMATION_TEMPLATE_ID = Number(
+  Deno.env.get("BREVO_ORDER_CONFIRMATION_TEMPLATE_ID") ?? "5",
+);
+
+async function brevoSend(payload: Record<string, unknown>) {
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
   const brevoKey = Deno.env.get("BREVO_API_KEY");
   if (!lovableKey || !brevoKey) throw new Error("Missing Brevo gateway credentials");
@@ -110,12 +114,7 @@ async function sendViaBrevo(to: string, name: string | null, subject: string, ht
       Authorization: `Bearer ${lovableKey}`,
       "X-Connection-Api-Key": brevoKey,
     },
-    body: JSON.stringify({
-      sender: { name: FROM_NAME, email: FROM_EMAIL },
-      to: [{ email: to, name: name ?? undefined }],
-      subject,
-      htmlContent: html,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -124,6 +123,16 @@ async function sendViaBrevo(to: string, name: string | null, subject: string, ht
   }
   return res.json();
 }
+
+async function sendViaBrevo(to: string, name: string | null, subject: string, html: string) {
+  return brevoSend({
+    sender: { name: FROM_NAME, email: FROM_EMAIL },
+    to: [{ email: to, name: name ?? undefined }],
+    subject,
+    htmlContent: html,
+  });
+}
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
