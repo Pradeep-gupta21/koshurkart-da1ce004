@@ -9,6 +9,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import { paymentService, type CheckoutResult } from "@/services/paymentService";
+import { supabase } from "@/integrations/supabase/client";
 import { analyticsService } from "@/services/analyticsService";
 import { PricingDebugBox } from "@/components/checkout/PricingDebugBox";
 
@@ -146,6 +147,9 @@ const CheckoutPage = () => {
           }
 
           clearCart();
+          supabase.functions
+            .invoke("send-transactional-email", { body: { type: "order_confirmation", orderId: currentOrderId } })
+            .catch((e) => console.warn("order email failed", e));
           navigate(`/payment/success?orderId=${currentOrderId}&paymentId=${payment.id}&txn=${response.razorpay_payment_id}`, { replace: true });
         } catch (err: any) {
           const reason = encodeURIComponent(err?.message ?? "Payment confirmation failed.");
@@ -245,6 +249,9 @@ const CheckoutPage = () => {
         });
       }
       clearCart();
+      supabase.functions
+        .invoke("send-transactional-email", { body: { type: "order_confirmation", orderId: result.orderId } })
+        .catch((e) => console.warn("order email failed", e));
       navigate(`/payment/success?orderId=${result.orderId}&paymentId=${result.paymentId}&method=cod`, { replace: true });
       return;
     } catch (err: any) {

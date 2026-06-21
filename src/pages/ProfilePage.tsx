@@ -8,8 +8,9 @@ import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2 } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2, Printer } from "lucide-react";
 import ReturnRequestModal, { type ReturnItem } from "@/components/orders/ReturnRequestModal";
+import { openReturnSlip } from "@/lib/printReturnSlip";
 import { Button as UIButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ShippingStatus } from "@/types/order";
@@ -372,9 +373,28 @@ const ProfilePage = () => {
                               <p className="text-sm font-semibold tabular-nums">{formatPrice(Number(item.price) * item.quantity)}</p>
                             </div>
                             {alreadyRequested ? (
-                              <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 capitalize">
-                                Return {returnStatus}
-                              </Badge>
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30 capitalize">
+                                  Return {returnStatus}
+                                </Badge>
+                                <UIButton
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                                  onClick={() => openReturnSlip({
+                                    orderId: o.id,
+                                    itemTitle: item.title,
+                                    quantity: item.quantity,
+                                    reason: item.return_reason ?? "Not specified",
+                                    description: item.return_description,
+                                    requestedAt: item.return_requested_at ?? new Date().toISOString(),
+                                    customerName: user?.user_metadata?.name ?? null,
+                                    customerEmail: user?.email ?? null,
+                                  })}
+                                >
+                                  <Printer className="h-3.5 w-3.5 mr-2" /> Download Return Slip
+                                </UIButton>
+                              </div>
                             ) : eligible ? (
                               <UIButton
                                 size="sm"

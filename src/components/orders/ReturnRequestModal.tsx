@@ -92,6 +92,13 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
         .eq("id", item.id);
       if (error) throw error;
 
+      // Fire-and-forget transactional email — do not block the UI on email delivery
+      supabase.functions
+        .invoke("send-transactional-email", {
+          body: { type: "return_requested", orderItemId: item.id },
+        })
+        .catch((e) => console.warn("return email failed", e));
+
       toast.success("Return request submitted", {
         description: "Our team will review your request shortly.",
       });
