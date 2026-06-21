@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS allow_cod boolean NOT NULL DEFAULT true;

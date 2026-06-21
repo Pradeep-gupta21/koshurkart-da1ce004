@@ -31,6 +31,7 @@ type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | 
 
 const CheckoutPage = () => {
   const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
+  const codBlockedByItem = items.some((i) => i.product.allowCod === false);
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -554,10 +555,18 @@ const CheckoutPage = () => {
 
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
+            {codBlockedByItem && (
+              <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                COD is not available for some items in your cart.
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {availableMethods.map(({ value, label, description, icon: Icon, iconBg }) => {
                 const isSelected = paymentMethod === value;
                 const isDisabled = value === "cod" && !codAvailable;
+                const disabledReason = value === "cod" && codBlockedByItem
+                  ? "Not available for some items in cart"
+                  : "Not available for this PIN";
                 return (
                   <button
                     key={value}
@@ -584,7 +593,7 @@ const CheckoutPage = () => {
                     <div>
                       <p className="text-sm font-semibold">{label}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {isDisabled ? "Not available for this PIN" : description}
+                        {isDisabled ? disabledReason : description}
                       </p>
                     </div>
                   </button>

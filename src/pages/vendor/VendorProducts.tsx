@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { productService } from "@/services/productService";
-import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
 const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
@@ -35,7 +36,7 @@ const VendorProducts = () => {
   const [uploading, setUploading] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [form, setForm] = useState({
-    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active",
+    title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true,
   });
 
   const { data: products = [], isLoading } = useQuery({
@@ -75,7 +76,7 @@ const VendorProducts = () => {
   const closeDialog = () => {
     setOpen(false);
     setEditing(null);
-    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active" });
+    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true });
     setImageUrls([]);
   };
 
@@ -90,6 +91,7 @@ const VendorProducts = () => {
       lowStockThreshold: String(p.lowStockThreshold ?? 5),
       category: p.category,
       status: p.status || "active",
+      allowCod: p.allowCod ?? true,
     });
     setImageUrls(p.images || []);
     setOpen(true);
@@ -133,6 +135,7 @@ const VendorProducts = () => {
           category: form.category,
           images: imageUrls,
           status: form.status,
+          allow_cod: form.allowCod,
         },
       });
     } else {
@@ -148,7 +151,8 @@ const VendorProducts = () => {
         category: form.category,
         images: imageUrls,
         status: form.status,
-      });
+        allow_cod: form.allowCod,
+      } as Parameters<typeof productService.create>[0]);
     }
   };
 
@@ -220,6 +224,24 @@ const VendorProducts = () => {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-full bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
+                    <Banknote className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <Label htmlFor="allow-cod" className="text-sm font-semibold cursor-pointer">Allow Cash on Delivery (COD)</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Customers can pay when the order arrives. Turn off to require online payment.</p>
+                  </div>
+                </div>
+                <Switch
+                  id="allow-cod"
+                  checked={form.allowCod}
+                  onCheckedChange={(v) => setForm(f => ({ ...f, allowCod: v }))}
+                />
+              </div>
+
 
               {/* Image upload */}
               <div className="space-y-2">

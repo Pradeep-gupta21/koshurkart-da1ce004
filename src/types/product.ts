@@ -26,6 +26,7 @@ export interface Product {
   basePrice?: number;
   dynamicPrice?: number;
   demandScore?: number;
+  allowCod?: boolean;
 }
 
 export interface Review {

@@ -115,6 +115,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   let hasUnserviceableItem = false;
   let codAvailable = items.length > 0;
   for (const { product, quantity } of items) {
+    if (product.allowCod === false) codAvailable = false;
     const row = serviceability.get(product.id);
     if (pincode && row) {
       if (!row.deliverable) hasUnserviceableItem = true;
