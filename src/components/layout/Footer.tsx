@@ -21,9 +21,9 @@ const Footer = () => (
           <h4 className="font-sans font-semibold mb-3 text-sm tracking-wide uppercase text-accent/90">Shop</h4>
           <nav className="flex flex-col gap-2 text-sm opacity-70">
             <Link to="/search" className="hover:text-accent hover:opacity-100 transition-colors">All Products</Link>
-            <Link to="/search?category=Electronics" className="hover:text-accent hover:opacity-100 transition-colors">Electronics</Link>
-            <Link to="/search?category=Fashion" className="hover:text-accent hover:opacity-100 transition-colors">Fashion</Link>
-            <Link to="/search?category=Home" className="hover:text-accent hover:opacity-100 transition-colors">Home & Living</Link>
+            <Link to="/search?category=pashmina" className="hover:text-accent hover:opacity-100 transition-colors">Pashmina</Link>
+            <Link to="/search?category=saffron" className="hover:text-accent hover:opacity-100 transition-colors">Saffron</Link>
+            <Link to="/search?category=dry_fruits" className="hover:text-accent hover:opacity-100 transition-colors">Dry Fruits</Link>
           </nav>
         </div>
         <div>
