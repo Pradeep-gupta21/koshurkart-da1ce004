@@ -225,6 +225,24 @@ const VendorProducts = () => {
                 </Select>
               </div>
 
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-full bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
+                    <Banknote className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <Label htmlFor="allow-cod" className="text-sm font-semibold cursor-pointer">Allow Cash on Delivery (COD)</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Customers can pay when the order arrives. Turn off to require online payment.</p>
+                  </div>
+                </div>
+                <Switch
+                  id="allow-cod"
+                  checked={form.allowCod}
+                  onCheckedChange={(v) => setForm(f => ({ ...f, allowCod: v }))}
+                />
+              </div>
+
+
               {/* Image upload */}
               <div className="space-y-2">
                 <Label>Images</Label>
