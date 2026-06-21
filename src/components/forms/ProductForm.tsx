@@ -4,8 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { sanitizeText } from "@/lib/sanitize";
+import { MARKETPLACE_CATEGORIES } from "@/config/categories";
 
-const categories = ["Electronics", "Fashion", "Home & Living", "Sports", "Beauty", "Books"];
+const categories = MARKETPLACE_CATEGORIES;
 
 export interface ProductFormValues {
   title: string;
