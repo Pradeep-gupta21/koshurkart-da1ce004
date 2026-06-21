@@ -31,6 +31,7 @@ type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | 
 
 const CheckoutPage = () => {
   const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
+  const codBlockedByItem = items.some((i) => i.product.allowCod === false);
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const { toast } = useToast();
