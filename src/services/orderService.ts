@@ -34,7 +34,7 @@ export const orderService = {
   async getUserOrders(userId: string, limit = 50) {
     const { data, error } = await supabase
       .from('orders')
-      .select('id, user_id, total_amount, order_status, payment_status, shipping_status, shipping_provider, tracking_id, estimated_delivery, created_at, order_items(id, product_id, vendor_id, title, image, price, quantity, return_status, return_reason, return_requested_at)')
+      .select('id, user_id, total_amount, order_status, payment_status, shipping_status, shipping_provider, tracking_id, estimated_delivery, created_at, order_items(id, product_id, vendor_id, title, image, price, quantity, return_status, return_reason, return_description, return_requested_at)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
