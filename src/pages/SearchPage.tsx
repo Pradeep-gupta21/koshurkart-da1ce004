@@ -203,7 +203,7 @@ const SearchPage = () => {
                   onClick={() => setSelectedCategory(cat)}
                   className="h-8 text-xs"
                 >
-                  {cat}
+                  {cat === "All" ? "All" : formatCategoryLabel(cat)}
                 </Button>
               ))}
             </div>
