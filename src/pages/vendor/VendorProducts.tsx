@@ -78,7 +78,7 @@ const VendorProducts = () => {
   const closeDialog = () => {
     setOpen(false);
     setEditing(null);
-    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: "Electronics", status: "active", allowCod: true });
+    setForm({ title: "", description: "", price: "", discountPrice: "", stock: "", lowStockThreshold: "5", category: DEFAULT_CATEGORY, status: "active", allowCod: true });
     setImageUrls([]);
   };
 
