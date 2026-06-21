@@ -54,6 +54,7 @@ const VendorCampaigns = lazy(() => import("@/pages/vendor/VendorCampaigns"));
 const VendorAnalytics = lazy(() => import("@/pages/vendor/VendorAnalytics"));
 const VendorPayments = lazy(() => import("@/pages/vendor/VendorPayments"));
 const VendorOrders = lazy(() => import("@/pages/vendor/VendorOrders"));
+const VendorReturns = lazy(() => import("@/pages/vendor/VendorReturns"));
 const VendorNotifications = lazy(() => import("@/pages/vendor/VendorNotifications"));
 
 const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
@@ -121,6 +122,7 @@ const App = () => (
                         <Route index element={<VendorOverview />} />
                         <Route path="products" element={<VendorProducts />} />
                         <Route path="orders" element={<VendorOrders />} />
+                        <Route path="returns" element={<VendorReturns />} />
                         <Route path="campaigns" element={<VendorCampaigns />} />
                         <Route path="analytics" element={<VendorAnalytics />} />
                         <Route path="payments" element={<VendorPayments />} />

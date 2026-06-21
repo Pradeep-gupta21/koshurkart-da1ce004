@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, ShieldAlert, Megaphone, Wallet, LayoutGrid,
-  MessageSquare, IndianRupee, CreditCard, Settings, Package, BarChart3,
+  MessageSquare, IndianRupee, CreditCard, Settings, Package, PackageX, BarChart3,
   ShoppingBag, Bell, Home, Tag, Sparkles, ShoppingCart, User as UserIcon,
   Star, Store, HelpCircle, LogIn, FileText, Heart,
 } from "lucide-react";
@@ -15,7 +15,7 @@ export interface NavItem {
   icon?: LucideIcon;
   roles?: NavRole[]; // undefined = visible to everyone
   children?: NavItem[];
-  badgeKey?: "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications";
+  badgeKey?: "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications" | "pendingReturns";
   end?: boolean;
   external?: boolean;
 }
@@ -117,6 +117,7 @@ export const vendorNav: NavSection[] = [
       { id: "v-overview", label: "Overview", to: "/vendor", icon: LayoutDashboard, end: true },
       { id: "v-products", label: "Products", to: "/vendor/products", icon: Package },
       { id: "v-orders", label: "Orders", to: "/vendor/orders", icon: ShoppingBag, badgeKey: "newOrders" },
+      { id: "v-returns", label: "Returns", to: "/vendor/returns", icon: PackageX, badgeKey: "pendingReturns" },
       { id: "v-campaigns", label: "Ad Campaigns", to: "/vendor/campaigns", icon: Megaphone },
       { id: "v-analytics", label: "Analytics", to: "/vendor/analytics", icon: BarChart3 },
       { id: "v-payments", label: "Payments", to: "/vendor/payments", icon: Wallet },
