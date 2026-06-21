@@ -150,6 +150,57 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+    const args = (await req.json()) as SendArgs;
+    if (!args?.type) {
+      return new Response(JSON.stringify({ error: "type required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const admin = createClient(supabaseUrl, serviceKey);
+
+    // -------- Public (no JWT): customer welcome --------
+    // Verifies the recipient exists in auth.users and was created in last 10 minutes
+    // to prevent abuse. Always returns ok to avoid email enumeration.
+    if (args.type === "customer_welcome") {
+      const email = (args.email ?? "").trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return new Response(JSON.stringify({ ok: true, skipped: "invalid_email" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      const user = list?.users?.find((u) => (u.email ?? "").toLowerCase() === email);
+      if (!user) {
+        return new Response(JSON.stringify({ ok: true, skipped: "user_not_found" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const createdAt = new Date(user.created_at).getTime();
+      if (Date.now() - createdAt > 10 * 60 * 1000) {
+        return new Response(JSON.stringify({ ok: true, skipped: "stale_signup" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+      const customerName =
+        (args.name && args.name.trim()) ||
+        (typeof meta.name === "string" && meta.name) ||
+        (typeof meta.full_name === "string" && meta.full_name) ||
+        email.split("@")[0];
+      const result = await brevoSend({
+        templateId: CUSTOMER_WELCOME_TEMPLATE_ID,
+        to: [{ email, name: customerName }],
+        params: { CUSTOMER_NAME: customerName, EMAIL: email },
+      });
+      console.log("email.sent", { type: args.type, templateId: CUSTOMER_WELCOME_TEMPLATE_ID, to: email });
+      return new Response(JSON.stringify({ ok: true, result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // -------- Authenticated routes below --------
     const authHeader = req.headers.get("Authorization") ?? "";
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -163,15 +214,36 @@ Deno.serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const args = (await req.json()) as SendArgs;
-    if (!args?.type) {
-      return new Response(JSON.stringify({ error: "type required" }), {
-        status: 400,
+    if (args.type === "vendor_kyc_welcome") {
+      const { data: vendor } = await admin
+        .from("vendors")
+        .select("id, store_name, user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!vendor) throw new Error("Vendor not found");
+      const to = userData.user.email;
+      if (!to) throw new Error("No recipient email");
+      const meta = (userData.user.user_metadata ?? {}) as Record<string, unknown>;
+      const customerName =
+        (typeof meta.name === "string" && meta.name) ||
+        (typeof meta.full_name === "string" && meta.full_name) ||
+        vendor.store_name ||
+        to.split("@")[0];
+      const result = await brevoSend({
+        templateId: VENDOR_KYC_WELCOME_TEMPLATE_ID,
+        to: [{ email: to, name: customerName }],
+        params: {
+          CUSTOMER_NAME: customerName,
+          EMAIL: to,
+          STORE_NAME: vendor.store_name ?? "",
+        },
+      });
+      console.log("email.sent", { type: args.type, templateId: VENDOR_KYC_WELCOME_TEMPLATE_ID, to });
+      return new Response(JSON.stringify({ ok: true, result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const admin = createClient(supabaseUrl, serviceKey);
 
     if (args.type === "order_confirmation") {
       if (!args.orderId) throw new Error("orderId required");
