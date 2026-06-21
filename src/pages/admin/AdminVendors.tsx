@@ -161,6 +161,15 @@ const AdminVendors = () => {
                     {v.verification_status}
                   </Badge>
 
+                  {/* View Core KYC Details */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setReviewVendorId(v.id)}
+                  >
+                    <FileSearch className="h-4 w-4 mr-1" /> View Core KYC Details
+                  </Button>
+
                   {/* Verify toggle */}
                   <Button
                     size="sm"
@@ -201,6 +210,13 @@ const AdminVendors = () => {
           ))}
         </div>
       )}
+
+      <KYCReviewSheet
+        vendorId={reviewVendorId}
+        open={!!reviewVendorId}
+        onOpenChange={(o) => { if (!o) setReviewVendorId(null); }}
+        onChanged={fetchVendors}
+      />
     </div>
   );
 };
