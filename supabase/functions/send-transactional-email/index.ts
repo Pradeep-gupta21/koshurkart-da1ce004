@@ -19,9 +19,11 @@ const FROM_EMAIL = Deno.env.get("BREVO_FROM_EMAIL") ?? "no-reply@koshurkart.in";
 const FROM_NAME = Deno.env.get("BREVO_FROM_NAME") ?? "Koshur Kart";
 
 interface SendArgs {
-  type: "order_confirmation" | "return_requested";
+  type: "order_confirmation" | "return_requested" | "customer_welcome" | "vendor_kyc_welcome";
   orderId?: string;
   orderItemId?: string;
+  email?: string;
+  name?: string;
 }
 
 function esc(s: unknown) {
