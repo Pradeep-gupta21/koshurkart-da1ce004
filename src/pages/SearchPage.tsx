@@ -10,6 +10,7 @@ import ProductCard from "@/components/product/ProductCard";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
+import { CATEGORY_SLUGS, formatCategoryLabel } from "@/config/categories";
 import { productService } from "@/services/productService";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
