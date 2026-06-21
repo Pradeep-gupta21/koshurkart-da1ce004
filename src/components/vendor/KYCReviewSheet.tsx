@@ -48,7 +48,7 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
   const [verificationReason, setVerificationReason] = useState("");
   const [acting, setActing] = useState(false);
   const [auditLog, setAuditLog] = useState<any[]>([]);
-  const [profile, setProfile] = useState<{ email?: string | null; phone?: string | null; full_name?: string | null } | null>(null);
+  const [profile, setProfile] = useState<{ email?: string | null; phone?: string | null; name?: string | null } | null>(null);
 
   const loadAudit = async (id: string) => {
     try {
