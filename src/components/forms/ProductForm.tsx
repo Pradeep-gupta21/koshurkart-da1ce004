@@ -25,7 +25,7 @@ interface ProductFormProps {
 }
 
 const defaultValues: ProductFormValues = {
-  title: "", description: "", price: "", discountPrice: "", stock: "", category: "Electronics", images: "",
+  title: "", description: "", price: "", discountPrice: "", stock: "", category: categories[0].slug, images: "",
 };
 
 const ProductForm = ({ initialValues, isEditing = false, onSubmit }: ProductFormProps) => {
