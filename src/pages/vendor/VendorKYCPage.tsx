@@ -111,6 +111,9 @@ const VendorKYCPage = () => {
         kyc_doc_business: uploaded.business,
       });
       await refreshVendor();
+      supabase.functions
+        .invoke("send-transactional-email", { body: { type: "vendor_kyc_welcome" } })
+        .catch((e) => console.warn("vendor welcome email failed", e));
       toast({ title: "KYC submitted", description: "We'll review your documents shortly." });
       navigate("/vendor", { replace: true });
     } catch (e: any) {
