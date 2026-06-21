@@ -79,7 +79,7 @@ const VendorReturns = () => {
     const { error } = await supabase.rpc("vendor_approve_return", { _order_item_id: id });
     setActing(null);
     if (error) {
-      logger.error("vendor.return_approve", { id, code: (error as any).code, message: error.message });
+      logger.error("vendor.return_approve", error.message, { id, code: (error as any).code });
       toast({ title: "Approval failed", description: error.message, variant: "destructive" });
       return;
     }
@@ -92,7 +92,7 @@ const VendorReturns = () => {
     const { error } = await supabase.rpc("vendor_reject_return", { _order_item_id: id });
     setActing(null);
     if (error) {
-      logger.error("vendor.return_reject", { id, code: (error as any).code, message: error.message });
+      logger.error("vendor.return_reject", error.message, { id, code: (error as any).code });
       toast({ title: "Rejection failed", description: error.message, variant: "destructive" });
       return;
     }

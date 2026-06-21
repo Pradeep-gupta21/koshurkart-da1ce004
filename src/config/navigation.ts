@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, ShieldAlert, Megaphone, Wallet, LayoutGrid,
-  MessageSquare, IndianRupee, CreditCard, Settings, Package, BarChart3,
+  MessageSquare, IndianRupee, CreditCard, Settings, Package, PackageX, BarChart3,
   ShoppingBag, Bell, Home, Tag, Sparkles, ShoppingCart, User as UserIcon,
   Star, Store, HelpCircle, LogIn, FileText, Heart,
 } from "lucide-react";

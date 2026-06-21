@@ -8,7 +8,7 @@ import {
 } from "@/config/navigation";
 
 export type BadgeMap = Partial<Record<
-  "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications",
+  "pendingVendors" | "suspiciousReviews" | "pendingPayments" | "newOrders" | "unreadNotifications" | "pendingReturns",
   number
 >>;
 
@@ -76,13 +76,15 @@ export function useVendorBadges(): BadgeMap {
     staleTime: 30_000,
     refetchInterval: 60_000,
     queryFn: async (): Promise<BadgeMap> => {
-      const [orders, notifications] = await Promise.all([
+      const [orders, notifications, returns] = await Promise.all([
         supabase.from("order_items").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId!),
         supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user!.id).eq("is_read", false),
+        supabase.from("order_items").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId!).eq("return_status", "requested"),
       ]);
       return {
         newOrders: orders.count ?? 0,
         unreadNotifications: notifications.count ?? 0,
+        pendingReturns: returns.count ?? 0,
       };
     },
   });
