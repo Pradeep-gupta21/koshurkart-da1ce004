@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { vendorService } from "@/services/vendorService";
+import { supabase } from "@/integrations/supabase/client";
 import { kycBankSchema, kycBusinessSchema, BUSINESS_TYPES, MAX_DOC_BYTES } from "@/lib/validators/kycSchema";
 import type { KYCBankForm, KYCBusinessForm } from "@/lib/validators/kycSchema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
