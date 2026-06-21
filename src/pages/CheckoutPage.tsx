@@ -9,6 +9,7 @@ import { useCart } from "@/contexts/CartContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/hooks/useAuth";
 import { paymentService, type CheckoutResult } from "@/services/paymentService";
+import { supabase } from "@/integrations/supabase/client";
 import { analyticsService } from "@/services/analyticsService";
 import { PricingDebugBox } from "@/components/checkout/PricingDebugBox";
 
