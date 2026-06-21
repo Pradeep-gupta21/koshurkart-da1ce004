@@ -117,6 +117,7 @@ export const vendorNav: NavSection[] = [
       { id: "v-overview", label: "Overview", to: "/vendor", icon: LayoutDashboard, end: true },
       { id: "v-products", label: "Products", to: "/vendor/products", icon: Package },
       { id: "v-orders", label: "Orders", to: "/vendor/orders", icon: ShoppingBag, badgeKey: "newOrders" },
+      { id: "v-returns", label: "Returns", to: "/vendor/returns", icon: PackageX, badgeKey: "pendingReturns" },
       { id: "v-campaigns", label: "Ad Campaigns", to: "/vendor/campaigns", icon: Megaphone },
       { id: "v-analytics", label: "Analytics", to: "/vendor/analytics", icon: BarChart3 },
       { id: "v-payments", label: "Payments", to: "/vendor/payments", icon: Wallet },
