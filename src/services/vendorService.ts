@@ -14,6 +14,7 @@ export interface KYCSubmission {
   bank_account_holder: string;
   bank_account_number: string; // raw — will be masked before persisting
   bank_ifsc: string;
+  checkout_display_name: 'store' | 'bank';
 }
 
 // Columns on `vendors` that are safe for any reader (anon/authenticated).

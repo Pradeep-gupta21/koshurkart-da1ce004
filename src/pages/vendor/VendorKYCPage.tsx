@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, FileText, Loader2, Upload } from "lucide-react";
 
@@ -34,6 +35,7 @@ const VendorKYCPage = () => {
     bank_account_holder: "",
     bank_account_number: "",
     bank_ifsc: "",
+    checkout_display_name: "store",
   });
   const [docs, setDocs] = useState<{ pan?: File; address?: File; business?: File }>({});
   const [uploaded, setUploaded] = useState<{ pan?: string; address?: string; business?: string }>({});
@@ -208,6 +210,30 @@ const VendorKYCPage = () => {
                 <Input value={bank.bank_ifsc} maxLength={11}
                   onChange={(e) => setBank({ ...bank, bank_ifsc: e.target.value.toUpperCase() })} />
                 {errs.bank_ifsc && <p className="text-xs text-destructive mt-1">{errs.bank_ifsc}</p>}
+              </div>
+              <div className="rounded-lg border p-3 space-y-2">
+                <Label>Choose the name displayed to customers during checkout payment</Label>
+                <RadioGroup
+                  value={bank.checkout_display_name}
+                  onValueChange={(v: "store" | "bank") => setBank({ ...bank, checkout_display_name: v })}
+                  className="gap-2"
+                >
+                  <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent/40 transition-colors">
+                    <RadioGroupItem value="store" id="cdn-store" className="mt-1" />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">My Store Name</p>
+                      <p className="text-xs text-muted-foreground">Shows your Koshur Kart registered store name in the payment modal.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent/40 transition-colors">
+                    <RadioGroupItem value="bank" id="cdn-bank" className="mt-1" />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium">My Registered Bank Account Holder Name</p>
+                      <p className="text-xs text-muted-foreground">Shows your official personal or business legal bank holder name.</p>
+                    </div>
+                  </label>
+                </RadioGroup>
+                {errs.checkout_display_name && <p className="text-xs text-destructive mt-1">{errs.checkout_display_name}</p>}
               </div>
               <div className="flex justify-between pt-2">
                 <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
