@@ -134,7 +134,30 @@ const AdminOverview = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold text-foreground">Platform Overview</h1>
-        <TimeRangeSelector value={range} onChange={setRange} />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const { data, error } = await supabase.rpc("admin_refresh_trending_scores");
+              if (error) {
+                toast({ title: "Refresh failed", description: error.message, variant: "destructive" });
+                return;
+              }
+              const result = data as { ok?: boolean; skipped?: boolean; error?: string } | null;
+              if (result?.ok === false) {
+                toast({ title: "Refresh failed", description: result.error ?? "Unknown error", variant: "destructive" });
+              } else if (result?.skipped) {
+                toast({ title: "Already running", description: "A trending refresh is in progress." });
+              } else {
+                toast({ title: "Trending scores refreshed" });
+              }
+            }}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" /> Refresh Trending
+          </Button>
+          <TimeRangeSelector value={range} onChange={setRange} />
+        </div>
       </div>
 
       {/* Core stats */}
