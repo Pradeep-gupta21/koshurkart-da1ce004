@@ -117,6 +117,7 @@ const CheckoutPage = () => {
     // choice (store name vs. bank account holder name). Multi-vendor carts fall
     // back to the platform name.
     let modalName = "Koshur Kart";
+    let preferredVendorName = "";
     try {
       const vendorIds = Array.from(
         new Set(items.map((i) => (i.product as any).vendorId).filter(Boolean) as string[]),
@@ -135,18 +136,27 @@ const CheckoutPage = () => {
             .maybeSingle();
           resolved = (v?.store_name ?? "").trim();
         }
-        if (resolved) modalName = `Koshur Kart - ${resolved}`;
+        if (resolved) {
+          modalName = `Koshur Kart - ${resolved}`;
+          preferredVendorName = resolved;
+        }
+      } else if (vendorIds.length > 1) {
+        preferredVendorName = `${vendorIds.length} vendors`;
       }
     } catch (e) {
       console.warn("Failed to resolve vendor display name", e);
     }
+
+    const vendorDescription = preferredVendorName
+      ? `Order #${currentOrderId.slice(0, 8)} · Fulfillment via ${preferredVendorName}`
+      : `Order #${currentOrderId.slice(0, 8)}`;
 
     const options = {
       key: razorpayKeyId,
       amount: Math.round(serverTotal * 100),
       currency: "INR",
       name: modalName,
-      description: `Order #${currentOrderId.slice(0, 8)}`,
+      description: vendorDescription,
       image: logoUrl,
       order_id: razorpayOrderId,
       prefill: {
