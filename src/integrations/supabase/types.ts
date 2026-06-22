@@ -978,7 +978,9 @@ export type Database = {
           order_id: string | null
           product_id: string
           rating: number
+          title: string | null
           user_id: string
+          videos: string[]
         }
         Insert: {
           comment?: string | null
@@ -993,7 +995,9 @@ export type Database = {
           order_id?: string | null
           product_id: string
           rating?: number
+          title?: string | null
           user_id: string
+          videos?: string[]
         }
         Update: {
           comment?: string | null
@@ -1008,7 +1012,9 @@ export type Database = {
           order_id?: string | null
           product_id?: string
           rating?: number
+          title?: string | null
           user_id?: string
+          videos?: string[]
         }
         Relationships: [
           {
