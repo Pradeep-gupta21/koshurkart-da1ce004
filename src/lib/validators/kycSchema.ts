@@ -41,8 +41,8 @@ export const kycBankSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(IFSC_REGEX, "Invalid IFSC (e.g. HDFC0001234)"),
-  checkout_display_name: z.enum(["store", "bank"], {
-    required_error: "Please choose the name shown to customers at checkout",
+  checkout_display_name: z.enum(["store", "bank"] as const).refine((v) => !!v, {
+    message: "Please choose the name shown to customers at checkout",
   }),
 });
 
