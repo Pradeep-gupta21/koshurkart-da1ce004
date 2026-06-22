@@ -245,7 +245,7 @@ const ProfilePage = () => {
       </Card>
 
       {/* Recently Viewed */}
-      <RecentlyViewedSection className="!container-none !mx-0 !px-0 !mt-0" />
+      <RecentlyViewedSection />
 
 
 
