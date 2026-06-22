@@ -26,9 +26,14 @@ const COLORS = [
   "hsl(280, 60%, 50%)",
 ];
 
+const COMMISSION_RATE = 0.07;
+
+type ChartView = "combined" | "gross" | "commission";
+
 const AdminOverview = () => {
   const { toast } = useToast();
   const [range, setRange] = useState<TimeRange>("monthly");
+  const [chartView, setChartView] = useState<ChartView>("combined");
   const { formatPrice } = useCurrency();
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
