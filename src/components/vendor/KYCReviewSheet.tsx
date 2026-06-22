@@ -250,6 +250,15 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
               <Field label="Holder" value={data.bank_account_holder} />
               <Field label="Account" value={data.bank_account_number_masked} />
               <Field label="IFSC" value={data.bank_ifsc} />
+              <Field
+                label="Checkout Display"
+                value={
+                  data.checkout_display_name === "bank"
+                    ? `Bank holder name (${data.bank_account_holder || "—"})`
+                    : `Store name (${data.store_name || "—"})`
+                }
+              />
+              <Field label="Razorpay Linked Acct" value={data.razorpay_account_id} />
             </section>
 
 
