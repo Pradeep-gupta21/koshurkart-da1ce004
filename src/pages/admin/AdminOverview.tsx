@@ -378,30 +378,8 @@ const AdminOverview = () => {
         </Card>
       </div>
 
-      {/* Top vendors */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-2">
-          <Trophy className="h-5 w-5 text-accent" />
-          <CardTitle>Top Vendors by Revenue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {analytics?.topVendors && analytics.topVendors.length > 0 ? (
-            <div className="space-y-3">
-              {analytics.topVendors.map((v, i) => (
-                <div key={v.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-muted-foreground w-6">{i + 1}.</span>
-                    <span className="font-medium text-sm">{v.name}</span>
-                  </div>
-                  <span className="font-semibold text-sm tabular-nums">{formatPrice(Number(v.revenue))}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No vendor revenue data yet.</p>
-          )}
-        </CardContent>
-      </Card>
+
+
 
       {/* Suspicious clicks detail */}
       {suspiciousClicks.length > 0 && (
