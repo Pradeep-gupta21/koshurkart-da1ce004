@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Store, ShoppingCart, Package, IndianRupee, Megaphone, AlertTriangle, Trophy, Archive, RefreshCw } from "lucide-react";
+import { Users, Store, ShoppingCart, Package, IndianRupee, Megaphone, AlertTriangle, Trophy, Archive, RefreshCw, TrendingUp, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Badge } from "@/components/ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { analyticsService } from "@/services/analyticsService";
 import { TimeRangeSelector, type TimeRange } from "@/components/analytics/TimeRangeSelector";
 import {
@@ -24,9 +26,14 @@ const COLORS = [
   "hsl(280, 60%, 50%)",
 ];
 
+const COMMISSION_RATE = 0.07;
+
+type ChartView = "combined" | "gross" | "commission";
+
 const AdminOverview = () => {
   const { toast } = useToast();
   const [range, setRange] = useState<TimeRange>("monthly");
+  const [chartView, setChartView] = useState<ChartView>("combined");
   const { formatPrice } = useCurrency();
   const [stats, setStats] = useState({ users: 0, vendors: 0, orders: 0, revenue: 0, products: 0 });
   const [loading, setLoading] = useState(true);
@@ -122,13 +129,22 @@ const AdminOverview = () => {
     }, []),
   });
 
+  const commissionEarnings = stats.revenue * COMMISSION_RATE;
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
     { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
-    { label: "Revenue", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-secondary" },
+    { label: "Gross Marketplace Sales", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-primary", hint: "100% of customer order value" },
+    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "7% of gross sales" },
   ];
+
+  const revenueChartData = useMemo(() => {
+    return (chartData?.revenueSeries ?? []).map(d => ({
+      ...d,
+      commission: Number(d.revenue) * COMMISSION_RATE,
+    }));
+  }, [chartData]);
 
   return (
     <div className="space-y-8">
@@ -161,8 +177,8 @@ const AdminOverview = () => {
       </div>
 
       {/* Core stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {cards.map(({ label, value, icon: Icon, color }) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {cards.map(({ label, value, icon: Icon, color, hint }: any) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -170,29 +186,98 @@ const AdminOverview = () => {
             </CardHeader>
             <CardContent>
               {loading ? <div className="h-8 w-20 bg-muted animate-pulse rounded" /> : (
-                <p className="text-2xl font-bold text-foreground">{value}</p>
+                <>
+                  <p className="text-2xl font-bold text-foreground">{value}</p>
+                  {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+                </>
               )}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Revenue Chart */}
+      {/* Revenue Chart: Gross vs Commission */}
       <Card>
-        <CardHeader><CardTitle>Platform Revenue</CardTitle></CardHeader>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Platform Revenue — Gross Sales vs 7% Commission
+          </CardTitle>
+          <ToggleGroup
+            type="single"
+            value={chartView}
+            onValueChange={(v) => v && setChartView(v as ChartView)}
+            size="sm"
+            variant="outline"
+          >
+            <ToggleGroupItem value="gross">Gross Sales</ToggleGroupItem>
+            <ToggleGroupItem value="commission">Commissions</ToggleGroupItem>
+            <ToggleGroupItem value="combined">Combined</ToggleGroupItem>
+          </ToggleGroup>
+        </CardHeader>
         <CardContent>
           {chartsLoading ? <div className="h-64 bg-muted animate-pulse rounded" /> : (
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={chartData?.revenueSeries ?? []}>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={revenueChartData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip contentStyle={{ borderRadius: '0.5rem', border: '1px solid hsl(214,32%,91%)' }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatPrice(Number(v))} width={90} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '0.5rem', border: '1px solid hsl(214,32%,91%)' }}
+                  formatter={(v: number, name) => [formatPrice(Number(v)), name]}
+                />
                 <Legend />
-                <Area type="monotone" dataKey="revenue" stroke={COLORS[0]} fill={COLORS[0]} fillOpacity={0.15} name="Revenue (₹)" />
-                <Area type="monotone" dataKey="orders" stroke={COLORS[1]} fill={COLORS[1]} fillOpacity={0.1} name="Orders" />
-              </AreaChart>
+                {(chartView === "gross" || chartView === "combined") && (
+                  <Line type="monotone" dataKey="revenue" stroke="hsl(217, 91%, 55%)" strokeWidth={2.5} name="Gross Marketplace Volume" dot={{ r: 3 }} />
+                )}
+                {(chartView === "commission" || chartView === "combined") && (
+                  <Line type="monotone" dataKey="commission" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} name="Platform Commission (7%)" dot={{ r: 3 }} />
+                )}
+              </LineChart>
             </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Vendor Performance Quick-Board */}
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2">
+          <Trophy className="h-5 w-5 text-accent" />
+          <CardTitle>Vendor Performance Quick-Board</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {analytics?.topVendors && analytics.topVendors.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Vendor Store</TableHead>
+                    <TableHead className="text-right">Orders Processed</TableHead>
+                    <TableHead className="text-right">Gross Revenue</TableHead>
+                    <TableHead className="text-right">Vendor Earnings (93%)</TableHead>
+                    <TableHead className="text-right">Platform Commission (7%)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analytics.topVendors.map((v: any) => {
+                    const gross = Number(v.revenue);
+                    const commission = gross * COMMISSION_RATE;
+                    const earnings = gross - commission;
+                    return (
+                      <TableRow key={v.id}>
+                        <TableCell className="font-medium">{v.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{v.orders ?? 0}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatPrice(gross)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-secondary font-semibold">{formatPrice(earnings)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-primary font-semibold">{formatPrice(commission)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No vendor sales data yet.</p>
           )}
         </CardContent>
       </Card>
@@ -293,30 +378,8 @@ const AdminOverview = () => {
         </Card>
       </div>
 
-      {/* Top vendors */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-2">
-          <Trophy className="h-5 w-5 text-accent" />
-          <CardTitle>Top Vendors by Revenue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {analytics?.topVendors && analytics.topVendors.length > 0 ? (
-            <div className="space-y-3">
-              {analytics.topVendors.map((v, i) => (
-                <div key={v.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-muted-foreground w-6">{i + 1}.</span>
-                    <span className="font-medium text-sm">{v.name}</span>
-                  </div>
-                  <span className="font-semibold text-sm tabular-nums">{formatPrice(Number(v.revenue))}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No vendor revenue data yet.</p>
-          )}
-        </CardContent>
-      </Card>
+
+
 
       {/* Suspicious clicks detail */}
       {suspiciousClicks.length > 0 && (
