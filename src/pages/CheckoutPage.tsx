@@ -112,11 +112,36 @@ const CheckoutPage = () => {
     // 256×256 PNG served from the Lovable CDN — Razorpay requires an absolute URL.
     const logoUrl = `${window.location.origin}${koshurkartLogoAsset.url}`;
 
+    // Resolve a vendor-preferred display name for the Razorpay modal title.
+    // When the cart contains a single vendor we honour their `checkout_display_name`
+    // choice (store name vs. bank account holder name). Multi-vendor carts fall
+    // back to the platform name.
+    let modalName = "KoshurKart";
+    try {
+      const vendorIds = Array.from(
+        new Set(items.map((i) => (i.product as any).vendorId).filter(Boolean) as string[]),
+      );
+      if (vendorIds.length === 1) {
+        const { data: v } = await supabase
+          .from("vendors")
+          .select("store_name, checkout_display_name")
+          .eq("id", vendorIds[0])
+          .maybeSingle();
+        const { data: kyc } = await supabase.rpc("get_vendor_admin", { _vendor_id: vendorIds[0] }).maybeSingle?.() ?? { data: null };
+        const holder = (kyc as any)?.bank_account_holder as string | undefined;
+        const preferred =
+          v?.checkout_display_name === "bank" && holder ? holder : v?.store_name;
+        if (preferred) modalName = `Koshur Kart - ${preferred}`;
+      }
+    } catch (e) {
+      logger.warn("Failed to resolve vendor display name", e);
+    }
+
     const options = {
       key: razorpayKeyId,
       amount: Math.round(serverTotal * 100),
       currency: "INR",
-      name: "KoshurKart",
+      name: modalName,
       description: `Order #${currentOrderId.slice(0, 8)}`,
       image: logoUrl,
       order_id: razorpayOrderId,
