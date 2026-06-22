@@ -249,13 +249,21 @@ export const analyticsService = {
   /** Admin dashboard: platform-wide analytics */
   async getAdminAnalytics() {
     const [ordersRes, campaignsRes, suspiciousRes] = await Promise.all([
-      supabase.from('orders').select('total_amount'),
+      supabase.from('orders').select('id, total_amount'),
       supabase.from('ad_campaigns').select('budget, status'),
       supabase.from('suspicious_clicks').select('id', { count: 'exact', head: true }),
     ]);
 
     const orders = ordersRes.data ?? [];
     const platformRevenue = orders.reduce((s, o) => s + Number(o.total_amount), 0);
+
+    // Historical commission rate per order (from payments table)
+    const orderIds = orders.map((o: any) => o.id).filter(Boolean);
+    const rateMap = await buildOrderCommissionRateMap(orderIds);
+    const platformCommission = orders.reduce(
+      (s, o: any) => s + Number(o.total_amount) * (rateMap.get(o.id) ?? 0),
+      0,
+    );
 
     const campaigns = campaignsRes.data ?? [];
     const adRevenue = campaigns
@@ -265,26 +273,39 @@ export const analyticsService = {
     const { data: topVendorData } = await supabase
       .from('order_items')
       .select('vendor_id, order_id, price, quantity, vendors(store_name)');
-    const vendorRevMap: Record<string, { name: string; revenue: number; orderIds: Set<string> }> = {};
+    const vendorRevMap: Record<string, { name: string; revenue: number; commission: number; orderIds: Set<string> }> = {};
     for (const item of topVendorData ?? []) {
       const vid = (item as any).vendor_id;
       if (!vid) continue;
-      if (!vendorRevMap[vid]) vendorRevMap[vid] = { name: (item as any).vendors?.store_name ?? 'Unknown', revenue: 0, orderIds: new Set() };
-      vendorRevMap[vid].revenue += Number(item.price) * item.quantity;
-      if ((item as any).order_id) vendorRevMap[vid].orderIds.add((item as any).order_id);
+      if (!vendorRevMap[vid]) vendorRevMap[vid] = { name: (item as any).vendors?.store_name ?? 'Unknown', revenue: 0, commission: 0, orderIds: new Set() };
+      const lineRevenue = Number(item.price) * item.quantity;
+      const oid = (item as any).order_id as string | null;
+      const rate = oid ? (rateMap.get(oid) ?? 0) : 0;
+      vendorRevMap[vid].revenue += lineRevenue;
+      vendorRevMap[vid].commission += lineRevenue * rate;
+      if (oid) vendorRevMap[vid].orderIds.add(oid);
     }
     const topVendors = Object.entries(vendorRevMap)
-      .map(([id, v]) => ({ id, name: v.name, revenue: v.revenue, orders: v.orderIds.size }))
+      .map(([id, v]) => ({
+        id,
+        name: v.name,
+        revenue: v.revenue,
+        commission: v.commission,
+        earnings: v.revenue - v.commission,
+        orders: v.orderIds.size,
+      }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
     return {
       platformRevenue,
+      platformCommission,
       adRevenue,
       topVendors,
       suspiciousClickCount: suspiciousRes.count ?? 0,
     };
   },
+
 
   /** Admin chart data with time range */
   async getAdminChartData(range: TimeRange): Promise<AdminChartData> {
