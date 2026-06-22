@@ -109,7 +109,14 @@ export const LocationProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setLocationByPincode = useCallback(async (pincode: string) => {
-    const info = await locationService.lookup(pincode);
+    let info;
+    try {
+      info = await locationService.lookup(pincode);
+    } catch (e) {
+      logger.error("LocationContext.setLocationByPincode", "lookup failed", e);
+      setIsServiceable(null);
+      return { ok: false, message: "We couldn't verify this pincode right now. Please try again." };
+    }
     if (!info.serviceable) {
       setIsServiceable(false);
       return { ok: false, message: "We don't deliver to this pincode yet." };

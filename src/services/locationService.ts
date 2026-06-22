@@ -60,8 +60,20 @@ async function fetchJson(path: string, init?: RequestInit) {
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok && res.status !== 404) throw new Error(`Location ${path} failed (${res.status})`);
-  return res.json();
+  const json = await res.json().catch(() => null);
+  if (!res.ok && res.status !== 404) {
+    logger.error("locationService.fetchJson", "Location edge function failed", {
+      path,
+      status: res.status,
+      body: json,
+    });
+    if (path === "lookup" && init?.method === "POST") {
+      const rawBody = typeof init.body === "string" ? JSON.parse(init.body || "{}") : {};
+      return { serviceable: false, pincode: rawBody.pincode, fallback: true };
+    }
+    throw new Error(`Location ${path} failed (${res.status})`);
+  }
+  return json;
 }
 
 export const locationService = {
