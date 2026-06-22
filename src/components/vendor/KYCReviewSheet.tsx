@@ -185,9 +185,14 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
                   .filter(({ key, optional }) => !optional || !!docUrls[key])
                   .map(({ key, label, optional }) => (
                   <div key={key} className="rounded-lg border bg-card p-3 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      {label}
+                    <div className="flex items-center justify-between gap-2 text-sm font-medium">
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        {label}
+                      </span>
+                      {optional && (
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Optional</span>
+                      )}
                     </div>
                     {docUrls[key] ? (
                       <>
