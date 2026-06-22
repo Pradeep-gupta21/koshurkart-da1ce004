@@ -131,20 +131,20 @@ const AdminOverview = () => {
     }, []),
   });
 
-  const commissionEarnings = stats.revenue * COMMISSION_RATE;
+  const commissionEarnings = analytics?.platformCommission ?? 0;
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
     { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
     { label: "Gross Marketplace Sales", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-primary", hint: "100% of customer order value" },
-    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "7% of gross sales" },
+    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "Actual commission charged per order" },
   ];
 
   const revenueChartData = useMemo(() => {
     return (chartData?.revenueSeries ?? []).map(d => ({
       ...d,
-      commission: Number(d.revenue) * COMMISSION_RATE,
+      commission: Number(d.commission ?? 0),
     }));
   }, [chartData]);
 
