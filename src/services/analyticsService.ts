@@ -313,22 +313,30 @@ export const analyticsService = {
     const buckets = generateBuckets(range);
 
     const [ordersRes, campaignsRes, vendorsRes, suspiciousRes, orderItemsRes] = await Promise.all([
-      supabase.from('orders').select('total_amount, created_at').gte('created_at', rangeStart),
+      supabase.from('orders').select('id, total_amount, created_at').gte('created_at', rangeStart),
       supabase.from('ad_campaigns').select('budget, status, created_at').eq('status', 'approved').gte('created_at', rangeStart),
       supabase.from('vendors').select('id, created_at').gte('created_at', rangeStart),
       supabase.from('suspicious_clicks').select('flagged_at').gte('flagged_at', rangeStart),
       supabase.from('order_items').select('price, quantity, product_id, products!inner(category, created_at)').gte('products.created_at', '2000-01-01'),
     ]);
 
-    // Revenue series
-    const revMap = new Map<string, { revenue: number; orders: number }>();
+    // Historical commission rate per order (decimals 0..1) from payments table
+    const orderIdsInRange = (ordersRes.data ?? []).map((o: any) => o.id).filter(Boolean);
+    const rateMap = await buildOrderCommissionRateMap(orderIdsInRange);
+
+    // Revenue series — commission is computed from per-order historical rate
+    const revMap = new Map<string, { revenue: number; orders: number; commission: number }>();
     for (const o of ordersRes.data ?? []) {
       const key = bucketKey(new Date(o.created_at), range);
-      const cur = revMap.get(key) || { revenue: 0, orders: 0 };
-      cur.revenue += Number(o.total_amount);
+      const cur = revMap.get(key) || { revenue: 0, orders: 0, commission: 0 };
+      const amt = Number((o as any).total_amount);
+      const rate = rateMap.get((o as any).id) ?? 0;
+      cur.revenue += amt;
+      cur.commission += amt * rate;
       cur.orders++;
       revMap.set(key, cur);
     }
+
 
     // Ad revenue series
     const adMap = new Map<string, { adRevenue: number }>();
