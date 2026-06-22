@@ -202,7 +202,55 @@ const AdminReviews = () => {
                 </Button>
               </>
             )}
-          </div>
+      </div>
+
+      {/* Vendor Leaderboard */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Star className="h-4 w-4 text-warning fill-warning" /> Top Rated Vendors
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {topVendors.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rated vendors yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {topVendors.map((v, idx) => (
+                  <li key={v.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate"><span className="text-muted-foreground mr-2">#{idx + 1}</span>{v.store_name}</span>
+                    <span className="font-semibold text-foreground tabular-nums">{Number(v.review_rating ?? 0).toFixed(2)} ★</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" /> Lowest Rated Vendors
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {bottomVendors.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rated vendors yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {bottomVendors.map((v, idx) => (
+                  <li key={v.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate"><span className="text-muted-foreground mr-2">#{idx + 1}</span>{v.store_name}</span>
+                    <span className="font-semibold text-destructive tabular-nums">{Number(v.review_rating ?? 0).toFixed(2)} ★</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+
         </CardContent>
       </Card>
     );
