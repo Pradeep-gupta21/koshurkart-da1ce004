@@ -250,15 +250,41 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
               <Field label="Holder" value={data.bank_account_holder} />
               <Field label="Account" value={data.bank_account_number_masked} />
               <Field label="IFSC" value={data.bank_ifsc} />
-              <Field
-                label="Checkout Display"
-                value={
-                  data.checkout_display_name === "bank"
-                    ? `Bank holder name (${data.bank_account_holder || "—"})`
-                    : `Store name (${data.store_name || "—"})`
-                }
-              />
+              <div className="grid grid-cols-3 gap-2 text-sm py-2 items-start">
+                <span className="text-muted-foreground pt-2">Checkout Display</span>
+                <div className="col-span-2 space-y-2">
+                  <select
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                    value={data.checkout_display_name ?? "store"}
+                    onChange={(e) => setData({ ...data, checkout_display_name: e.target.value })}
+                    disabled={acting}
+                  >
+                    <option value="store">Store Name ({data.store_name || "—"})</option>
+                    <option value="bank">Bank Holder Name ({data.bank_account_holder || "—"})</option>
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={acting}
+                    onClick={async () => {
+                      if (!vendorId) return;
+                      setActing(true);
+                      try {
+                        const val = (data.checkout_display_name ?? "store") as "store" | "bank";
+                        await vendorService.setCheckoutDisplayName(vendorId, val);
+                        toast({ title: "Checkout display updated" });
+                        onChanged?.();
+                      } catch (e: any) {
+                        toast({ title: "Failed", description: e.message, variant: "destructive" });
+                      } finally { setActing(false); }
+                    }}
+                  >
+                    Save Checkout Display
+                  </Button>
+                </div>
+              </div>
               <Field label="Razorpay Linked Acct" value={data.razorpay_account_id} />
+
             </section>
 
 
