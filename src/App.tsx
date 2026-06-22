@@ -83,6 +83,7 @@ const App = () => (
           <CurrencyProvider>
           <LocationProvider>
           <CartProvider>
+          <WishlistProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter>
@@ -98,6 +99,7 @@ const App = () => (
                       <Route path="/search" element={<SearchPage />} />
                       <Route path="/product/:slug" element={<ProductDetailPage />} />
                       <Route path="/cart" element={<CartPage />} />
+                      <Route path="/wishlist" element={<WishlistPage />} />
                       <Route path="/auth" element={<AuthPage />} />
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
@@ -156,6 +158,7 @@ const App = () => (
               </div>
               </SidebarProvider>
             </BrowserRouter>
+          </WishlistProvider>
           </CartProvider>
           </LocationProvider>
           </CurrencyProvider>
