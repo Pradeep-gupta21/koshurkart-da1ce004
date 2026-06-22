@@ -1926,6 +1926,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_vendor_checkout_name: {
+        Args: { _vendor_id: string }
+        Returns: string
+      }
       get_vendor_financials: {
         Args: { _vendor_id: string }
         Returns: {
