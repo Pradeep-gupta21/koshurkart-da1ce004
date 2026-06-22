@@ -256,15 +256,15 @@ const AdminOverview = () => {
                     <TableHead>Vendor Store</TableHead>
                     <TableHead className="text-right">Orders Processed</TableHead>
                     <TableHead className="text-right">Gross Revenue</TableHead>
-                    <TableHead className="text-right">Vendor Earnings (93%)</TableHead>
-                    <TableHead className="text-right">Platform Commission (7%)</TableHead>
+                    <TableHead className="text-right">Vendor Earnings</TableHead>
+                    <TableHead className="text-right">Platform Commission</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {analytics.topVendors.map((v: any) => {
                     const gross = Number(v.revenue);
-                    const commission = gross * COMMISSION_RATE;
-                    const earnings = gross - commission;
+                    const commission = Number(v.commission ?? 0);
+                    const earnings = Number(v.earnings ?? gross - commission);
                     return (
                       <TableRow key={v.id}>
                         <TableCell className="font-medium">{v.name}</TableCell>
