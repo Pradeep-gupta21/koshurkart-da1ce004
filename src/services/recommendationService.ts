@@ -5,6 +5,54 @@ import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 
 export const recommendationService = {
+  /**
+   * Returns the user's most-recently viewed active products, deduplicated and
+   * ordered most-recent first. Reads from the existing analytics_events stream
+   * (no new tracking tables). Caller is responsible for handling guest users
+   * separately (see recentlyViewedStore).
+   */
+  async getRecentlyViewed(userId: string, limit = 10): Promise<Product[]> {
+    const { data: events } = await supabase
+      .from('analytics_events')
+      .select('product_id, created_at')
+      .eq('user_id', userId)
+      .eq('event_type', 'product_view')
+      .not('product_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(60);
+
+    const orderedIds: string[] = [];
+    const seen = new Set<string>();
+    for (const row of events ?? []) {
+      const pid = row.product_id as string | null;
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+      orderedIds.push(pid);
+      if (orderedIds.length >= limit) break;
+    }
+    return this.getProductsPreservingOrder(orderedIds);
+  },
+
+  /**
+   * Fetches active products for the given IDs in a single query and returns
+   * them in the same order as the input array. Inactive/deleted IDs are
+   * silently dropped.
+   */
+  async getProductsPreservingOrder(ids: string[]): Promise<Product[]> {
+    if (!ids.length) return [];
+    const { data } = await supabase
+      .from('products')
+      .select('*, vendors(store_name, pickup_state)')
+      .in('id', ids)
+      .eq('status', 'active');
+    const byId = new Map<string, Product>();
+    for (const row of data ?? []) {
+      const p = mapDbProduct(row);
+      byId.set(p.id, p);
+    }
+    return ids.map((id) => byId.get(id)).filter(Boolean) as Product[];
+  },
+
   async getPersonalizedRecommendations(userId: string, limit = 8): Promise<Product[]> {
     // No caching — user-specific and changes frequently
     const { data: viewEvents } = await supabase
