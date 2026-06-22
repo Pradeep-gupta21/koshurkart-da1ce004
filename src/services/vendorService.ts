@@ -226,6 +226,15 @@ export const vendorService = {
     return data ?? [];
   },
 
+  /** Admin: override the vendor's checkout display name preference. */
+  async setCheckoutDisplayName(vendorId: string, value: 'store' | 'bank') {
+    const { error } = await supabase
+      .from('vendors')
+      .update({ checkout_display_name: value })
+      .eq('id', vendorId);
+    if (error) throw error;
+  },
+
   /** Admin: mark a vendor's bank details as verified (or unverified). */
   async setBankVerified(vendorId: string, verified: boolean) {
     const { error } = await supabase
