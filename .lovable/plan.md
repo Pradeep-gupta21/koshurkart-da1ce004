@@ -1,60 +1,148 @@
-# Switch Razorpay from Test → Live
+# Koshur Kart — Feature Architecture Audit
 
-## Key insight
-The Razorpay key/secret are **not in source code** — they're read from edge function secrets (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`). Switching to live is a **secrets rotation**, not a code change. Order creation, verification, and webhook handling already pull these from `Deno.env.get(...)` and will use live keys automatically once rotated.
+Read-only audit. No code changes proposed or required.
 
-## Steps
+## Summary Table
 
-### 1. Rotate the three secrets (you enter values in the secure form)
-- `RAZORPAY_KEY_ID` → live `rzp_live_...` Key ID
-- `RAZORPAY_KEY_SECRET` → live Key Secret (paired with the live Key ID)
-- `RAZORPAY_WEBHOOK_SECRET` → the secret you set when creating the **live** webhook in the Razorpay Dashboard (see step 2)
-
-I'll trigger `update_secret` for these three; you paste values in the popup. Do **not** mix test and live (live Key ID with test Secret = signature failures).
-
-### 2. Create the live webhook in Razorpay Dashboard
-Razorpay Dashboard → **Settings → Webhooks** → switch to **Live mode** → Add webhook:
-- **URL:** `https://xlqzbomiuuadxcygnsal.supabase.co/functions/v1/razorpay-webhook`
-- **Secret:** generate a strong random string; use the same value in `RAZORPAY_WEBHOOK_SECRET` above
-- **Active events:** `payment.captured`, `payment.failed`
-- Save
-
-### 3. Verify end-to-end (after rotation)
-I'll run these checks and report back:
-
-| Requirement | How it's verified | Code reference |
+| # | Feature Area | Status |
 |---|---|---|
-| Order creation uses live creds | `create-razorpay-order` reads `RAZORPAY_KEY_ID/SECRET` from env, calls `api.razorpay.com/v1/orders` | `supabase/functions/create-razorpay-order/index.ts` |
-| Payment verification uses live creds | `verify-razorpay-payment` HMAC-validates with `RAZORPAY_KEY_SECRET` + re-fetches order from Razorpay API | `supabase/functions/verify-razorpay-payment/index.ts` |
-| Successful payments create/confirm orders | On verified capture → `payments.status='success'` + `orders.status='confirmed'` | verify-razorpay-payment + razorpay-webhook |
-| Failed payments do not create orders | Order row is created on checkout (pending). On `payment.failed` → `payments.status='failed'`, `orders.payment_status='failed'`. Order is **not promoted to confirmed**. Existing behavior — no change needed. | razorpay-webhook |
-| Webhook signature validation | `verifyWebhookSignature()` does constant-time HMAC-SHA256 compare against `RAZORPAY_WEBHOOK_SECRET`; rejects with 401 on mismatch; dedupes via `webhook_events` table | `supabase/functions/razorpay-webhook/index.ts` |
+| 1 | Recommendation Systems | Implemented & Working |
+| 2 | Product Discovery Systems | Implemented & Working |
+| 3 | Personalization Systems | Implemented & Working |
+| 4 | Analytics Tracking | Implemented & Working |
+| 5 | User Behavior Tracking | Implemented & Working |
+| 6 | Homepage Recommendation Sections | Implemented & Working |
+| 7 | Product Page Recommendation Sections | Implemented & Working |
+| 8 | Vendor Recommendation Systems | Partially Implemented |
+| 9 | Search & Filtering Capabilities | Implemented & Working |
+| 10 | Wishlist Functionality | Not Implemented |
+| 11 | Recently Viewed Functionality | Not Implemented |
+| 12 | Trending / Popular Product Logic | Implemented & Working |
 
-Verification commands I'll run:
-- `supabase--curl_edge_functions` GET-style probe on `create-razorpay-order` (auth required, will return 401 without a session — confirms function is up)
-- `supabase--edge_function_logs` for `create-razorpay-order` and `razorpay-webhook` after you run a real ₹1 test transaction
-- Check that `keyId` returned from `create-razorpay-order` to the client starts with `rzp_live_`
+---
 
-### 4. Clarify "failed payments do not create orders"
-Current architecture creates the `orders` row **before** payment (status `pending`), then promotes to `confirmed` only on verified capture. Failed payments leave the order in `pending`/`failed` state — they're never confirmed and don't appear as completed orders.
+## 1. Recommendation Systems — Implemented & Working
+Two parallel engines:
+- **Rule-based** `src/services/recommendationService.ts` → `getPersonalizedRecommendations`, `getSimilarProducts`, `getFrequentlyBoughtTogether` (co-purchase mining over `order_items`).
+- **Composite scoring** `src/services/aiRecommendationService.ts` → `getSmartRecommendations` (Similarity 40% + Popularity 30% + Behavior 20% + Recency 10%), `getBecauseYouViewed`, `getPopularInCategory`, `getScoredSimilarProducts`.
 
-**Question:** Is that acceptable, or do you want failed payments to **hard-delete** the pending order row? (I'd recommend leaving it for audit/retry; you already have `RetryPaymentPanel`.)
+**Tables:** `analytics_events`, `products` (category, tags, sales_count, view_count, trending_score, rating), `orders`, `order_items`
+**Frontend:** consumed by HomePage, ProductDetailPage
+**Edge functions:** none (logic runs client-side via supabase-js)
+**API calls:** direct table SELECTs + RPCs (`get_trending_products`)
 
-## Files / secrets touched
+## 2. Product Discovery Systems — Implemented & Working
+- `get_ranked_products` SQL RPC: 35% sales, 25% rating, 20% ad boost, 20% recency + locality boost on `vendor.pickup_state`.
+- `search_products` SQL RPC: full-text + filters + locality boost.
 
-**Secrets rotated** (no code changes):
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET`
+**Tables:** `products`, `vendors`, `ad_campaigns`
+**Frontend:** `HomePage.tsx`, `SearchPage.tsx`, `RegionRecommendations.tsx`
+**Services:** `productService.getRanked`, `searchService.searchProducts`
+**RPCs:** `get_ranked_products`, `search_products`
 
-**Files inspected, not modified:**
-- `supabase/functions/create-razorpay-order/index.ts`
-- `supabase/functions/verify-razorpay-payment/index.ts`
-- `supabase/functions/razorpay-webhook/index.ts`
+## 3. Personalization Systems — Implemented & Working
+- `getUserBehaviorProfile` aggregates 200 latest events; weights purchase ×4, add_to_cart ×3, view ×1.
+- Locality personalization via `LocationContext` (`userState`, pincode) flows into ranked + search RPCs.
+- Pincode serviceability filter via `useServiceability`.
+- Personalized homepage sections gated on `!!user?.id`; anonymous → trending fallback.
+- No server-side ML — deterministic TS/SQL scoring.
 
-**Edge functions redeployed:** none (secret rotation is picked up on next invocation; no redeploy needed).
+**Tables:** `analytics_events`, `products`, `orders`, `order_items`, `user_locations`, `vendor_serviceability`
+**Services:** `aiRecommendationService`, `locationService`
+**Frontend:** `HomePage.tsx`, `RegionRecommendations.tsx`, `LocalDeals.tsx`
 
-## Before you approve
-1. Have your **live** Razorpay Key ID + Key Secret ready (Razorpay Dashboard → Account & Settings → API Keys → Live mode → Generate)
-2. Decide on the webhook secret string (or let Razorpay generate one when you create the webhook)
-3. Answer the failed-order question above (default: leave as `failed`, don't delete)
+## 4. Analytics Tracking — Implemented & Working
+- `analytics_events` table (event_type, user_id, product_id, campaign_id, metadata, created_at); RLS allows anon/authenticated INSERT; only product vendor can SELECT own events.
+- Ingestion via `record_analytics_event` security-definer RPC (`analyticsService.trackEvent`).
+- AFTER INSERT trigger `trg_analytics_event_insert` → increments `products.view_count`.
+- Vendor dashboard `VendorAnalytics.tsx` (time-series charts).
+- Admin dashboard `AdminOverview.tsx` (revenue, growth, suspicious clicks).
+
+**Tables:** `analytics_events`, `suspicious_clicks`, `products`, `orders`, `order_items`, `ad_campaigns`
+**Services:** `analyticsService` (`getVendorAnalytics`, `getVendorChartData`)
+**RPCs:** `record_analytics_event`
+
+## 5. User Behavior Tracking — Implemented & Working
+| Signal | Source | Storage |
+|---|---|---|
+| product_view | `ProductDetailPage.tsx:114` | analytics_events (+ view_count trigger) |
+| add_to_cart | `CartContext.tsx:66` | analytics_events |
+| purchase | `CheckoutPage.tsx:173/276/319` | analytics_events |
+| ad_view / ad_click | `adService` | analytics_events (+ suspicious_clicks) |
+| search query | `SearchPage` → `searchService.saveSearchQuery` | **localStorage only — not in DB** |
+
+**Gap:** search queries not persisted server-side; unavailable for personalization or analytics.
+
+## 6. Homepage Recommendation Sections — Implemented & Working
+Sections rendered in `src/pages/HomePage.tsx`:
+1. Sponsored / Auction Winners (`adService.getAuctionWinners('homepage', 4)`)
+2. "For You" — `aiRecommendationService.getSmartRecommendations` (auth only)
+3. "Because You Viewed…" — `getBecauseYouViewed` (auth only, hidden if no history)
+4. Trending — `productService.getTrending` → `get_trending_products` RPC
+5. Local Deals — `LocalDeals.tsx` → `locationService.getLocalDeals`
+6. Region Recommendations — `RegionRecommendations.tsx` (ranked + pincode-filtered)
+7. Kashmir Categories — `KashmirCategories.tsx` (static tiles)
+8. Story Section — `StorySection.tsx`
+9. Featured Vendors — `productService.getVendors` (top 6 by total_sales)
+10. All Products — `productService.getRanked({ limit: 16, userState })`
+
+## 7. Product Page Recommendation Sections — Implemented & Working
+`src/pages/ProductDetailPage.tsx`:
+- Sponsored Suggestions — `adService.getApprovedByPlacement('product')`
+- Frequently Bought Together — `recommendationService.getFrequentlyBoughtTogether` (line 152)
+- Similar Products — `aiRecommendationService.getScoredSimilarProducts` (line 145)
+- Tracks `product_view` on mount (line 114)
+
+## 8. Vendor Recommendation Systems — Partially Implemented
+**Present:** `productService.getVendors()` — top 6 approved vendors ordered by `total_sales DESC`, rendered as "Featured Vendors" strip in `HomePage.tsx:217`. Vendor info joined into product queries.
+
+**Missing:**
+- No personalized vendor recommendations (no "Vendors you may like" based on category preference or purchase history).
+- No "New Vendors" / "Top vendors in your state" sections.
+- No dedicated `vendorService` recommendation methods (existing `vendorService.ts` is order/fulfillment only).
+- Sort is purely `total_sales DESC`.
+
+**Tables:** `vendors` (total_sales, rating, trust_score, verification_status, pickup_state)
+
+## 9. Search & Filtering — Implemented & Working
+- Backend RPC `search_products` (full-text + category + price range + min rating + 6 sort options + locality boost).
+- Autocomplete RPC `get_search_suggestions` (8 results, 2-char min).
+- Frontend `SearchPage.tsx`: chips, price slider, rating selector, sort dropdown, active-filter badge.
+- Post-query pincode serviceability filter + deliverable-first sort.
+- Search history in localStorage (10 max).
+
+**Tables:** `products`, `vendors`
+**Services:** `searchService`
+**Frontend:** `SearchPage.tsx`, `components/search/SearchBar.tsx`
+
+## 10. Wishlist Functionality — Not Implemented
+- No `wishlists` / `favorites` / `saved_items` table in any migration.
+- No service, hook, context, component, route, or UI affordance (no heart button on `ProductCard` / `ProductDetailPage`).
+- `rg "wishlist|favorites"` returns zero matches.
+
+## 11. Recently Viewed Functionality — Not Implemented
+- No table, service, or component dedicated to "Recently Viewed".
+- The raw data **exists** in `analytics_events` (event_type=`product_view` per user) and is consumed indirectly by `getBecauseYouViewed`, but there is no user-facing "Recently Viewed" strip on Home, Product, or Profile pages.
+
+## 12. Trending / Popular Product Logic — Implemented & Working
+- `products.trending_score` column.
+- `calculate_product_scores()` SQL function (7-day window: purchases ×3 + carts ×2 + views ×1).
+- Real-time triggers: `trg_analytics_event_insert` (view_count++), `on_order_status_change` (sales_count++ when delivered).
+- `get_trending_products` RPC sorts by trending_score, sales_count, view_count.
+- Used directly on Home and as fallback in both recommendation services.
+
+**Gap:** No cron / scheduled job invokes `calculate_product_scores()`; `trending_score` will drift stale unless triggered externally or via `recalculate-prices` edge function.
+
+---
+
+## Cross-Cutting Notes
+- **Caching:** `cacheService` (TTLs ~3–5 min) wraps trending, similar, FBT, search; user-personalized AI recs cached 3 min, rule-based personalized recs uncached.
+- **Anonymous users** always fall back to trending.
+- **No server-side ML model** — all "AI" is weighted-sum arithmetic.
+- **Three notable gaps:** Wishlist (full feature), Recently Viewed (frontend surfacing only), Vendor personalization (logic only).
+- **Search history** is device-local only.
+- **trending_score freshness** depends on an external scheduler.
+
+---
+
+This is a report only — no implementation will follow unless you request specific gaps be addressed.
