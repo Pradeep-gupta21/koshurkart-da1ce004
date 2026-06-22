@@ -150,7 +150,7 @@ const VendorSettings = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            KYC Status <Badge variant={KYC_BADGE[ks] ?? "outline"}>{ks.replace("_", " ")}</Badge>
+            KYC Status <Badge variant={KYC_BADGE[ks] ?? "outline"}>{KYC_LABEL[ks] ?? ks.replace("_", " ")}</Badge>
           </CardTitle>
           <CardDescription>
             {ks === "approved" && "Your KYC is verified."}
