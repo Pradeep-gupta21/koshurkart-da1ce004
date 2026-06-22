@@ -9,8 +9,10 @@ export interface ReviewRow {
   product_id: string;
   order_id: string | null;
   rating: number;
+  title: string | null;
   comment: string;
   images: string[];
+  videos: string[];
   helpful_count: number;
   is_verified_purchase: boolean;
   created_at: string;
@@ -116,27 +118,56 @@ export const reviewService = {
     return urls;
   },
 
+  async uploadVideos(files: File[]): Promise<string[]> {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) throw new Error('Not authenticated');
+
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage
+        .from('review-videos')
+        .upload(path, file, { contentType: file.type || 'video/mp4', upsert: false });
+      if (error) throw error;
+      const { data: signed, error: signErr } = await supabase.storage
+        .from('review-videos')
+        .createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (signErr || !signed) throw signErr ?? new Error('Failed to sign video URL');
+      urls.push(signed.signedUrl);
+    }
+    return urls;
+  },
+
   async submitReview(input: {
     productId: string;
     orderId: string;
     rating: number;
+    title?: string;
     comment: string;
     imageFiles: File[];
+    videoFiles?: File[];
   }) {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
     if (!userId) throw new Error('Not authenticated');
 
-    const images = input.imageFiles.length ? await this.uploadImages(input.imageFiles) : [];
+    const [images, videos] = await Promise.all([
+      input.imageFiles.length ? this.uploadImages(input.imageFiles) : Promise.resolve([] as string[]),
+      input.videoFiles?.length ? this.uploadVideos(input.videoFiles) : Promise.resolve([] as string[]),
+    ]);
 
     const { error } = await supabase.from('reviews').insert({
       user_id: userId,
       product_id: input.productId,
       order_id: input.orderId,
       rating: input.rating,
+      title: input.title?.trim() || null,
       comment: input.comment,
       images,
-    });
+      videos,
+    } as any);
     if (error) throw error;
   },
 

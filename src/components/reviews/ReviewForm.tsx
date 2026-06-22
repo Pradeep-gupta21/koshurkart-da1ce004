@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Star, X, Upload, Loader2 } from 'lucide-react';
+import { Star, X, Upload, Loader2, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -16,14 +17,38 @@ interface Props {
 }
 
 const MAX_IMAGES = 6;
+const MAX_VIDEOS = 2;
+const MAX_VIDEO_MB = 50;
+const MAX_VIDEO_SECONDS = 30;
 const MAX_CHARS = 2000;
+const MAX_TITLE = 150;
+
+function probeVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(v.duration);
+    };
+    v.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read video'));
+    };
+    v.src = url;
+  });
+}
 
 export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: Props) {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
+  const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [videos, setVideos] = useState<File[]>([]);
+  const [videoPreviews, setVideoPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const handleFiles = (files: FileList | null) => {
@@ -47,10 +72,47 @@ export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: 
     setPreviews(nextPreviews);
   };
 
+  const handleVideoFiles = async (files: FileList | null) => {
+    if (!files) return;
+    const next = [...videos];
+    const nextPreviews = [...videoPreviews];
+    for (const file of Array.from(files)) {
+      if (next.length >= MAX_VIDEOS) break;
+      if (!file.type.startsWith('video/')) {
+        toast.error(`${file.name} is not a video`);
+        continue;
+      }
+      if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+        toast.error(`${file.name} exceeds ${MAX_VIDEO_MB}MB`);
+        continue;
+      }
+      try {
+        const duration = await probeVideoDuration(file);
+        if (duration > MAX_VIDEO_SECONDS + 0.5) {
+          toast.error(`${file.name} exceeds ${MAX_VIDEO_SECONDS}s (was ${Math.round(duration)}s)`);
+          continue;
+        }
+      } catch {
+        toast.error(`Could not read ${file.name}`);
+        continue;
+      }
+      next.push(file);
+      nextPreviews.push(URL.createObjectURL(file));
+    }
+    setVideos(next);
+    setVideoPreviews(nextPreviews);
+  };
+
   const removeImage = (i: number) => {
     URL.revokeObjectURL(previews[i]);
     setImages(images.filter((_, idx) => idx !== i));
     setPreviews(previews.filter((_, idx) => idx !== i));
+  };
+
+  const removeVideo = (i: number) => {
+    URL.revokeObjectURL(videoPreviews[i]);
+    setVideos(videos.filter((_, idx) => idx !== i));
+    setVideoPreviews(videoPreviews.filter((_, idx) => idx !== i));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -59,8 +121,10 @@ export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: 
       productId,
       orderId,
       rating,
+      title,
       comment,
       images: [],
+      videos: [],
     });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message || 'Invalid review');
@@ -73,8 +137,10 @@ export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: 
         productId,
         orderId,
         rating,
+        title: title.trim() || undefined,
         comment: comment.trim(),
         imageFiles: images,
+        videoFiles: videos,
       });
       toast.success('Review submitted!');
       onSuccess();
@@ -109,6 +175,21 @@ export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: 
               />
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="review-title" className="mb-2 block">
+          Headline (optional)
+        </Label>
+        <Input
+          id="review-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value.slice(0, MAX_TITLE))}
+          placeholder="Sum up your experience in a few words"
+        />
+        <div className="text-xs text-muted-foreground mt-1 text-right">
+          {title.length} / {MAX_TITLE}
         </div>
       </div>
 
@@ -164,6 +245,44 @@ export default function ReviewForm({ productId, orderId, onSuccess, onCancel }: 
         </div>
         <p className="text-xs text-muted-foreground mt-2">
           Up to {MAX_IMAGES} photos. Images are compressed automatically.
+        </p>
+      </div>
+
+      <div>
+        <Label className="mb-2 block">Videos (optional)</Label>
+        <div className="flex flex-wrap gap-2">
+          {videoPreviews.map((src, i) => (
+            <div
+              key={i}
+              className="relative aspect-square w-28 rounded-lg overflow-hidden border border-border bg-muted group"
+            >
+              <video src={src} className="w-full h-full object-cover" muted playsInline />
+              <button
+                type="button"
+                onClick={() => removeVideo(i)}
+                className="absolute top-1 right-1 bg-background/90 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Remove video"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {videos.length < MAX_VIDEOS && (
+            <label className="aspect-square w-28 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors text-muted-foreground">
+              <Film className="h-5 w-5" />
+              <span className="text-[10px] mt-1">Add Video</span>
+              <input
+                type="file"
+                accept="video/*"
+                multiple
+                className="hidden"
+                onChange={(e) => handleVideoFiles(e.target.files)}
+              />
+            </label>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Up to {MAX_VIDEOS} videos · max {MAX_VIDEO_MB}MB and {MAX_VIDEO_SECONDS}s each.
         </p>
       </div>
 
