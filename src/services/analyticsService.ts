@@ -379,7 +379,7 @@ export const analyticsService = {
     }
 
     return {
-      revenueSeries: fillBuckets(buckets, revMap, { revenue: 0, orders: 0 }),
+      revenueSeries: fillBuckets(buckets, revMap, { revenue: 0, orders: 0, commission: 0 }),
       adRevenueSeries: fillBuckets(buckets, adMap, { adRevenue: 0 }),
       vendorGrowth: fillBuckets(buckets, vgMap, { newVendors: 0 }),
       categoryPerformance,
