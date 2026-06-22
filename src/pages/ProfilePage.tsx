@@ -20,6 +20,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useToast } from "@/hooks/use-toast";
 import SavedAddresses from "@/components/location/SavedAddresses";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import RecentlyViewedSection from "@/components/home/RecentlyViewedSection";
 
 const statusColor: Record<string, string> = {
   processing: "bg-warning/15 text-warning border-warning/30",
@@ -242,6 +243,11 @@ const ProfilePage = () => {
           <Button asChild size="sm" variant="outline"><Link to="/payments">View</Link></Button>
         </CardContent>
       </Card>
+
+      {/* Recently Viewed */}
+      <RecentlyViewedSection className="!container-none !mx-0 !px-0 !mt-0" />
+
+
 
 
       {/* Notifications */}
