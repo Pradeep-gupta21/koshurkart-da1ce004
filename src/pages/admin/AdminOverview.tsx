@@ -233,7 +233,7 @@ const AdminOverview = () => {
                   <Line type="monotone" dataKey="revenue" stroke="hsl(217, 91%, 55%)" strokeWidth={2.5} name="Gross Marketplace Volume" dot={{ r: 3 }} />
                 )}
                 {(chartView === "commission" || chartView === "combined") && (
-                  <Line type="monotone" dataKey="commission" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} name="Platform Commission (7%)" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="commission" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} name="Platform Commission" dot={{ r: 3 }} />
                 )}
               </LineChart>
             </ResponsiveContainer>
