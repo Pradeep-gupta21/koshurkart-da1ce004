@@ -16,6 +16,16 @@ export const MARKETPLACE_CATEGORIES: MarketplaceCategory[] = [
   { slug: "kahwa", label: "Kahwa" },
   { slug: "handicrafts", label: "Handicrafts" },
   { slug: "carpets", label: "Carpets" },
+  { slug: "calligraphy_art", label: "Calligraphy Art" },
+  { slug: "kashmiri_wood_art", label: "Kashmiri Wood Art" },
+  { slug: "luxury_carpets_iranian_curtains", label: "Luxury Carpets & Iranian Curtains" },
+  { slug: "traditional_clothing", label: "Traditional Clothing" },
+  { slug: "arabic_hijabs_modest_wear", label: "Arabic Hijabs & Modest Wear" },
+  { slug: "fine_art_photography", label: "Fine Art & Photography" },
+  { slug: "artisanal_local_crafts", label: "Artisanal & Local Crafts" },
+  { slug: "kashmiri_spices_kehsar", label: "Kashmiri Spices & Kehsar" },
+  { slug: "kashmiri_apples", label: "World-Famous Kashmiri Apples" },
+  { slug: "kashmiri_cherries_berries", label: "Fresh Kashmiri Cherries & Berries" },
 ];
 
 export const CATEGORY_SLUGS = MARKETPLACE_CATEGORIES.map((c) => c.slug);
