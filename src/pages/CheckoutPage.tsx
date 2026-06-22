@@ -134,7 +134,7 @@ const CheckoutPage = () => {
         if (preferred) modalName = `Koshur Kart - ${preferred}`;
       }
     } catch (e) {
-      logger.warn("Failed to resolve vendor display name", e);
+      console.warn("Failed to resolve vendor display name", e);
     }
 
     const options = {
