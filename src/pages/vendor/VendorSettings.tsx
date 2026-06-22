@@ -14,9 +14,18 @@ import { Loader2, Upload } from "lucide-react";
 
 const KYC_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   approved: "default",
+  verified: "default",
   pending: "secondary",
   rejected: "destructive",
   not_submitted: "outline",
+};
+
+const KYC_LABEL: Record<string, string> = {
+  approved: "verified",
+  verified: "verified",
+  pending: "pending",
+  rejected: "rejected",
+  not_submitted: "not submitted",
 };
 
 const VendorSettings = () => {
