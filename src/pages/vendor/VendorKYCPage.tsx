@@ -34,6 +34,7 @@ const VendorKYCPage = () => {
     bank_account_holder: "",
     bank_account_number: "",
     bank_ifsc: "",
+    checkout_display_name: "store",
   });
   const [docs, setDocs] = useState<{ pan?: File; address?: File; business?: File }>({});
   const [uploaded, setUploaded] = useState<{ pan?: string; address?: string; business?: string }>({});
