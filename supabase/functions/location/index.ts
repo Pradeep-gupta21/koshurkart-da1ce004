@@ -101,7 +101,24 @@ Deno.serve(async (req) => {
         .eq("pincode", parsed.data.pincode)
         .eq("is_active", true)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        console.error(JSON.stringify({
+          fn: "location",
+          action: "lookup",
+          pincode: parsed.data.pincode,
+          err: error.message,
+          code: error.code,
+        }));
+        log(200, { pincode: parsed.data.pincode, serviceable: false, fallback: true });
+        return new Response(JSON.stringify({
+          serviceable: false,
+          pincode: parsed.data.pincode,
+          fallback: true,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       // Best-effort usage tracking
       void supabase.rpc("record_analytics_event", {
         _event_type: "location_lookup",
