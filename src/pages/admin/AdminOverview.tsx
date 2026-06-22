@@ -203,7 +203,7 @@ const AdminOverview = () => {
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            Platform Revenue — Gross Sales vs 7% Commission
+            Platform Revenue — Gross Sales vs Commission
           </CardTitle>
           <ToggleGroup
             type="single"
