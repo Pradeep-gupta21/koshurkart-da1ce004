@@ -116,7 +116,7 @@ const CheckoutPage = () => {
     // When the cart contains a single vendor we honour their `checkout_display_name`
     // choice (store name vs. bank account holder name). Multi-vendor carts fall
     // back to the platform name.
-    let modalName = "KoshurKart";
+    let modalName = "Koshur Kart";
     try {
       const vendorIds = Array.from(
         new Set(items.map((i) => (i.product as any).vendorId).filter(Boolean) as string[]),
