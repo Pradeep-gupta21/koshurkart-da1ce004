@@ -72,10 +72,29 @@ export default function ReviewCard({ review, hasVoted, onToggleHelpful, voting }
         </div>
       </header>
 
+      {review.title && (
+        <h3 className="text-sm font-semibold text-foreground mt-3">{review.title}</h3>
+      )}
+
       {review.comment && (
-        <p className="text-sm text-foreground/90 mt-3 leading-relaxed whitespace-pre-wrap break-words">
+        <p className="text-sm text-foreground/90 mt-2 leading-relaxed whitespace-pre-wrap break-words">
           {review.comment}
         </p>
+      )}
+
+      {review.videos?.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-md">
+          {review.videos.map((src, i) => (
+            <video
+              key={i}
+              src={src}
+              controls
+              playsInline
+              preload="metadata"
+              className="w-full rounded-lg border border-border bg-muted aspect-video object-cover"
+            />
+          ))}
+        </div>
       )}
 
       {review.images?.length > 0 && <ReviewImageGallery images={review.images} />}
