@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Store, ShoppingCart, Package, IndianRupee, Megaphone, AlertTriangle, Trophy, Archive, RefreshCw } from "lucide-react";
+import { Users, Store, ShoppingCart, Package, IndianRupee, Megaphone, AlertTriangle, Trophy, Archive, RefreshCw, TrendingUp, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Badge } from "@/components/ui/badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { analyticsService } from "@/services/analyticsService";
 import { TimeRangeSelector, type TimeRange } from "@/components/analytics/TimeRangeSelector";
 import {
