@@ -1400,6 +1400,7 @@ export type Database = {
           business_type: string | null
           cancellation_rate: number | null
           category: string | null
+          checkout_display_name: string
           created_at: string
           delivery_rate: number | null
           description: string | null
@@ -1424,6 +1425,7 @@ export type Database = {
           pickup_pincode: string | null
           pickup_state: string | null
           rating: number | null
+          razorpay_account_id: string | null
           return_rate: number | null
           review_rating: number | null
           store_name: string
@@ -1448,6 +1450,7 @@ export type Database = {
           business_type?: string | null
           cancellation_rate?: number | null
           category?: string | null
+          checkout_display_name?: string
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
@@ -1472,6 +1475,7 @@ export type Database = {
           pickup_pincode?: string | null
           pickup_state?: string | null
           rating?: number | null
+          razorpay_account_id?: string | null
           return_rate?: number | null
           review_rating?: number | null
           store_name: string
@@ -1496,6 +1500,7 @@ export type Database = {
           business_type?: string | null
           cancellation_rate?: number | null
           category?: string | null
+          checkout_display_name?: string
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
@@ -1520,6 +1525,7 @@ export type Database = {
           pickup_pincode?: string | null
           pickup_state?: string | null
           rating?: number | null
+          razorpay_account_id?: string | null
           return_rate?: number | null
           review_rating?: number | null
           store_name?: string
@@ -1748,6 +1754,7 @@ export type Database = {
           business_type: string | null
           cancellation_rate: number | null
           category: string | null
+          checkout_display_name: string
           created_at: string
           delivery_rate: number | null
           description: string | null
@@ -1772,6 +1779,7 @@ export type Database = {
           pickup_pincode: string | null
           pickup_state: string | null
           rating: number | null
+          razorpay_account_id: string | null
           return_rate: number | null
           review_rating: number | null
           store_name: string
@@ -1872,6 +1880,7 @@ export type Database = {
           business_type: string | null
           cancellation_rate: number | null
           category: string | null
+          checkout_display_name: string
           created_at: string
           delivery_rate: number | null
           description: string | null
@@ -1896,6 +1905,7 @@ export type Database = {
           pickup_pincode: string | null
           pickup_state: string | null
           rating: number | null
+          razorpay_account_id: string | null
           return_rate: number | null
           review_rating: number | null
           store_name: string
@@ -2033,6 +2043,7 @@ export type Database = {
           business_type: string | null
           cancellation_rate: number | null
           category: string | null
+          checkout_display_name: string
           created_at: string
           delivery_rate: number | null
           description: string | null
@@ -2057,6 +2068,7 @@ export type Database = {
           pickup_pincode: string | null
           pickup_state: string | null
           rating: number | null
+          razorpay_account_id: string | null
           return_rate: number | null
           review_rating: number | null
           store_name: string
