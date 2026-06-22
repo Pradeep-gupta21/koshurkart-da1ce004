@@ -70,11 +70,35 @@ export interface VendorChartData {
 /* ------------------------------------------------------------------ */
 
 export interface AdminChartData {
-  revenueSeries: { date: string; revenue: number; orders: number }[];
+  revenueSeries: { date: string; revenue: number; orders: number; commission: number }[];
   adRevenueSeries: { date: string; adRevenue: number }[];
   vendorGrowth: { date: string; newVendors: number }[];
   categoryPerformance: { category: string; revenue: number; count: number }[];
   suspiciousTrend: { date: string; count: number }[];
+}
+
+/**
+ * Build a map of order_id -> commission rate (decimal 0..1) using the
+ * actual `commission_percentage` recorded on the payment row at the
+ * time of the transaction. Orders without a payment row (or with 0%)
+ * get a 0 rate — the dashboard reflects what was actually charged
+ * historically, never a synthetic flat rate.
+ */
+async function buildOrderCommissionRateMap(orderIds?: string[]): Promise<Map<string, number>> {
+  let query = supabase
+    .from('payments')
+    .select('order_id, commission_percentage, created_at')
+    .order('created_at', { ascending: false });
+  if (orderIds && orderIds.length > 0) query = query.in('order_id', orderIds);
+  const { data } = await query;
+  const map = new Map<string, number>();
+  for (const p of data ?? []) {
+    const oid = (p as any).order_id as string | null;
+    if (!oid || map.has(oid)) continue; // keep most recent (already ordered desc)
+    const pct = Number((p as any).commission_percentage ?? 0);
+    map.set(oid, Number.isFinite(pct) ? pct / 100 : 0);
+  }
+  return map;
 }
 
 /* ------------------------------------------------------------------ */
