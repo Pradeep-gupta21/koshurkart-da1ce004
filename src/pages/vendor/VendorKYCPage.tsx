@@ -45,6 +45,33 @@ const VendorKYCPage = () => {
     if (!loading && user && !vendorId) navigate("/vendor/apply", { replace: true });
   }, [loading, user, vendorId, navigate]);
 
+  // Prefill from existing vendor row so old vendors can edit their saved details.
+  useEffect(() => {
+    if (!vendorId) return;
+    vendorService.getMine().then((v) => {
+      if (!v) return;
+      setBiz((b) => ({
+        business_name: v.business_name ?? b.business_name,
+        business_type: (v.business_type as any) ?? b.business_type,
+        pan_number: v.pan_number ?? b.pan_number,
+        gstin: v.gstin ?? "",
+        aadhaar_last4: v.aadhaar_last4 ?? b.aadhaar_last4,
+      }));
+      setBank((bk) => ({
+        bank_account_holder: v.bank_account_holder ?? bk.bank_account_holder,
+        bank_account_number: "",
+        bank_ifsc: v.bank_ifsc ?? bk.bank_ifsc,
+        checkout_display_name: (v.checkout_display_name as "store" | "bank") ?? "store",
+      }));
+      setUploaded({
+        pan: v.kyc_doc_pan ?? undefined,
+        address: v.kyc_doc_address ?? undefined,
+        business: v.kyc_doc_business ?? undefined,
+      });
+    }).catch(() => { /* ignore — empty form fallback */ });
+  }, [vendorId]);
+
+
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }

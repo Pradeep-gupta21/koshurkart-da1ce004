@@ -122,10 +122,20 @@ const CheckoutPage = () => {
         new Set(items.map((i) => (i.product as any).vendorId).filter(Boolean) as string[]),
       );
       if (vendorIds.length === 1) {
-        const { data: preferred } = await supabase.rpc("get_vendor_checkout_name", { _vendor_id: vendorIds[0] });
-        if (preferred && typeof preferred === "string") {
-          modalName = `Koshur Kart - ${preferred}`;
+        const vendorId = vendorIds[0];
+        const { data: preferred } = await supabase.rpc("get_vendor_checkout_name", { _vendor_id: vendorId });
+        let resolved = typeof preferred === "string" ? preferred.trim() : "";
+        // Fallback for legacy vendors with null/empty checkout_display_name:
+        // pull the registered store name directly so the modal never shows the bare platform name.
+        if (!resolved) {
+          const { data: v } = await supabase
+            .from("vendors")
+            .select("store_name")
+            .eq("id", vendorId)
+            .maybeSingle();
+          resolved = (v?.store_name ?? "").trim();
         }
+        if (resolved) modalName = `Koshur Kart - ${resolved}`;
       }
     } catch (e) {
       console.warn("Failed to resolve vendor display name", e);

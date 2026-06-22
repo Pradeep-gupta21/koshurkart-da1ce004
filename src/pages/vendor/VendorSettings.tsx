@@ -159,10 +159,18 @@ const VendorSettings = () => {
             {ks === "not_submitted" && "Submit KYC to activate your store."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
           {(ks === "not_submitted" || ks === "rejected") && (
             <Button asChild><Link to="/vendor/apply/kyc">{ks === "rejected" ? "Resubmit KYC" : "Complete KYC"}</Link></Button>
           )}
+          <div>
+            <Button variant="outline" asChild>
+              <Link to="/vendor/apply/kyc">Update KYC &amp; Bank Details</Link>
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Edit your previously saved business, bank, and checkout display preference. Resubmission will return your KYC to pending review.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
