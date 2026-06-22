@@ -46,6 +46,17 @@ const VendorSettings = () => {
       setLogo(v.logo ?? null);
       setLoading(false);
     });
+    // Live KYC status updates from admin actions
+    refreshVendor();
+    const channel = supabase
+      .channel(`vendor-kyc-${vendorId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "vendors", filter: `id=eq.${vendorId}` },
+        () => { refreshVendor(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [vendorId]);
 
   const handleSave = async () => {
