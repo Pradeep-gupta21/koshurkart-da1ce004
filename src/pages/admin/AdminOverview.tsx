@@ -26,7 +26,9 @@ const COLORS = [
   "hsl(280, 60%, 50%)",
 ];
 
-const COMMISSION_RATE = 0.07;
+// NOTE: Commission is read per-order from the payments table (commission_percentage
+// recorded at transaction time). No flat frontend rate — orders placed while
+// commission was disabled accurately reflect ₹0 platform earnings.
 
 type ChartView = "combined" | "gross" | "commission";
 
@@ -129,20 +131,20 @@ const AdminOverview = () => {
     }, []),
   });
 
-  const commissionEarnings = stats.revenue * COMMISSION_RATE;
+  const commissionEarnings = analytics?.platformCommission ?? 0;
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
     { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
     { label: "Gross Marketplace Sales", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-primary", hint: "100% of customer order value" },
-    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "7% of gross sales" },
+    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "Actual commission charged per order" },
   ];
 
   const revenueChartData = useMemo(() => {
     return (chartData?.revenueSeries ?? []).map(d => ({
       ...d,
-      commission: Number(d.revenue) * COMMISSION_RATE,
+      commission: Number(d.commission ?? 0),
     }));
   }, [chartData]);
 
@@ -201,7 +203,7 @@ const AdminOverview = () => {
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            Platform Revenue — Gross Sales vs 7% Commission
+            Platform Revenue — Gross Sales vs Commission
           </CardTitle>
           <ToggleGroup
             type="single"
@@ -231,7 +233,7 @@ const AdminOverview = () => {
                   <Line type="monotone" dataKey="revenue" stroke="hsl(217, 91%, 55%)" strokeWidth={2.5} name="Gross Marketplace Volume" dot={{ r: 3 }} />
                 )}
                 {(chartView === "commission" || chartView === "combined") && (
-                  <Line type="monotone" dataKey="commission" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} name="Platform Commission (7%)" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="commission" stroke="hsl(45, 93%, 47%)" strokeWidth={2.5} name="Platform Commission" dot={{ r: 3 }} />
                 )}
               </LineChart>
             </ResponsiveContainer>
@@ -254,15 +256,15 @@ const AdminOverview = () => {
                     <TableHead>Vendor Store</TableHead>
                     <TableHead className="text-right">Orders Processed</TableHead>
                     <TableHead className="text-right">Gross Revenue</TableHead>
-                    <TableHead className="text-right">Vendor Earnings (93%)</TableHead>
-                    <TableHead className="text-right">Platform Commission (7%)</TableHead>
+                    <TableHead className="text-right">Vendor Earnings</TableHead>
+                    <TableHead className="text-right">Platform Commission</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {analytics.topVendors.map((v: any) => {
                     const gross = Number(v.revenue);
-                    const commission = gross * COMMISSION_RATE;
-                    const earnings = gross - commission;
+                    const commission = Number(v.commission ?? 0);
+                    const earnings = Number(v.earnings ?? gross - commission);
                     return (
                       <TableRow key={v.id}>
                         <TableCell className="font-medium">{v.name}</TableCell>
