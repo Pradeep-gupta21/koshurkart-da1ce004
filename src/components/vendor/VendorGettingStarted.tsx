@@ -32,7 +32,7 @@ const VendorGettingStarted = ({ vendorId }: Props) => {
   });
   const [loading, setLoading] = useState(true);
   const [hasLogo, setHasLogo] = useState(false);
-  const [hasBanner, setHasBanner] = useState(false);
+  const [hasDescription, setHasDescription] = useState(false);
   const [productCount, setProductCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
   const [serviceabilityCount, setServiceabilityCount] = useState(0);
@@ -42,14 +42,14 @@ const VendorGettingStarted = ({ vendorId }: Props) => {
     let cancelled = false;
     (async () => {
       const [vendorRes, prodRes, orderRes, svcRes] = await Promise.all([
-        supabase.from("vendors").select("logo, banner").eq("id", vendorId).single(),
+        supabase.from("vendors").select("logo, description").eq("id", vendorId).single(),
         supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
         supabase.from("order_items").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
         supabase.from("vendor_serviceability").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
       ]);
       if (cancelled) return;
       setHasLogo(!!vendorRes.data?.logo);
-      setHasBanner(!!vendorRes.data?.banner);
+      setHasDescription(!!(vendorRes.data?.description && String(vendorRes.data.description).trim().length > 0));
       setProductCount(prodRes.count ?? 0);
       setOrderCount(orderRes.count ?? 0);
       setServiceabilityCount(svcRes.count ?? 0);
@@ -62,8 +62,8 @@ const VendorGettingStarted = ({ vendorId }: Props) => {
     {
       key: "storefront",
       title: "Complete your storefront",
-      description: "Add a logo and banner so customers recognize your store.",
-      done: hasLogo && hasBanner,
+      description: "Add a logo and a store description so customers recognize your store.",
+      done: hasLogo && hasDescription,
       icon: ImageIcon,
       ctaLabel: "Edit storefront",
       ctaTo: "/vendor/settings",
@@ -96,7 +96,7 @@ const VendorGettingStarted = ({ vendorId }: Props) => {
       ctaTo: "/vendor/products",
       passive: true,
     },
-  ], [hasLogo, hasBanner, productCount, serviceabilityCount, orderCount]);
+  ], [hasLogo, hasDescription, productCount, serviceabilityCount, orderCount]);
 
   if (hidden || loading) return null;
 

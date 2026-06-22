@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { vendorService } from "@/services/vendorService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,18 @@ import { Loader2, Upload } from "lucide-react";
 
 const KYC_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   approved: "default",
+  verified: "default",
   pending: "secondary",
   rejected: "destructive",
   not_submitted: "outline",
+};
+
+const KYC_LABEL: Record<string, string> = {
+  approved: "verified",
+  verified: "verified",
+  pending: "pending",
+  rejected: "rejected",
+  not_submitted: "not submitted",
 };
 
 const VendorSettings = () => {
@@ -37,6 +47,17 @@ const VendorSettings = () => {
       setLogo(v.logo ?? null);
       setLoading(false);
     });
+    // Live KYC status updates from admin actions
+    refreshVendor();
+    const channel = supabase
+      .channel(`vendor-kyc-${vendorId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "vendors", filter: `id=eq.${vendorId}` },
+        () => { refreshVendor(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [vendorId]);
 
   const handleSave = async () => {
@@ -129,7 +150,7 @@ const VendorSettings = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            KYC Status <Badge variant={KYC_BADGE[ks] ?? "outline"}>{ks.replace("_", " ")}</Badge>
+            KYC Status <Badge variant={KYC_BADGE[ks] ?? "outline"}>{KYC_LABEL[ks] ?? ks.replace("_", " ")}</Badge>
           </CardTitle>
           <CardDescription>
             {ks === "approved" && "Your KYC is verified."}

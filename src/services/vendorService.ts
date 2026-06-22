@@ -174,6 +174,11 @@ export const vendorService = {
         kyc_status: 'approved',
         kyc_reviewed_at: new Date().toISOString(),
         kyc_rejection_reason: null,
+        // Sync top-level verification flags so the vendor dashboard, settings page,
+        // and customer-facing badges reflect the "verified" state immediately.
+        is_verified: true,
+        verification_status: 'verified',
+        verification_rejection_reason: null,
       })
       .eq('id', vendorId);
     if (error) throw error;
@@ -201,7 +206,7 @@ export const vendorService = {
       verification_status: string;
       verification_rejection_reason: string | null;
       is_verified: boolean;
-    }> = { verification_status: status };
+    }> = { verification_status: status === 'approved' ? 'verified' : status };
     if (status === 'rejected' || status === 'suspended') {
       updates.verification_rejection_reason = reason ?? null;
     } else {

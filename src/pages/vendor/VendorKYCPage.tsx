@@ -244,30 +244,46 @@ const VendorKYCPage = () => {
 
           {step === 2 && (
             <div className="space-y-4">
-              {(["pan", "address", "business"] as const).map((kind) => (
-                <div key={kind} className="rounded-lg border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="capitalize">
-                      {kind === "business" ? "Business proof (optional)" : `${kind} proof`}
-                    </Label>
-                    {uploaded[kind] && <CheckCircle2 className="h-4 w-4 text-success" />}
+              {(["pan", "address", "business"] as const).map((kind) => {
+                const labelMap = {
+                  pan: "PAN Card Document",
+                  address: "Aadhaar Card Document",
+                  business: "Business Certificate / Store Certificate (Optional)",
+                } as const;
+                const helperMap = {
+                  pan: "Required. Clear photo or PDF of your PAN card.",
+                  address: "Required. Clear photo or PDF of your Aadhaar card.",
+                  business: "Optional. Trade license, GST certificate, or shop registration.",
+                } as const;
+                return (
+                  <div key={kind} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>{labelMap[kind]}</Label>
+                      {uploaded[kind] && <CheckCircle2 className="h-4 w-4 text-success" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{helperMap[kind]}</p>
+                    <div className="flex gap-2">
+                      <Input type="file" accept="image/*,application/pdf" onChange={handleDocChange(kind)} />
+                      <Button type="button" size="sm" variant="outline" disabled={!docs[kind]} onClick={() => uploadDoc(kind)}>
+                        <Upload className="h-4 w-4 mr-1" /> Upload
+                      </Button>
+                    </div>
+                    {uploaded[kind] && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <FileText className="h-3 w-3" /> Uploaded
+                      </p>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <Input type="file" accept="image/*,application/pdf" onChange={handleDocChange(kind)} />
-                    <Button type="button" size="sm" variant="outline" disabled={!docs[kind]} onClick={() => uploadDoc(kind)}>
-                      <Upload className="h-4 w-4 mr-1" /> Upload
-                    </Button>
-                  </div>
-                  {uploaded[kind] && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <FileText className="h-3 w-3" /> Uploaded
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
+              {(!uploaded.pan || !uploaded.address) && (
+                <p className="text-xs text-destructive">
+                  Aadhaar and PAN documents are both required to submit KYC.
+                </p>
+              )}
               <div className="flex justify-between pt-2">
                 <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-                <Button onClick={handleSubmit} disabled={submitting}>
+                <Button onClick={handleSubmit} disabled={submitting || !uploaded.pan || !uploaded.address}>
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Submit KYC
                 </Button>
