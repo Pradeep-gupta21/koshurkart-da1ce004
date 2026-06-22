@@ -206,7 +206,7 @@ export const vendorService = {
       verification_status: string;
       verification_rejection_reason: string | null;
       is_verified: boolean;
-    }> = { verification_status: status };
+    }> = { verification_status: status === 'approved' ? 'verified' : status };
     if (status === 'rejected' || status === 'suspended') {
       updates.verification_rejection_reason = reason ?? null;
     } else {
