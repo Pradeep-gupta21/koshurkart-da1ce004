@@ -1643,6 +1643,7 @@ export type Database = {
       }
     }
     Functions: {
+      admin_refresh_trending_scores: { Args: never; Returns: Json }
       calculate_dynamic_prices: { Args: never; Returns: undefined }
       calculate_product_scores: { Args: never; Returns: undefined }
       can_review_product: {
@@ -2178,6 +2179,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      refresh_trending_scores: { Args: never; Returns: Json }
       release_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
