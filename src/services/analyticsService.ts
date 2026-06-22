@@ -240,18 +240,19 @@ export const analyticsService = {
 
     const { data: topVendorData } = await supabase
       .from('order_items')
-      .select('vendor_id, price, quantity, vendors(store_name)');
-    const vendorRevMap: Record<string, { name: string; revenue: number }> = {};
+      .select('vendor_id, order_id, price, quantity, vendors(store_name)');
+    const vendorRevMap: Record<string, { name: string; revenue: number; orderIds: Set<string> }> = {};
     for (const item of topVendorData ?? []) {
       const vid = (item as any).vendor_id;
       if (!vid) continue;
-      if (!vendorRevMap[vid]) vendorRevMap[vid] = { name: (item as any).vendors?.store_name ?? 'Unknown', revenue: 0 };
+      if (!vendorRevMap[vid]) vendorRevMap[vid] = { name: (item as any).vendors?.store_name ?? 'Unknown', revenue: 0, orderIds: new Set() };
       vendorRevMap[vid].revenue += Number(item.price) * item.quantity;
+      if ((item as any).order_id) vendorRevMap[vid].orderIds.add((item as any).order_id);
     }
     const topVendors = Object.entries(vendorRevMap)
-      .map(([id, v]) => ({ id, ...v }))
+      .map(([id, v]) => ({ id, name: v.name, revenue: v.revenue, orders: v.orderIds.size }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+      .slice(0, 10);
 
     return {
       platformRevenue,
