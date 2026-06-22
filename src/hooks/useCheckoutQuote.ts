@@ -46,12 +46,18 @@ export function useCheckoutQuote() {
     refetchOnWindowFocus: true,
     retry: 1,
     queryFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please sign in again to continue.");
+      }
       const payload = items.map(({ product, quantity }) => ({
         product_id: product.id,
         quantity,
       }));
       const { data, error } = await supabase.functions.invoke("quote-checkout", {
         body: { items: payload },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (error) throw new Error(error.message ?? "Quote failed");
       if (data?.error) throw new Error(data.error);
