@@ -26,7 +26,9 @@ const COLORS = [
   "hsl(280, 60%, 50%)",
 ];
 
-const COMMISSION_RATE = 0.07;
+// NOTE: Commission is read per-order from the payments table (commission_percentage
+// recorded at transaction time). No flat frontend rate — orders placed while
+// commission was disabled accurately reflect ₹0 platform earnings.
 
 type ChartView = "combined" | "gross" | "commission";
 
