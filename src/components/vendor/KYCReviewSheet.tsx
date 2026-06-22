@@ -178,9 +178,12 @@ const KYCReviewSheet = ({ vendorId, open, onOpenChange, onChanged }: Props) => {
               <h3 className="text-sm font-semibold mb-2">Verification Documents</h3>
               <div className="grid sm:grid-cols-2 gap-3">
                 {([
-                  { key: "address" as const, label: "Aadhaar Card Document" },
-                  { key: "pan" as const, label: "PAN Card Document" },
-                ]).map(({ key, label }) => (
+                  { key: "address" as const, label: "Aadhaar Card Document", optional: false },
+                  { key: "pan" as const, label: "PAN Card Document", optional: false },
+                  { key: "business" as const, label: "Business / Store Certificate", optional: true },
+                ])
+                  .filter(({ key, optional }) => !optional || !!docUrls[key])
+                  .map(({ key, label, optional }) => (
                   <div key={key} className="rounded-lg border bg-card p-3 flex flex-col gap-2">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <FileText className="h-4 w-4 text-muted-foreground" />
