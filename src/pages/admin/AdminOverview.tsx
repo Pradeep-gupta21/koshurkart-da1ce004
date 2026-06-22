@@ -129,13 +129,22 @@ const AdminOverview = () => {
     }, []),
   });
 
+  const commissionEarnings = stats.revenue * COMMISSION_RATE;
   const cards = [
     { label: "Total Users", value: stats.users, icon: Users, color: "text-primary" },
     { label: "Vendors", value: stats.vendors, icon: Store, color: "text-secondary" },
     { label: "Products", value: stats.products, icon: Package, color: "text-accent" },
     { label: "Orders", value: stats.orders, icon: ShoppingCart, color: "text-primary" },
-    { label: "Revenue", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-secondary" },
+    { label: "Gross Marketplace Sales", value: formatPrice(stats.revenue), icon: IndianRupee, color: "text-primary", hint: "100% of customer order value" },
+    { label: "Platform Commission Earnings", value: formatPrice(commissionEarnings), icon: Percent, color: "text-secondary", hint: "7% of gross sales" },
   ];
+
+  const revenueChartData = useMemo(() => {
+    return (chartData?.revenueSeries ?? []).map(d => ({
+      ...d,
+      commission: Number(d.revenue) * COMMISSION_RATE,
+    }));
+  }, [chartData]);
 
   return (
     <div className="space-y-8">
