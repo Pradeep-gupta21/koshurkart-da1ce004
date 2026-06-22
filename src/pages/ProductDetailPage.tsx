@@ -113,6 +113,11 @@ const ProductDetailPage = () => {
     if (product?.id && !trackedRef.current) {
       trackedRef.current = true;
       analyticsService.trackEvent('product_view', product.id);
+      // Mirror to local store so the "Recently Viewed" rail works for guests
+      // and as a fast cache for authenticated users.
+      import('@/lib/recentlyViewedStore').then(({ recentlyViewedStore }) => {
+        recentlyViewedStore.push(product.id);
+      });
     }
   }, [product?.id]);
 
