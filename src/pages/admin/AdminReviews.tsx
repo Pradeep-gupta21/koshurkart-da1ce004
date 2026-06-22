@@ -22,8 +22,17 @@ interface ReviewRow {
   products: { title: string } | null;
 }
 
+interface VendorLeaderRow {
+  id: string;
+  store_name: string;
+  review_rating: number | null;
+  total_sales: number | null;
+}
+
 const AdminReviews = () => {
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [topVendors, setTopVendors] = useState<VendorLeaderRow[]>([]);
+  const [bottomVendors, setBottomVendors] = useState<VendorLeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -58,7 +67,24 @@ const AdminReviews = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchReviews(); }, []);
+  const fetchLeaderboard = async () => {
+    const { data: top } = await supabase
+      .from("vendors")
+      .select("id, store_name, review_rating, total_sales")
+      .gt("review_rating", 0)
+      .order("review_rating", { ascending: false })
+      .limit(5);
+    const { data: bottom } = await supabase
+      .from("vendors")
+      .select("id, store_name, review_rating, total_sales")
+      .gt("review_rating", 0)
+      .order("review_rating", { ascending: true })
+      .limit(5);
+    setTopVendors((top ?? []) as VendorLeaderRow[]);
+    setBottomVendors((bottom ?? []) as VendorLeaderRow[]);
+  };
+
+  useEffect(() => { fetchReviews(); fetchLeaderboard(); }, []);
 
   const suspiciousReviews = reviews.filter((r) => r.is_suspicious);
   const pendingCount = reviews.filter((r) => r.moderation_status === "pending" && r.is_suspicious).length;
