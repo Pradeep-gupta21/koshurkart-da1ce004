@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CartProvider } from "@/contexts/CartContext";
+import { WishlistProvider } from "@/contexts/WishlistContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
@@ -18,6 +19,7 @@ import HomePage from "@/pages/HomePage";
 import SearchPage from "@/pages/SearchPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
 import CartPage from "@/pages/CartPage";
+import WishlistPage from "@/pages/WishlistPage";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
@@ -81,6 +83,7 @@ const App = () => (
           <CurrencyProvider>
           <LocationProvider>
           <CartProvider>
+          <WishlistProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter>
@@ -96,6 +99,7 @@ const App = () => (
                       <Route path="/search" element={<SearchPage />} />
                       <Route path="/product/:slug" element={<ProductDetailPage />} />
                       <Route path="/cart" element={<CartPage />} />
+                      <Route path="/wishlist" element={<WishlistPage />} />
                       <Route path="/auth" element={<AuthPage />} />
                       <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
                       <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
@@ -154,6 +158,7 @@ const App = () => (
               </div>
               </SidebarProvider>
             </BrowserRouter>
+          </WishlistProvider>
           </CartProvider>
           </LocationProvider>
           </CurrencyProvider>

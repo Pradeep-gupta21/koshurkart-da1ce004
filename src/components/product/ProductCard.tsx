@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import ServiceabilityBadge from "@/components/location/ServiceabilityBadge";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import WishlistButton from "@/components/product/WishlistButton";
 import { isKashmirVendor } from "@/lib/regionUtils";
 
 interface ProductCardProps {
@@ -46,13 +47,19 @@ const ProductCard = ({ product }: ProductCardProps) => {
         )}
         {isKashmirVendor({ pickup_state: product.vendorPickupState }) && <FromKashmirBadge />}
       </div>
-      {isOutOfStock && (
+      {isOutOfStock ? (
         <span className="absolute top-2 right-2 z-10 bg-destructive text-destructive-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
           OUT OF STOCK
         </span>
+      ) : (
+        <WishlistButton
+          productId={product.id}
+          vendorId={product.vendorId}
+          category={product.category}
+        />
       )}
       {!isOutOfStock && product.discountPrice && (
-        <span className="absolute top-2 right-2 z-10 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
+        <span className="absolute top-12 right-2 z-10 bg-accent text-accent-foreground px-2 py-0.5 rounded-full text-[10px] font-bold">
           {Math.round((1 - product.discountPrice / product.price) * 100)}% OFF
         </span>
       )}

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import ProductCard from "@/components/product/ProductCard";
+import WishlistButton from "@/components/product/WishlistButton";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
@@ -322,6 +323,12 @@ const ProductDetailPage = () => {
                     <ShoppingCart className="h-4 w-4" />
                     {isOutOfStock ? "Out of Stock" : "Add to Cart"}
                   </Button>
+                  <WishlistButton
+                    productId={product.id}
+                    vendorId={product.vendorId}
+                    category={product.category}
+                    variant="inline"
+                  />
                 </div>
               </>
             );
