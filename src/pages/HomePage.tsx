@@ -21,6 +21,7 @@ import RegionRecommendations from "@/components/home/RegionRecommendations";
 import KashmirCategories from "@/components/home/KashmirCategories";
 import StorySection from "@/components/home/StorySection";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
+import RecentlyViewedSection from "@/components/home/RecentlyViewedSection";
 
 const mapAuctionWinnerToProduct = (c: any): Product & { campaignId: string } => ({
   campaignId: c.campaign_id,
@@ -194,6 +195,9 @@ const HomePage = () => {
           </ProductGrid>
         </section>
       )}
+
+      {/* Recently Viewed (auth + guest) */}
+      <RecentlyViewedSection />
 
       {/* Trending */}
       <section className="container mx-auto px-4 mt-14">
