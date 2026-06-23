@@ -1,8 +1,23 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Heart } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-const StorySection = () => (
+const StorySection = () => {
+  const { data: activeVendorCount = 0 } = useQuery({
+    queryKey: ["vendors", "active-count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("vendors")
+        .select("id", { count: "exact", head: true })
+        .eq("verification_status", "verified");
+      return count ?? 0;
+    },
+    staleTime: 60_000,
+  });
+
+  return (
   <section className="container mx-auto px-4 mt-16">
     <div className="grid md:grid-cols-2 gap-0 rounded-3xl overflow-hidden border border-wood marketplace-shadow">
       {/* Left: Story */}
@@ -33,18 +48,19 @@ const StorySection = () => (
       <div className="relative bg-dusk bg-paisley min-h-[280px] md:min-h-0 flex items-center justify-center p-12">
         <div className="relative z-10 text-center">
           <div className="text-6xl md:text-7xl font-serif font-semibold text-[hsl(210_40%_98%)] italic leading-none">
-            "Karkhandar"
+            "Dastkar"
           </div>
           <p className="mt-4 text-[hsl(210_40%_98%)]/70 text-sm tracking-wide">
-            — the Kashmiri word for craftsperson
+            — the true Kashmiri word for artisan
           </p>
           <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-accent/20 border border-accent/40 px-3 py-1 text-accent text-xs font-semibold backdrop-blur-sm">
-            500+ verified artisans
+            {activeVendorCount.toLocaleString()} verified artisans
           </div>
         </div>
       </div>
     </div>
   </section>
-);
+  );
+};
 
 export default StorySection;
