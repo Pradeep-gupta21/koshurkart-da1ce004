@@ -114,7 +114,7 @@ const HomePage = () => {
               <span className="text-accent italic">Finest Products</span>
             </h1>
             <p className="mt-4 text-[hsl(210_40%_98%)]/75 text-sm md:text-base max-w-lg leading-relaxed">
-              Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans, shipped across India.
+              Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans, shipped across India and worldwide.
             </p>
             <div className="mt-7 flex gap-3">
               <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20" asChild>
