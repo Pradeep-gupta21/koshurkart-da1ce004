@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Instagram, Linkedin } from "lucide-react";
 
 const Footer = () => (
   <footer className="bg-[hsl(222_47%_11%)] text-[hsl(210_40%_98%)] mt-16 border-t border-wood">
@@ -46,8 +47,28 @@ const Footer = () => (
           </nav>
         </div>
       </div>
-      <div className="mt-12 pt-6 border-t border-wood text-sm opacity-50 text-center">
-        © 2026 Koshur Kart. Crafted in the valley.
+      <div className="mt-12 pt-6 border-t border-wood flex flex-col sm:flex-row items-center justify-between gap-4">
+        <p className="text-sm opacity-50">© 2026 Koshur Kart. Crafted in the valley.</p>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://www.instagram.com/koshurkart?igsh=MTh2MWE2cHgxaG1iYQ=="
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Follow Koshur Kart on Instagram"
+            className="opacity-70 hover:opacity-100 hover:text-accent transition-opacity duration-200"
+          >
+            <Instagram className="h-5 w-5" />
+          </a>
+          <a
+            href="https://www.linkedin.com/company/koshur-kart/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Follow Koshur Kart on LinkedIn"
+            className="opacity-70 hover:opacity-100 hover:text-accent transition-opacity duration-200"
+          >
+            <Linkedin className="h-5 w-5" />
+          </a>
+        </div>
       </div>
     </div>
   </footer>
