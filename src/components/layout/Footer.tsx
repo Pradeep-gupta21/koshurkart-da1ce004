@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Instagram, Linkedin } from "lucide-react";
+import { Instagram, Linkedin, Facebook } from "lucide-react";
 
 const Footer = () => (
   <footer className="bg-[hsl(222_47%_11%)] text-[hsl(210_40%_98%)] mt-16 border-t border-wood">
@@ -67,6 +67,15 @@ const Footer = () => (
             className="opacity-70 hover:opacity-100 hover:text-accent transition-opacity duration-200"
           >
             <Linkedin className="h-5 w-5" />
+          </a>
+          <a
+            href="https://www.facebook.com/share/1GHhHvadZj/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Follow Koshur Kart on Facebook"
+            className="opacity-70 hover:opacity-100 hover:text-accent transition-opacity duration-200"
+          >
+            <Facebook className="h-5 w-5" />
           </a>
         </div>
       </div>
