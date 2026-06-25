@@ -21,7 +21,7 @@ const categories = [
   { label: "Cherries & Berries", slug: "kashmiri_cherries_berries", Icon: Cherry, tint: "from-accent/25 to-transparent" },
 ];
 
-const MOBILE_PREVIEW_COUNT = 4;
+
 
 const CategoryTile = ({ label, slug, Icon, tint }: typeof categories[number]) => (
   <Link
