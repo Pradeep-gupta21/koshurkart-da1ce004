@@ -87,7 +87,7 @@ const HomePage = () => {
   const sponsoredProducts = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
   return (
-    <div>
+    <div className="w-full overflow-x-hidden">
       {/* Hero — Dal Lake at dusk */}
       <section className="relative overflow-hidden rounded-2xl mx-4 mt-4 lg:mx-0">
         <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
