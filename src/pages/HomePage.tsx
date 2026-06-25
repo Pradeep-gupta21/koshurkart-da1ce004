@@ -87,7 +87,7 @@ const HomePage = () => {
   const sponsoredProducts = sponsoredCampaigns.map(mapAuctionWinnerToProduct);
 
   return (
-    <div>
+    <div className="w-full overflow-x-hidden">
       {/* Hero — Dal Lake at dusk */}
       <section className="relative overflow-hidden rounded-2xl mx-4 mt-4 lg:mx-0">
         <div className="relative h-[360px] md:h-[460px] overflow-hidden rounded-2xl bg-dusk bg-paisley">
@@ -105,22 +105,22 @@ const HomePage = () => {
             className="absolute inset-0 w-full h-full object-cover opacity-70"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[hsl(222_47%_8%)]/80 via-[hsl(222_47%_8%)]/40 to-transparent" />
-          <div className="relative z-10 flex flex-col justify-center h-full px-8 md:px-14 max-w-2xl">
+          <div className="relative z-10 flex flex-col justify-center h-full px-5 sm:px-8 md:px-14 max-w-2xl">
             <span className="text-accent font-sans font-semibold text-xs tracking-[0.2em] mb-3 uppercase">
               From the Valley
             </span>
-            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-[hsl(210_40%_98%)] leading-[1.05]">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl font-serif font-semibold text-[hsl(210_40%_98%)] leading-[1.1]">
               Discover Kashmir's<br />
               <span className="text-accent italic">Finest Products</span>
             </h1>
             <p className="mt-4 text-[hsl(210_40%_98%)]/75 text-sm md:text-base max-w-lg leading-relaxed">
               Pashmina, saffron, walnut wood and more — handpicked from verified Kashmiri artisans, shipped across India and worldwide.
             </p>
-            <div className="mt-7 flex gap-3">
-              <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20" asChild>
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold shadow-lg shadow-accent/20 w-full sm:w-auto" asChild>
                 <Link to="/search">Explore Now</Link>
               </Button>
-              <Button size="lg" variant="outline" className="border-[hsl(210_40%_98%)]/30 text-[hsl(210_40%_98%)] hover:bg-[hsl(210_40%_98%)]/10 hover:text-[hsl(210_40%_98%)]" asChild>
+              <Button size="lg" variant="outline" className="border-[hsl(210_40%_98%)]/30 text-[hsl(210_40%_98%)] hover:bg-[hsl(210_40%_98%)]/10 hover:text-[hsl(210_40%_98%)] w-full sm:w-auto" asChild>
                 <Link to="/vendor">Sell Your Craft</Link>
               </Button>
             </div>
