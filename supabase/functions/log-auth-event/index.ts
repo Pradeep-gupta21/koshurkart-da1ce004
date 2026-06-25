@@ -29,28 +29,27 @@ Deno.serve(async (req) => {
       req.headers.get("cf-connecting-ip") ??
       null;
 
-    // Require authentication — prevents anonymous audit-log pollution
+    // Optional auth — this endpoint logs pre-auth events (login_failure,
+    // signup_failure, etc.) so we resolve the user when a valid bearer token
+    // is provided but never reject anonymous calls.
     let userId: string | null = null;
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    {
-      const supabaseAuth = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const token = authHeader.replace("Bearer ", "");
-      const { data, error: claimsErr } = await supabaseAuth.auth.getClaims(token);
-      if (claimsErr || !data?.claims?.sub) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const bearer = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : null;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    if (bearer && bearer !== anonKey) {
+      try {
+        const supabaseAuth = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          anonKey,
+          { global: { headers: { Authorization: `Bearer ${bearer}` } } }
+        );
+        const { data } = await supabaseAuth.auth.getClaims(bearer);
+        userId = data?.claims?.sub ?? null;
+      } catch {
+        userId = null;
       }
-      userId = data?.claims?.sub ?? null;
     }
 
     const service = createClient(
