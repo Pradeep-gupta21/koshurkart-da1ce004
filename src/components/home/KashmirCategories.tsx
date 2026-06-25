@@ -38,35 +38,37 @@ const CategoryTile = ({ label, slug, Icon, tint }: typeof categories[number]) =>
   </Link>
 );
 
+const MOBILE_VISIBLE_COUNT = 6;
+
 const KashmirCategories = () => {
   const [expanded, setExpanded] = useState(false);
-  const previewCategories = categories.slice(0, MOBILE_PREVIEW_COUNT);
-  const restCategories = categories.slice(MOBILE_PREVIEW_COUNT);
+  const visibleCategories = expanded ? categories : categories.slice(0, MOBILE_VISIBLE_COUNT);
+  const hasMore = categories.length > MOBILE_VISIBLE_COUNT;
 
   return (
-    <section className="container mx-auto px-4 mt-12">
+    <section className="w-full max-w-7xl mx-auto px-4 mt-12">
       <div className="mb-6">
         <h2 className="text-2xl font-serif font-semibold tracking-tight">Treasures of the Valley</h2>
         <p className="text-sm text-muted-foreground mt-1">Curated categories from Kashmiri artisans</p>
       </div>
 
-      {/* Mobile: compact 2x2 with expand */}
-      <div className="sm:hidden">
-        <div className="grid grid-cols-2 gap-3">
-          {previewCategories.map((c) => (
-            <CategoryTile key={c.slug} {...c} />
-          ))}
-        </div>
-        <div
-          className={`grid grid-cols-2 gap-3 overflow-hidden transition-all duration-500 ease-out ${
-            expanded ? "max-h-[4000px] opacity-100 mt-3" : "max-h-0 opacity-0"
-          }`}
-        >
-          {restCategories.map((c) => (
-            <CategoryTile key={c.slug} {...c} />
-          ))}
-        </div>
-        <div className="mt-5 flex justify-center">
+      {/* Unified responsive grid: 1 col mobile, 2 tablet, 4 desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* On mobile show only first N until expanded; on sm+ always show all */}
+        {categories.map((c, i) => (
+          <div
+            key={c.slug}
+            className={
+              !expanded && i >= MOBILE_VISIBLE_COUNT ? "hidden sm:block" : ""
+            }
+          >
+            <CategoryTile {...c} />
+          </div>
+        ))}
+      </div>
+
+      {hasMore && (
+        <div className="mt-5 flex justify-center sm:hidden">
           <Button
             variant="outline"
             size="sm"
@@ -80,14 +82,7 @@ const KashmirCategories = () => {
             />
           </Button>
         </div>
-      </div>
-
-      {/* Desktop/Tablet: unchanged */}
-      <div className="hidden sm:grid grid-cols-3 lg:grid-cols-5 gap-4">
-        {categories.map((c) => (
-          <CategoryTile key={c.slug} {...c} />
-        ))}
-      </div>
+      )}
     </section>
   );
 };
