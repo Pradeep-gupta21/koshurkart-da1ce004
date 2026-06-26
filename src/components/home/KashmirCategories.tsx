@@ -21,19 +21,26 @@ const categories = [
   { label: "Cherries & Berries", slug: "kashmiri_cherries_berries", Icon: Cherry, tint: "from-accent/25 to-transparent" },
 ];
 
-
-
 const CategoryTile = ({ label, slug, Icon, tint }: typeof categories[number]) => (
   <Link
     to={`/search?category=${encodeURIComponent(slug)}`}
-    className="group relative overflow-hidden rounded-2xl border border-wood bg-card p-6 marketplace-shadow transition-all duration-300 hover:scale-[1.02] hover:marketplace-shadow-hover hover:ring-1 hover:ring-accent/40"
+    className="group relative block overflow-hidden rounded-2xl border border-wood bg-card marketplace-shadow transition-all duration-300 hover:scale-[1.02] hover:marketplace-shadow-hover hover:ring-1 hover:ring-accent/40
+               p-5 sm:aspect-[3/4] sm:p-6"
   >
-    <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint}`} />
-    <div className="relative flex flex-col items-center text-center gap-3">
-      <div className="h-12 w-12 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent/20 transition-colors">
-        <Icon className="h-6 w-6" strokeWidth={1.5} />
+    {/* Layered pillar background — visible on sm+ */}
+    <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${tint}`} />
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden sm:block h-2/3 bg-gradient-to-t from-accent/10 via-accent/5 to-transparent" />
+    <div className="pointer-events-none absolute inset-x-4 top-4 hidden sm:block h-24 rounded-full bg-accent/10 blur-2xl opacity-70 group-hover:opacity-100 transition-opacity" />
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden sm:block h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
+
+    {/* Mobile: horizontal row. Desktop: vertical pillar */}
+    <div className="relative flex sm:flex-col items-center sm:justify-between sm:h-full text-left sm:text-center gap-4 sm:gap-3">
+      <div className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent/20 transition-colors ring-1 ring-accent/20 sm:ring-2">
+        <Icon className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.5} />
       </div>
-      <h3 className="font-serif text-base font-semibold tracking-tight">{label}</h3>
+      <h3 className="font-serif text-base sm:text-base font-semibold tracking-tight sm:mt-auto leading-snug">
+        {label}
+      </h3>
     </div>
   </Link>
 );
@@ -42,7 +49,6 @@ const MOBILE_VISIBLE_COUNT = 6;
 
 const KashmirCategories = () => {
   const [expanded, setExpanded] = useState(false);
-  const visibleCategories = expanded ? categories : categories.slice(0, MOBILE_VISIBLE_COUNT);
   const hasMore = categories.length > MOBILE_VISIBLE_COUNT;
 
   return (
@@ -52,15 +58,12 @@ const KashmirCategories = () => {
         <p className="text-sm text-muted-foreground mt-1">Curated categories from Kashmiri artisans</p>
       </div>
 
-      {/* Unified responsive grid: 1 col mobile, 2 tablet, 4 desktop */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* On mobile show only first N until expanded; on sm+ always show all */}
+      {/* 1 col mobile · 3 tablet · 5 desktop pillars */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {categories.map((c, i) => (
           <div
             key={c.slug}
-            className={
-              !expanded && i >= MOBILE_VISIBLE_COUNT ? "hidden sm:block" : ""
-            }
+            className={!expanded && i >= MOBILE_VISIBLE_COUNT ? "hidden sm:block" : ""}
           >
             <CategoryTile {...c} />
           </div>
