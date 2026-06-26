@@ -25,20 +25,20 @@ const CategoryTile = ({ label, slug, Icon, tint }: typeof categories[number]) =>
   <Link
     to={`/search?category=${encodeURIComponent(slug)}`}
     className="group relative block overflow-hidden rounded-2xl border border-wood bg-card marketplace-shadow transition-all duration-300 hover:scale-[1.02] hover:marketplace-shadow-hover hover:ring-1 hover:ring-accent/40
-               p-5 sm:aspect-[3/4] sm:p-6"
+               p-5 sm:aspect-[5/4] sm:p-4"
   >
-    {/* Layered pillar background — visible on sm+ */}
+    {/* Layered background — visible on sm+ */}
     <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${tint}`} />
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden sm:block h-2/3 bg-gradient-to-t from-accent/10 via-accent/5 to-transparent" />
-    <div className="pointer-events-none absolute inset-x-4 top-4 hidden sm:block h-24 rounded-full bg-accent/10 blur-2xl opacity-70 group-hover:opacity-100 transition-opacity" />
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden sm:block h-1/2 bg-gradient-to-t from-accent/10 via-accent/5 to-transparent" />
+    <div className="pointer-events-none absolute inset-x-4 top-3 hidden sm:block h-14 rounded-full bg-accent/10 blur-2xl opacity-70 group-hover:opacity-100 transition-opacity" />
     <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden sm:block h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
 
-    {/* Mobile: horizontal row. Desktop: vertical pillar */}
-    <div className="relative flex sm:flex-col items-center sm:justify-between sm:h-full text-left sm:text-center gap-4 sm:gap-3">
-      <div className="h-12 w-12 sm:h-16 sm:w-16 shrink-0 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent/20 transition-colors ring-1 ring-accent/20 sm:ring-2">
-        <Icon className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.5} />
+    {/* Mobile: horizontal row. Desktop: compact centered card */}
+    <div className="relative flex sm:flex-col items-center sm:justify-center sm:h-full text-left sm:text-center gap-4 sm:gap-2">
+      <div className="h-12 w-12 sm:h-11 sm:w-11 shrink-0 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent/20 transition-colors ring-1 ring-accent/20 sm:ring-2">
+        <Icon className="h-6 w-6 sm:h-5 sm:w-5" strokeWidth={1.5} />
       </div>
-      <h3 className="font-serif text-base sm:text-base font-semibold tracking-tight sm:mt-auto leading-snug">
+      <h3 className="font-serif text-base sm:text-sm font-semibold tracking-tight leading-snug">
         {label}
       </h3>
     </div>
