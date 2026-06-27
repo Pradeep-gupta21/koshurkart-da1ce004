@@ -22,6 +22,7 @@ import CartPage from "@/pages/CartPage";
 import WishlistPage from "@/pages/WishlistPage";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/NotFound";
+import VendorStorePage from "@/pages/VendorStorePage";
 const ForgotPasswordPage = lazy(() => import("@/pages/auth/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/auth/ResetPasswordPage"));
 const OtpVerifyPage = lazy(() => import("@/pages/auth/OtpVerifyPage"));
@@ -98,6 +99,7 @@ const App = () => (
                       <Route path="/" element={<HomePage />} />
                       <Route path="/search" element={<SearchPage />} />
                       <Route path="/product/:slug" element={<ProductDetailPage />} />
+                      <Route path="/store/:slug" element={<VendorStorePage />} />
                       <Route path="/cart" element={<CartPage />} />
                       <Route path="/wishlist" element={<WishlistPage />} />
                       <Route path="/auth" element={<AuthPage />} />

@@ -10,6 +10,7 @@ import {
 import { vendorService } from "@/services/vendorService";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import VendorGettingStarted from "@/components/vendor/VendorGettingStarted";
+import StorefrontLinkCard from "@/components/vendor/StorefrontLinkCard";
 import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
 import { isKashmirVendor, isVerifiedLocalSeller } from "@/lib/regionUtils";
@@ -53,6 +54,7 @@ const VendorOverview = () => {
     returnRate: number; reviewRating: number; isVerified: boolean;
   } | null>(null);
   const [vendorLocality, setVendorLocality] = useState<{ pickup_state: string | null; verification_status: string; kyc_status: string } | null>(null);
+  const [storeMeta, setStoreMeta] = useState<{ store_slug: string | null; store_name: string | null } | null>(null);
 
   const fetchAll = useCallback(async () => {
     if (!vendorId) return;
@@ -117,11 +119,17 @@ const VendorOverview = () => {
       pricingService.getPricingSuggestions(vendorId).then(setPricingSuggestions).catch(() => {});
       supabase.rpc("get_my_vendor").then(({ data }) => {
         const row = data?.[0] as any;
-        if (row) setVendorLocality({
-          pickup_state: row.pickup_state ?? null,
-          verification_status: row.verification_status,
-          kyc_status: row.kyc_status,
-        });
+        if (row) {
+          setVendorLocality({
+            pickup_state: row.pickup_state ?? null,
+            verification_status: row.verification_status,
+            kyc_status: row.kyc_status,
+          });
+          setStoreMeta({
+            store_slug: row.store_slug ?? null,
+            store_name: row.store_name ?? null,
+          });
+        }
       });
     }
   }, [vendorId, fetchAll]);
@@ -164,7 +172,16 @@ const VendorOverview = () => {
         </div>
       </div>
 
-      {vendorId && <VendorGettingStarted vendorId={vendorId} />}
+      {vendorId && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+          <div className="lg:col-span-2">
+            <VendorGettingStarted vendorId={vendorId} />
+          </div>
+          <div className="lg:col-span-1">
+            <StorefrontLinkCard storeSlug={storeMeta?.store_slug} storeName={storeMeta?.store_name} />
+          </div>
+        </div>
+      )}
 
       {/* Commission info banner */}
       <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
