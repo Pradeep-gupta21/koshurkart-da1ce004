@@ -148,6 +148,9 @@ const VendorSettings = () => {
         </CardContent>
       </Card>
 
+      <ShippingServiceabilityCard vendorId={vendorId} />
+
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
