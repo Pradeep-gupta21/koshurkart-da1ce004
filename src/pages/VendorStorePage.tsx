@@ -112,19 +112,16 @@ const VendorStorePage = () => {
     kyc_status: "approved",
   };
 
+  if (vendor) {
+    setDocumentMeta(
+      `${vendor.store_name} | Koshur Kart Storefront`,
+      vendor.description?.slice(0, 155) ??
+        `Shop authentic products from ${vendor.store_name} on Koshur Kart.`,
+    );
+  }
+
   return (
     <>
-      <Helmet>
-        <title>{`${vendor.store_name} | Koshur Kart Storefront`}</title>
-        <meta
-          name="description"
-          content={
-            vendor.description?.slice(0, 155) ??
-            `Shop authentic products from ${vendor.store_name} on Koshur Kart.`
-          }
-        />
-        <link rel="canonical" href={`${typeof window !== "undefined" ? window.location.origin : "https://koshurkart.shop"}/store/${vendor.store_slug}`} />
-      </Helmet>
 
       {/* Banner */}
       <div className="relative w-full">
