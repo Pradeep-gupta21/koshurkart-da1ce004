@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Upload } from "lucide-react";
+import ShippingServiceabilityCard from "@/components/vendor/ShippingServiceabilityCard";
 
 const KYC_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   approved: "default",
