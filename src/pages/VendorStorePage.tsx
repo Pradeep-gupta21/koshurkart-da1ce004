@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+
+const setDocumentMeta = (title: string, description: string) => {
+  if (typeof document === "undefined") return;
+  document.title = title;
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "description";
+    document.head.appendChild(meta);
+  }
+  meta.content = description;
+};
 import { supabase } from "@/integrations/supabase/client";
 import { vendorService, VENDOR_PUBLIC_COLUMNS } from "@/services/vendorService";
 import { mapDbProduct } from "@/services/productService";
