@@ -13,7 +13,7 @@ const setDocumentMeta = (title: string, description: string) => {
   meta.content = description;
 };
 import { supabase } from "@/integrations/supabase/client";
-import { vendorService, VENDOR_PUBLIC_COLUMNS } from "@/services/vendorService";
+import { VENDOR_PUBLIC_COLUMNS } from "@/services/vendorService";
 import { mapDbProduct } from "@/services/productService";
 import type { Product } from "@/types";
 import ProductCard from "@/components/product/ProductCard";
