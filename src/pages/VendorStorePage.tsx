@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { supabase } from "@/integrations/supabase/client";
 import { vendorService, VENDOR_PUBLIC_COLUMNS } from "@/services/vendorService";
 import { mapDbProduct } from "@/services/productService";
