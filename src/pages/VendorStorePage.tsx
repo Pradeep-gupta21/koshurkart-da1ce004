@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 const setDocumentMeta = (title: string, description: string) => {
@@ -18,10 +18,11 @@ import { mapDbProduct } from "@/services/productService";
 import type { Product } from "@/types";
 import ProductCard from "@/components/product/ProductCard";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, ShieldCheck, Star, Store, Package } from "lucide-react";
+import { MapPin, ShieldCheck, Star, Store, Package, Search, X } from "lucide-react";
 import FromKashmirBadge from "@/components/product/FromKashmirBadge";
 import VerifiedLocalSellerBadge from "@/components/product/VerifiedLocalSellerBadge";
 import { isKashmirVendor, isVerifiedLocalSeller } from "@/lib/regionUtils";
@@ -36,12 +37,14 @@ const VendorStorePage = () => {
   const [notFound, setNotFound] = useState(false);
   const [vendor, setVendor] = useState<any | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!slug) return;
     let cancelled = false;
     setLoading(true);
     setNotFound(false);
+    setQuery("");
 
     (async () => {
       const { data: vendorRow, error } = await supabase
@@ -74,6 +77,16 @@ const VendorStorePage = () => {
       cancelled = true;
     };
   }, [slug]);
+
+  const filteredProducts = useMemo(() => {
+    const text = query.trim().toLowerCase();
+    if (!text) return products;
+    return products.filter(
+      (p) =>
+        p.title.toLowerCase().includes(text) ||
+        p.description.toLowerCase().includes(text),
+    );
+  }, [products, query]);
 
   const verified = vendor?.is_verified || vendor?.verification_status === "verified";
 
@@ -188,6 +201,31 @@ const VendorStorePage = () => {
           </Card>
         )}
 
+        {/* In-Store Search */}
+        <div className="relative">
+          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <Input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search items in this store..."
+            className="h-11 w-full rounded-lg bg-card pl-10 pr-10 text-sm shadow-sm transition-all focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-0 focus-visible:border-accent"
+            aria-label="Search items in this store"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         <div>
           <h2 className="text-xl font-bold mb-4">Products</h2>
           {products.length === 0 ? (
@@ -197,9 +235,18 @@ const VendorStorePage = () => {
                 <p>This store hasn't listed any products yet. Check back soon!</p>
               </CardContent>
             </Card>
+          ) : filteredProducts.length === 0 ? (
+            <Card className="marketplace-shadow">
+              <CardContent className="p-10 text-center text-muted-foreground">
+                <Search className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">
+                  No items matching "<span className="font-medium text-foreground">{query.trim()}</span>" found in this store.
+                </p>
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {products.map((product) => (
+              {filteredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
