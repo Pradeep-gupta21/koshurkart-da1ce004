@@ -4,16 +4,41 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Truck } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Loader2, Truck, Globe2, Mountain, MapPin } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Props {
   vendorId: string | null;
 }
 
+type Mode = "worldwide" | "jk" | "pincodes";
+
 const PIN_RE = /^\d{6}$/;
+const JK_PATTERNS = ["18%", "19%"];
+
+const OPTIONS: { value: Mode; title: string; description: string; Icon: typeof Globe2 }[] = [
+  {
+    value: "worldwide",
+    title: "Deliver Worldwide / Pan-India",
+    description: "Your products are available to every customer globally without restrictions.",
+    Icon: Globe2,
+  },
+  {
+    value: "jk",
+    title: "All Over J&K Only",
+    description: "Restrict sales strictly to the Jammu & Kashmir region (pincodes starting with 18 or 19).",
+    Icon: Mountain,
+  },
+  {
+    value: "pincodes",
+    title: "Specific Pincodes",
+    description: "Restrict delivery to an explicit list of pincodes.",
+    Icon: MapPin,
+  },
+];
 
 const ShippingServiceabilityCard = ({ vendorId }: Props) => {
   const { toast } = useToast();
@@ -22,10 +47,9 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [worldwide, setWorldwide] = useState(true);
+  const [mode, setMode] = useState<Mode>("worldwide");
   const [pincodesInput, setPincodesInput] = useState("");
 
-  // Load existing rules
   useEffect(() => {
     if (!vendorId) return;
     let active = true;
@@ -38,22 +62,30 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
       if (error) {
         console.error("[Serviceability] load failed", error);
       } else {
-        const rows = data ?? [];
-        const wildcard = rows.find((r) => r.pincode_pattern === "*" && r.ships);
-        if (rows.length === 0 || wildcard) {
-          setWorldwide(true);
+        const rows = (data ?? []).filter((r) => r.ships);
+        const patterns = rows.map((r) => r.pincode_pattern);
+        const hasWildcard = patterns.includes("*");
+        const jkOnly =
+          patterns.length === JK_PATTERNS.length &&
+          JK_PATTERNS.every((p) => patterns.includes(p));
+        if (rows.length === 0 || hasWildcard) {
+          setMode("worldwide");
+          setPincodesInput("");
+        } else if (jkOnly) {
+          setMode("jk");
           setPincodesInput("");
         } else {
-          setWorldwide(false);
-          setPincodesInput(rows.filter((r) => r.ships).map((r) => r.pincode_pattern).join(", "));
+          setMode("pincodes");
+          setPincodesInput(patterns.join(", "));
         }
       }
       setLoading(false);
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [vendorId]);
 
-  // Smooth scroll + focus on #serviceability
   useEffect(() => {
     if (hash !== "#serviceability" || loading) return;
     const el = sectionRef.current;
@@ -68,8 +100,10 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
     if (!vendorId) return;
     let rows: { vendor_id: string; pincode_pattern: string; ships: boolean }[] = [];
 
-    if (worldwide) {
+    if (mode === "worldwide") {
       rows = [{ vendor_id: vendorId, pincode_pattern: "*", ships: true }];
+    } else if (mode === "jk") {
+      rows = JK_PATTERNS.map((p) => ({ vendor_id: vendorId, pincode_pattern: p, ships: true }));
     } else {
       const tokens = pincodesInput
         .split(/[\s,]+/)
@@ -88,7 +122,7 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
       if (unique.length === 0) {
         toast({
           title: "Add at least one pincode",
-          description: "Enter at least one 6-digit pincode, or enable Pan-India / Worldwide.",
+          description: "Enter at least one 6-digit pincode, or pick a broader option above.",
           variant: "destructive",
         });
         return;
@@ -130,7 +164,7 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
           <Truck className="h-5 w-5" /> Shipping & Serviceability
         </CardTitle>
         <CardDescription>
-          Control where your store ships. Choose Pan-India / Worldwide, or restrict to specific pincodes.
+          Choose how broadly your store ships. You can update this at any time.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -140,19 +174,34 @@ const ShippingServiceabilityCard = ({ vendorId }: Props) => {
           </div>
         ) : (
           <>
-            <div className="flex items-start justify-between gap-4 rounded-md border p-4">
-              <div className="space-y-1">
-                <Label htmlFor="ww-switch" className="text-base">
-                  Deliver Worldwide / Pan-India
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  No restrictions — your products are available to every customer.
-                </p>
-              </div>
-              <Switch id="ww-switch" checked={worldwide} onCheckedChange={setWorldwide} />
-            </div>
+            <RadioGroup
+              value={mode}
+              onValueChange={(v) => setMode(v as Mode)}
+              className="grid gap-3"
+            >
+              {OPTIONS.map(({ value, title, description, Icon }) => {
+                const active = mode === value;
+                return (
+                  <Label
+                    key={value}
+                    htmlFor={`ship-${value}`}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-colors",
+                      active ? "border-primary bg-primary/5" : "hover:bg-accent",
+                    )}
+                  >
+                    <RadioGroupItem id={`ship-${value}`} value={value} className="mt-1" />
+                    <Icon className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium leading-none">{title}</div>
+                      <p className="text-sm text-muted-foreground">{description}</p>
+                    </div>
+                  </Label>
+                );
+              })}
+            </RadioGroup>
 
-            {!worldwide && (
+            {mode === "pincodes" && (
               <div className="space-y-2">
                 <Label htmlFor="pincodes">Restrict to specific pincodes</Label>
                 <Textarea
