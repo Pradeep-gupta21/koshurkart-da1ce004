@@ -1412,6 +1412,7 @@ export type Database = {
           description: string | null
           gstin: string | null
           id: string
+          is_commission_exempt: boolean
           is_verified: boolean | null
           kyc_doc_address: string | null
           kyc_doc_business: string | null
@@ -1462,6 +1463,7 @@ export type Database = {
           description?: string | null
           gstin?: string | null
           id?: string
+          is_commission_exempt?: boolean
           is_verified?: boolean | null
           kyc_doc_address?: string | null
           kyc_doc_business?: string | null
@@ -1512,6 +1514,7 @@ export type Database = {
           description?: string | null
           gstin?: string | null
           id?: string
+          is_commission_exempt?: boolean
           is_verified?: boolean | null
           kyc_doc_address?: string | null
           kyc_doc_business?: string | null
@@ -1796,6 +1799,7 @@ export type Database = {
           description: string | null
           gstin: string | null
           id: string
+          is_commission_exempt: boolean
           is_verified: boolean | null
           kyc_doc_address: string | null
           kyc_doc_business: string | null
@@ -1922,6 +1926,7 @@ export type Database = {
           description: string | null
           gstin: string | null
           id: string
+          is_commission_exempt: boolean
           is_verified: boolean | null
           kyc_doc_address: string | null
           kyc_doc_business: string | null
@@ -2089,6 +2094,7 @@ export type Database = {
           description: string | null
           gstin: string | null
           id: string
+          is_commission_exempt: boolean
           is_verified: boolean | null
           kyc_doc_address: string | null
           kyc_doc_business: string | null
