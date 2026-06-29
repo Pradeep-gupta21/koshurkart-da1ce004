@@ -30,7 +30,7 @@ const ALL_PAYMENT_METHODS = [
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
-  const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
+  const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart, isBuyNow, exitBuyNow } = useCart();
   const codBlockedByItem = items.some((i) => i.product.allowCod === false);
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
