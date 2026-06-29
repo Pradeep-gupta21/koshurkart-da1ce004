@@ -7,6 +7,7 @@ import { locationService } from "@/services/locationService";
 import { useLocation } from "@/contexts/LocationContext";
 
 const CART_STORAGE_KEY = "marketplace_cart";
+const BUYNOW_STORAGE_KEY = "marketplace_buynow";
 
 export interface CartServiceabilityRow {
   product_id: string;
@@ -22,6 +23,9 @@ interface CartContextType {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  startBuyNow: (product: Product, quantity?: number) => void;
+  exitBuyNow: () => void;
+  isBuyNow: boolean;
   totalItems: number;
   totalPrice: number;
   shippingTotal: number;
@@ -33,13 +37,22 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-function loadCart(): CartItem[] {
+function loadPersistedCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
 }
+
+function loadBuyNow(): CartItem[] | null {
+  try {
+    const raw = sessionStorage.getItem(BUYNOW_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(loadCart);
