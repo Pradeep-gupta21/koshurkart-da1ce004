@@ -56,6 +56,16 @@ const CheckoutPage = () => {
     });
   }, []);
 
+  // If the user navigates away from checkout mid-buy-now (e.g. back button),
+  // discard the buy-now snapshot and restore their persistent cart.
+  useEffect(() => {
+    return () => {
+      if (isBuyNow) exitBuyNow();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   // If COD is unavailable for this destination but it was selected, switch away
   useEffect(() => {
     if (paymentMethod === "cod" && !codAvailable && pmSettings) {
