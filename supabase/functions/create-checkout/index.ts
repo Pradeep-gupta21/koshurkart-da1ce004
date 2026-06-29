@@ -407,7 +407,27 @@ Deno.serve(async (req) => {
     }
   } catch (_) { /* defaults */ }
 
-  const commission = commissionEnabled && commissionPct > 0 ? Math.round(total * commissionPct) / 100 : 0;
+  // Per-vendor commission: exempt vendors (influencer partners) get 0% cut and
+  // receive 100% of their line subtotal. Non-exempt vendors are charged the
+  // active platform commission percentage.
+  let commission = 0;
+  if (commissionEnabled && commissionPct > 0) {
+    const vendorIds = Array.from(new Set(lines.map((l: any) => l.vendor_id).filter(Boolean)));
+    let exemptIds = new Set<string>();
+    if (vendorIds.length > 0) {
+      const { data: vendorRows } = await service
+        .from("vendors")
+        .select("id, is_commission_exempt")
+        .in("id", vendorIds);
+      exemptIds = new Set((vendorRows ?? []).filter((v: any) => v.is_commission_exempt).map((v: any) => v.id));
+    }
+    let chargeableSubtotal = 0;
+    for (const l of lines as any[]) {
+      if (l.vendor_id && exemptIds.has(l.vendor_id)) continue;
+      chargeableSubtotal += Number(l.unit_price) * Number(l.quantity);
+    }
+    commission = Math.round(chargeableSubtotal * commissionPct) / 100;
+  }
   const vendorEarnings = Math.round((total - commission) * 100) / 100;
 
   // ---- 7. Idempotent payment row ----
