@@ -55,13 +55,19 @@ function loadBuyNow(): CartItem[] | null {
 
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(loadCart);
+  const initialBuyNow = loadBuyNow();
+  const [isBuyNow, setIsBuyNow] = useState<boolean>(initialBuyNow !== null);
+  const [items, setItems] = useState<CartItem[]>(initialBuyNow ?? loadPersistedCart());
   const { location } = useLocation();
   const pincode = location?.pincode ?? null;
 
   useEffect(() => {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+    if (isBuyNow) {
+      sessionStorage.setItem(BUYNOW_STORAGE_KEY, JSON.stringify(items));
+    } else {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    }
+  }, [items, isBuyNow]);
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setItems(prev => {
@@ -100,10 +106,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearCart = useCallback(() => {
+    if (isBuyNow) {
+      // End buy-now session and restore the previously saved persistent cart.
+      sessionStorage.removeItem(BUYNOW_STORAGE_KEY);
+      setIsBuyNow(false);
+      setItems(loadPersistedCart());
+      return;
+    }
     setItems([]);
     localStorage.removeItem(CART_STORAGE_KEY);
     toast("Cart cleared");
+  }, [isBuyNow]);
+
+  const startBuyNow = useCallback((product: Product, quantity = 1) => {
+    const next: CartItem[] = [{ product, quantity }];
+    sessionStorage.setItem(BUYNOW_STORAGE_KEY, JSON.stringify(next));
+    setIsBuyNow(true);
+    setItems(next);
   }, []);
+
+  const exitBuyNow = useCallback(() => {
+    if (!sessionStorage.getItem(BUYNOW_STORAGE_KEY)) return;
+    sessionStorage.removeItem(BUYNOW_STORAGE_KEY);
+    setIsBuyNow(false);
+    setItems(loadPersistedCart());
+  }, []);
+
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => {
