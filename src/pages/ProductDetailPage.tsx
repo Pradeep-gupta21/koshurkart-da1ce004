@@ -351,12 +351,7 @@ const ProductDetailPage = () => {
                   />
                 </div>
 
-                    productId={product.id}
-                    vendorId={product.vendorId}
-                    category={product.category}
-                    variant="inline"
-                  />
-                </div>
+
               </>
             );
           })()}
