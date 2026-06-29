@@ -94,7 +94,9 @@ const DetailSkeleton = () => (
 
 const ProductDetailPage = () => {
   const { slug } = useParams();
-  const { addToCart } = useCart();
+  const { addToCart, startBuyNow } = useCart();
+  const navigate = useNavigate();
+
   const { formatPrice } = useCurrency();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
