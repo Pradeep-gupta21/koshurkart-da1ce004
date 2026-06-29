@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Star, ShoppingCart, ChevronRight, CheckCircle, MessageSquare, ShieldCheck, Mountain, Truck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -94,7 +94,9 @@ const DetailSkeleton = () => (
 
 const ProductDetailPage = () => {
   const { slug } = useParams();
-  const { addToCart } = useCart();
+  const { addToCart, startBuyNow } = useCart();
+  const navigate = useNavigate();
+
   const { formatPrice } = useCurrency();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -324,10 +326,23 @@ const ProductDetailPage = () => {
                     <span className="px-4 py-2 text-sm font-medium tabular-nums">{quantity}</span>
                     <button className="px-3 py-2 hover:bg-muted transition-colors" onClick={() => setQuantity(Math.min(availableStock, quantity + 1))}>+</button>
                   </div>
-                  <Button size="lg" className="flex-1 h-12 gap-2" disabled={isOutOfStock} onClick={() => addToCart(product, quantity)}>
-                    <ShoppingCart className="h-4 w-4" />
-                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-                  </Button>
+                  <div className="flex-1 flex flex-col gap-3">
+                    <Button
+                      size="lg"
+                      className="w-full h-12 gap-2 bg-accent text-accent-foreground hover:bg-accent/90 shadow-sm"
+                      disabled={isOutOfStock}
+                      onClick={() => {
+                        startBuyNow(product, quantity);
+                        navigate('/checkout');
+                      }}
+                    >
+                      {isOutOfStock ? "Out of Stock" : "Buy Now"}
+                    </Button>
+                    <Button size="lg" className="w-full h-12 gap-2" disabled={isOutOfStock} onClick={() => addToCart(product, quantity)}>
+                      <ShoppingCart className="h-4 w-4" />
+                      {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                    </Button>
+                  </div>
                   <WishlistButton
                     productId={product.id}
                     vendorId={product.vendorId}
@@ -335,6 +350,8 @@ const ProductDetailPage = () => {
                     variant="inline"
                   />
                 </div>
+
+
               </>
             );
           })()}

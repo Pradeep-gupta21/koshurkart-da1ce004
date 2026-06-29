@@ -30,7 +30,7 @@ const ALL_PAYMENT_METHODS = [
 type FlowState = "form" | "processing" | "success" | "failed" | "upi_pending" | "razorpay_pending";
 
 const CheckoutPage = () => {
-  const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart } = useCart();
+  const { items, totalPrice, shippingTotal, hasUnserviceableItem, codAvailable, clearCart, isBuyNow, exitBuyNow } = useCart();
   const codBlockedByItem = items.some((i) => i.product.allowCod === false);
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
@@ -55,6 +55,16 @@ const CheckoutPage = () => {
       else setPaymentMethod("cod");
     });
   }, []);
+
+  // If the user navigates away from checkout mid-buy-now (e.g. back button),
+  // discard the buy-now snapshot and restore their persistent cart.
+  useEffect(() => {
+    return () => {
+      if (isBuyNow) exitBuyNow();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // If COD is unavailable for this destination but it was selected, switch away
   useEffect(() => {

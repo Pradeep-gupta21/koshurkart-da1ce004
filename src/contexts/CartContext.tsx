@@ -7,6 +7,7 @@ import { locationService } from "@/services/locationService";
 import { useLocation } from "@/contexts/LocationContext";
 
 const CART_STORAGE_KEY = "marketplace_cart";
+const BUYNOW_STORAGE_KEY = "marketplace_buynow";
 
 export interface CartServiceabilityRow {
   product_id: string;
@@ -22,6 +23,9 @@ interface CartContextType {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  startBuyNow: (product: Product, quantity?: number) => void;
+  exitBuyNow: () => void;
+  isBuyNow: boolean;
   totalItems: number;
   totalPrice: number;
   shippingTotal: number;
@@ -33,7 +37,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-function loadCart(): CartItem[] {
+function loadPersistedCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -41,14 +45,29 @@ function loadCart(): CartItem[] {
   return [];
 }
 
+function loadBuyNow(): CartItem[] | null {
+  try {
+    const raw = sessionStorage.getItem(BUYNOW_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(loadCart);
+  const initialBuyNow = loadBuyNow();
+  const [isBuyNow, setIsBuyNow] = useState<boolean>(initialBuyNow !== null);
+  const [items, setItems] = useState<CartItem[]>(initialBuyNow ?? loadPersistedCart());
   const { location } = useLocation();
   const pincode = location?.pincode ?? null;
 
   useEffect(() => {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+    if (isBuyNow) {
+      sessionStorage.setItem(BUYNOW_STORAGE_KEY, JSON.stringify(items));
+    } else {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    }
+  }, [items, isBuyNow]);
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setItems(prev => {
@@ -87,10 +106,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearCart = useCallback(() => {
+    if (isBuyNow) {
+      // End buy-now session and restore the previously saved persistent cart.
+      sessionStorage.removeItem(BUYNOW_STORAGE_KEY);
+      setIsBuyNow(false);
+      setItems(loadPersistedCart());
+      return;
+    }
     setItems([]);
     localStorage.removeItem(CART_STORAGE_KEY);
     toast("Cart cleared");
+  }, [isBuyNow]);
+
+  const startBuyNow = useCallback((product: Product, quantity = 1) => {
+    const next: CartItem[] = [{ product, quantity }];
+    sessionStorage.setItem(BUYNOW_STORAGE_KEY, JSON.stringify(next));
+    setIsBuyNow(true);
+    setItems(next);
   }, []);
+
+  const exitBuyNow = useCallback(() => {
+    if (!sessionStorage.getItem(BUYNOW_STORAGE_KEY)) return;
+    sessionStorage.removeItem(BUYNOW_STORAGE_KEY);
+    setIsBuyNow(false);
+    setItems(loadPersistedCart());
+  }, []);
+
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => {
@@ -129,9 +170,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <CartContext.Provider value={{
       items, addToCart, removeFromCart, updateQuantity, clearCart,
+      startBuyNow, exitBuyNow, isBuyNow,
       totalItems, totalPrice, shippingTotal, grandTotal,
       hasUnserviceableItem, codAvailable, serviceability,
     }}>
+
       {children}
     </CartContext.Provider>
   );
