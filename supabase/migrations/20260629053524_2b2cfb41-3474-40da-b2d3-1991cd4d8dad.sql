@@ -1,0 +1,2 @@
+ALTER TABLE public.vendors ADD COLUMN IF NOT EXISTS is_commission_exempt boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN public.vendors.is_commission_exempt IS 'When true, platform commission is waived and the vendor receives 100% of product earnings (e.g. influencer partnerships). Admin-only toggle.';

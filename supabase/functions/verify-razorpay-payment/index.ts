@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
         const vendorIds = [...perVendor.keys()];
         const { data: vendorRows } = await service
           .from("vendors")
-          .select("id, razorpay_account_id, store_name")
+          .select("id, razorpay_account_id, store_name, is_commission_exempt")
           .in("id", vendorIds);
 
         const transfers: Array<{ account: string; amount: number; currency: string; notes: Record<string, string> }> = [];
@@ -254,7 +254,9 @@ Deno.serve(async (req) => {
         for (const v of (vendorRows ?? []) as any[]) {
           const vendorSubtotal = perVendor.get(v.id) ?? 0;
           if (vendorSubtotal <= 0) continue;
-          const vendorShare = vendorSubtotal * (1 - PLATFORM_FEE_PCT);
+          // Influencer / commission-exempt vendors keep 100% of their subtotal.
+          const feePct = v.is_commission_exempt ? 0 : PLATFORM_FEE_PCT;
+          const vendorShare = vendorSubtotal * (1 - feePct);
           const amountPaise = Math.round(vendorShare * 100);
           if (!v.razorpay_account_id) {
             skipped.push({ vendor_id: v.id, reason: "missing razorpay_account_id" });
@@ -268,7 +270,7 @@ Deno.serve(async (req) => {
             account: v.razorpay_account_id,
             amount: amountPaise,
             currency: "INR",
-            notes: { order_id: orderId, vendor_id: v.id, vendor_name: v.store_name ?? "" },
+            notes: { order_id: orderId, vendor_id: v.id, vendor_name: v.store_name ?? "", commission_exempt: v.is_commission_exempt ? "true" : "false" },
           });
         }
 
