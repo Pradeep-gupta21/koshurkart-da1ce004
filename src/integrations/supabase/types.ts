@@ -667,6 +667,44 @@ export type Database = {
           },
         ]
       }
+      payout_requests: {
+        Row: {
+          amount: number
+          id: string
+          notes: string | null
+          processed_at: string | null
+          requested_at: string
+          status: string
+          vendor_id: string
+        }
+        Insert: {
+          amount: number
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+          vendor_id: string
+        }
+        Update: {
+          amount?: number
+          id?: string
+          notes?: string | null
+          processed_at?: string | null
+          requested_at?: string
+          status?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_requests_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payouts: {
         Row: {
           amount: number
@@ -1410,6 +1448,8 @@ export type Database = {
           created_at: string
           delivery_rate: number | null
           description: string | null
+          direct_upi_id: string | null
+          direct_upi_qr_url: string | null
           gstin: string | null
           id: string
           is_commission_exempt: boolean
@@ -1461,6 +1501,8 @@ export type Database = {
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
+          direct_upi_id?: string | null
+          direct_upi_qr_url?: string | null
           gstin?: string | null
           id?: string
           is_commission_exempt?: boolean
@@ -1512,6 +1554,8 @@ export type Database = {
           created_at?: string
           delivery_rate?: number | null
           description?: string | null
+          direct_upi_id?: string | null
+          direct_upi_qr_url?: string | null
           gstin?: string | null
           id?: string
           is_commission_exempt?: boolean
@@ -1797,6 +1841,8 @@ export type Database = {
           created_at: string
           delivery_rate: number | null
           description: string | null
+          direct_upi_id: string | null
+          direct_upi_qr_url: string | null
           gstin: string | null
           id: string
           is_commission_exempt: boolean
@@ -1924,6 +1970,8 @@ export type Database = {
           created_at: string
           delivery_rate: number | null
           description: string | null
+          direct_upi_id: string | null
+          direct_upi_qr_url: string | null
           gstin: string | null
           id: string
           is_commission_exempt: boolean
@@ -1970,6 +2018,15 @@ export type Database = {
       get_vendor_checkout_name: {
         Args: { _vendor_id: string }
         Returns: string
+      }
+      get_vendor_direct_checkout: {
+        Args: { _vendor_id: string }
+        Returns: {
+          direct_upi_id: string
+          direct_upi_qr_url: string
+          is_commission_exempt: boolean
+          store_name: string
+        }[]
       }
       get_vendor_financials: {
         Args: { _vendor_id: string }
@@ -2092,6 +2149,8 @@ export type Database = {
           created_at: string
           delivery_rate: number | null
           description: string | null
+          direct_upi_id: string | null
+          direct_upi_qr_url: string | null
           gstin: string | null
           id: string
           is_commission_exempt: boolean
