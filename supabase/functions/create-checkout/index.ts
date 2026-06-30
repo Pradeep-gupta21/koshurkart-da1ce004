@@ -585,7 +585,10 @@ Deno.serve(async (req) => {
     .from("payments")
     .update({ razorpay_order_id: rpOrder.id })
     .eq("id", payment.id);
-  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise });
+  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise, transfers: transfers.length, skipped_transfers: skippedTransfers });
+  if (skippedTransfers.length > 0) {
+    console.warn("[create-checkout] vendors skipped from Route split", skippedTransfers);
+  }
 
   return json({
     orderId,
