@@ -116,6 +116,43 @@ const VendorSettings = () => {
     }
   };
 
+  // Save the influencer/exempt vendor's personal UPI checkout block.
+  const handleSaveDirectUpi = async () => {
+    if (!vendorId) return;
+    const trimmedUpi = directUpiId.trim();
+    // Basic UPI VPA format: handle@provider
+    if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(trimmedUpi)) {
+      toast({ title: "Invalid UPI ID", description: "Use the format name@bank (e.g. yourname@okaxis).", variant: "destructive" });
+      return;
+    }
+    setSavingDirect(true);
+    try {
+      let qrUrl: string | null = directUpiQrUrl;
+      if (qrFile) {
+        // Reuse uploadLogo's bucket/path conventions so storage RLS passes.
+        qrUrl = await vendorService.uploadLogo(vendorId, qrFile);
+      }
+      if (!qrUrl) {
+        toast({ title: "QR code required", description: "Upload your personal UPI payment QR image to continue.", variant: "destructive" });
+        setSavingDirect(false);
+        return;
+      }
+      const { error } = await supabase
+        .from("vendors")
+        .update({ direct_upi_id: trimmedUpi, direct_upi_qr_url: qrUrl })
+        .eq("id", vendorId);
+      if (error) throw error;
+      setDirectUpiId(trimmedUpi);
+      setDirectUpiQrUrl(qrUrl);
+      setQrFile(null);
+      toast({ title: "Direct UPI checkout updated" });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Could not save UPI details.", variant: "destructive" });
+    } finally {
+      setSavingDirect(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-[40vh]"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
