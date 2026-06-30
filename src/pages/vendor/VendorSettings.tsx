@@ -40,14 +40,33 @@ const VendorSettings = () => {
   const [logo, setLogo] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
+  // Influencer (commission-exempt) direct UPI checkout configuration.
+  const [isExempt, setIsExempt] = useState(false);
+  const [directUpiId, setDirectUpiId] = useState("");
+  const [directUpiQrUrl, setDirectUpiQrUrl] = useState<string | null>(null);
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [savingDirect, setSavingDirect] = useState(false);
+
   useEffect(() => {
     if (!vendorId) return;
-    vendorService.getById(vendorId).then((v) => {
+    (async () => {
+      const v = await vendorService.getById(vendorId);
       setStoreName(v.store_name);
       setDescription(v.description ?? "");
       setLogo(v.logo ?? null);
+      // Fetch the influencer-checkout fields directly (vendorService.getById may not surface them).
+      const { data: directRow } = await supabase
+        .from("vendors")
+        .select("is_commission_exempt, direct_upi_id, direct_upi_qr_url")
+        .eq("id", vendorId)
+        .maybeSingle();
+      if (directRow) {
+        setIsExempt(!!directRow.is_commission_exempt);
+        setDirectUpiId(directRow.direct_upi_id ?? "");
+        setDirectUpiQrUrl(directRow.direct_upi_qr_url ?? null);
+      }
       setLoading(false);
-    });
+    })();
     // Live KYC status updates from admin actions
     refreshVendor();
     const channel = supabase
@@ -60,6 +79,7 @@ const VendorSettings = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [vendorId]);
+
 
   const handleSave = async () => {
     if (!vendorId) {
