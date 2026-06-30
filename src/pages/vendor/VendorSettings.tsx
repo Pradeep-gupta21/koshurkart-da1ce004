@@ -207,6 +207,65 @@ const VendorSettings = () => {
 
       <ShippingServiceabilityCard vendorId={vendorId} />
 
+      {isExempt && (
+        <Card className="border-primary/40">
+          <CardHeader>
+            <CardTitle>Direct Influencer Checkout Payout Setup</CardTitle>
+            <CardDescription>
+              You're on a commission-exempt partnership. Configure your personal UPI so checkout takes
+              buyers directly to you — bypassing the standard Razorpay gateway and routing 100% of the
+              order amount to your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="direct-upi-id">Your Personal UPI ID</Label>
+              <Input
+                id="direct-upi-id"
+                placeholder="e.g. name@okaxis"
+                value={directUpiId}
+                onChange={(e) => setDirectUpiId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Format: handle@bankprovider</p>
+            </div>
+            <div>
+              <Label>Upload UPI Payment QR Code Image</Label>
+              <div className="flex items-center gap-4 mt-1">
+                {(qrFile || directUpiQrUrl) && (
+                  <img
+                    src={qrFile ? URL.createObjectURL(qrFile) : directUpiQrUrl!}
+                    alt="UPI QR preview"
+                    className="h-24 w-24 rounded-md border object-contain bg-white"
+                  />
+                )}
+                <Label htmlFor="upi-qr" className="cursor-pointer">
+                  <div className="inline-flex items-center gap-2 px-3 py-2 border rounded-md text-sm hover:bg-accent">
+                    <Upload className="h-4 w-4" /> {directUpiQrUrl ? "Replace QR" : "Upload QR"}
+                  </div>
+                  <Input
+                    id="upi-qr"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => setQrFile(e.target.files?.[0] ?? null)}
+                  />
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Buyers will scan this QR to pay you directly via any UPI app.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveDirectUpi} disabled={savingDirect}>
+                {savingDirect && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save Direct UPI
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
+
 
       <Card>
         <CardHeader>
