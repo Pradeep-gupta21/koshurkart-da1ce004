@@ -467,32 +467,51 @@ const CheckoutPage = () => {
           <div className="bg-primary/10 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <QrCode className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-semibold mb-2">Pay via UPI</h1>
+          <h1 className="text-2xl font-semibold mb-2">
+            {directUpi ? `Pay ${directUpi.storeName} directly` : "Pay via UPI"}
+          </h1>
           <p className="text-3xl font-bold text-primary mb-6">{formatPrice(totalPrice)}</p>
 
-          {/* QR Code */}
-          {qrCodeUrl && (
+          {/* QR Code — vendor's custom QR overrides the merchant QR for direct UPI. */}
+          {(directUpi?.qrUrl || qrCodeUrl) && (
             <div className="bg-card border border-border rounded-xl p-4 inline-block mb-4 shadow-sm">
-              <img src={qrCodeUrl} alt="UPI QR Code" className="w-[200px] h-[200px]" />
+              <img
+                src={directUpi?.qrUrl ?? qrCodeUrl!}
+                alt={directUpi ? `${directUpi.storeName} UPI QR` : "UPI QR Code"}
+                className="w-[200px] h-[200px] object-contain bg-white"
+              />
             </div>
           )}
 
-          {/* Merchant UPI ID */}
+          {/* UPI ID — vendor's personal UPI for direct flow, otherwise merchant. */}
           <div className="bg-muted rounded-lg px-4 py-3 mb-6">
             <p className="text-xs text-muted-foreground mb-1">Or pay manually to UPI ID</p>
-            <p className="font-mono font-semibold text-sm select-all">{pmSettings?.merchantUpiId ?? "merchant@upi"}</p>
+            <p className="font-mono font-semibold text-sm select-all">
+              {directUpi?.upiId ?? pmSettings?.merchantUpiId ?? "merchant@upi"}
+            </p>
           </div>
 
           {/* Instructions */}
-          <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">How to pay:</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>Open any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
-              <li>Scan the QR code above or enter the UPI ID</li>
-              <li>Enter the exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></li>
-              <li>Complete the payment and click "I Have Paid" below</li>
-            </ol>
-          </div>
+          {directUpi ? (
+            <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg p-3">
+              <p className="font-medium text-foreground">Direct payment partnership active.</p>
+              <p>
+                Scan the custom vendor QR code above using any UPI App (GPay/PhonePe/Paytm) to pay
+                the vendor directly. Once paid, click confirm.
+              </p>
+              <p className="text-xs">Exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></p>
+            </div>
+          ) : (
+            <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">How to pay:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Open any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
+                <li>Scan the QR code above or enter the UPI ID</li>
+                <li>Enter the exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></li>
+                <li>Complete the payment and click "I Have Paid" below</li>
+              </ol>
+            </div>
+          )}
 
           {/* Optional proof upload */}
           <div className="mb-6">
