@@ -76,6 +76,33 @@ const CheckoutPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Detect Direct Influencer UPI: only valid when the cart is from a single
+  // vendor that is commission-exempt AND has configured their personal UPI.
+  useEffect(() => {
+    if (items.length === 0) { setDirectUpi(null); return; }
+    const vendorIds = Array.from(new Set(items.map((i) => i.product.vendorId).filter(Boolean)));
+    if (vendorIds.length !== 1) { setDirectUpi(null); return; }
+    const vId = vendorIds[0]!;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc("get_vendor_direct_checkout", { _vendor_id: vId });
+      if (cancelled || error) return;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.is_commission_exempt && row?.direct_upi_id && row?.direct_upi_qr_url) {
+        setDirectUpi({
+          vendorId: vId,
+          storeName: row.store_name ?? "Vendor",
+          upiId: row.direct_upi_id,
+          qrUrl: row.direct_upi_qr_url,
+        });
+      } else {
+        setDirectUpi(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
+
+
 
   // If COD is unavailable for this destination but it was selected, switch away
   useEffect(() => {
