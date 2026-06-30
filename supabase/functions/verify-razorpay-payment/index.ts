@@ -219,92 +219,13 @@ Deno.serve(async (req) => {
     });
 
     // ─────────────────────────────────────────────────────────────────────
-    // Razorpay Route split — 7% platform commission stays in our main
-    // account, remaining 93% is transferred to each vendor's linked account
-    // (pro-rated by vendor subtotal). Linked vendors without a configured
-    // `razorpay_account_id` are skipped and logged so they can be paid out
-    // manually. Failure here does NOT roll back the payment — the customer
-    // has already paid; transfer is a settlement detail.
+    // Route splits are now attached UPFRONT at order creation time
+    // (see create-checkout `transfers` block on the Razorpay order).
+    // Razorpay executes the split automatically on capture, so we do NOT
+    // create payment-level transfers here — doing so would double-pay.
     // ─────────────────────────────────────────────────────────────────────
-    try {
-      const PLATFORM_FEE_PCT = 0.07;
 
-      const { data: itemRows } = await service
-        .from("order_items")
-        .select("vendor_id, quantity, price, total_price")
-        .eq("order_id", orderId);
 
-      const perVendor = new Map<string, number>();
-      for (const r of (itemRows ?? []) as any[]) {
-        if (!r.vendor_id) continue;
-        const line = Number(r.total_price ?? Number(r.price) * Number(r.quantity));
-        perVendor.set(r.vendor_id, (perVendor.get(r.vendor_id) ?? 0) + line);
-      }
-
-      if (perVendor.size > 0) {
-        const vendorIds = [...perVendor.keys()];
-        const { data: vendorRows } = await service
-          .from("vendors")
-          .select("id, razorpay_account_id, store_name, is_commission_exempt")
-          .in("id", vendorIds);
-
-        const transfers: Array<{ account: string; amount: number; currency: string; notes: Record<string, string> }> = [];
-        const skipped: Array<{ vendor_id: string; reason: string }> = [];
-
-        for (const v of (vendorRows ?? []) as any[]) {
-          const vendorSubtotal = perVendor.get(v.id) ?? 0;
-          if (vendorSubtotal <= 0) continue;
-          // Influencer / commission-exempt vendors keep 100% of their subtotal.
-          const feePct = v.is_commission_exempt ? 0 : PLATFORM_FEE_PCT;
-          const vendorShare = vendorSubtotal * (1 - feePct);
-          const amountPaise = Math.round(vendorShare * 100);
-          if (!v.razorpay_account_id) {
-            skipped.push({ vendor_id: v.id, reason: "missing razorpay_account_id" });
-            continue;
-          }
-          if (amountPaise < 100) {
-            skipped.push({ vendor_id: v.id, reason: "share below minimum ₹1" });
-            continue;
-          }
-          transfers.push({
-            account: v.razorpay_account_id,
-            amount: amountPaise,
-            currency: "INR",
-            notes: { order_id: orderId, vendor_id: v.id, vendor_name: v.store_name ?? "", commission_exempt: v.is_commission_exempt ? "true" : "false" },
-          });
-        }
-
-        if (transfers.length > 0) {
-          const tRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}/transfers`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Basic " + btoa(`${keyId}:${keySecret}`),
-            },
-            body: JSON.stringify({ transfers }),
-          });
-          const tBody = await tRes.json().catch(() => ({}));
-          if (!tRes.ok) {
-            console.error("Razorpay Route transfer failed", tRes.status, tBody?.error?.description);
-          }
-          await service.rpc("log_payment_event", {
-            p_payment_id: paymentId,
-            p_event_type: tRes.ok ? "route_transfer_success" : "route_transfer_failed",
-            p_message: tRes.ok ? "Route split transfers created" : `Route transfer error: ${tBody?.error?.description ?? tRes.status}`,
-            p_metadata: { transfers, skipped, response_status: tRes.status },
-          });
-        } else if (skipped.length > 0) {
-          await service.rpc("log_payment_event", {
-            p_payment_id: paymentId,
-            p_event_type: "route_transfer_skipped",
-            p_message: "No eligible vendors for Route transfer",
-            p_metadata: { skipped },
-          });
-        }
-      }
-    } catch (transferErr) {
-      console.error("Route split error:", (transferErr as Error).message);
-    }
 
 
     return new Response(
