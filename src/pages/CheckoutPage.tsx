@@ -47,6 +47,17 @@ const CheckoutPage = () => {
   const [paymentMode, setPaymentMode] = useState<'test' | 'live' | null>(null);
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
 
+  // Direct Influencer UPI checkout: populated only when the entire cart belongs
+  // to a single commission-exempt vendor that has configured their personal
+  // UPI/QR. When set, the standard Razorpay/COD selector is hidden and the
+  // buyer pays the vendor directly.
+  const [directUpi, setDirectUpi] = useState<{
+    vendorId: string;
+    storeName: string;
+    upiId: string;
+    qrUrl: string;
+  } | null>(null);
+
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
       setPmSettings(s);
