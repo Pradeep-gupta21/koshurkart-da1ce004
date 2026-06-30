@@ -297,10 +297,15 @@ const CheckoutPage = () => {
         quantity,
       }));
 
+      // Direct Influencer UPI override: settle off-gateway, vendor-to-buyer.
+      const effectiveMethod: 'cod' | 'upi' | 'razorpay' = directUpi
+        ? 'upi'
+        : (paymentMethod as 'cod' | 'upi' | 'razorpay');
+
       setFlowState("processing");
       const result = await paymentService.startCheckout(
         itemsPayload,
-        paymentMethod as 'cod' | 'upi' | 'razorpay',
+        effectiveMethod,
         shipping.zip,
         quote?.subtotal,
         buildShippingPayload(),
