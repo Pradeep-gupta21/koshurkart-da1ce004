@@ -47,6 +47,17 @@ const CheckoutPage = () => {
   const [paymentMode, setPaymentMode] = useState<'test' | 'live' | null>(null);
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
 
+  // Direct Influencer UPI checkout: populated only when the entire cart belongs
+  // to a single commission-exempt vendor that has configured their personal
+  // UPI/QR. When set, the standard Razorpay/COD selector is hidden and the
+  // buyer pays the vendor directly.
+  const [directUpi, setDirectUpi] = useState<{
+    vendorId: string;
+    storeName: string;
+    upiId: string;
+    qrUrl: string;
+  } | null>(null);
+
   useEffect(() => {
     fetchPaymentMethodSettings().then((s) => {
       setPmSettings(s);
@@ -64,6 +75,33 @@ const CheckoutPage = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Detect Direct Influencer UPI: only valid when the cart is from a single
+  // vendor that is commission-exempt AND has configured their personal UPI.
+  useEffect(() => {
+    if (items.length === 0) { setDirectUpi(null); return; }
+    const vendorIds = Array.from(new Set(items.map((i) => i.product.vendorId).filter(Boolean)));
+    if (vendorIds.length !== 1) { setDirectUpi(null); return; }
+    const vId = vendorIds[0]!;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc("get_vendor_direct_checkout", { _vendor_id: vId });
+      if (cancelled || error) return;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.is_commission_exempt && row?.direct_upi_id && row?.direct_upi_qr_url) {
+        setDirectUpi({
+          vendorId: vId,
+          storeName: row.store_name ?? "Vendor",
+          upiId: row.direct_upi_id,
+          qrUrl: row.direct_upi_qr_url,
+        });
+      } else {
+        setDirectUpi(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
+
 
 
   // If COD is unavailable for this destination but it was selected, switch away
@@ -259,10 +297,15 @@ const CheckoutPage = () => {
         quantity,
       }));
 
+      // Direct Influencer UPI override: settle off-gateway, vendor-to-buyer.
+      const effectiveMethod: 'cod' | 'upi' | 'razorpay' = directUpi
+        ? 'upi'
+        : (paymentMethod as 'cod' | 'upi' | 'razorpay');
+
       setFlowState("processing");
       const result = await paymentService.startCheckout(
         itemsPayload,
-        paymentMethod as 'cod' | 'upi' | 'razorpay',
+        effectiveMethod,
         shipping.zip,
         quote?.subtotal,
         buildShippingPayload(),
@@ -424,32 +467,51 @@ const CheckoutPage = () => {
           <div className="bg-primary/10 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
             <QrCode className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-semibold mb-2">Pay via UPI</h1>
+          <h1 className="text-2xl font-semibold mb-2">
+            {directUpi ? `Pay ${directUpi.storeName} directly` : "Pay via UPI"}
+          </h1>
           <p className="text-3xl font-bold text-primary mb-6">{formatPrice(totalPrice)}</p>
 
-          {/* QR Code */}
-          {qrCodeUrl && (
+          {/* QR Code — vendor's custom QR overrides the merchant QR for direct UPI. */}
+          {(directUpi?.qrUrl || qrCodeUrl) && (
             <div className="bg-card border border-border rounded-xl p-4 inline-block mb-4 shadow-sm">
-              <img src={qrCodeUrl} alt="UPI QR Code" className="w-[200px] h-[200px]" />
+              <img
+                src={directUpi?.qrUrl ?? qrCodeUrl!}
+                alt={directUpi ? `${directUpi.storeName} UPI QR` : "UPI QR Code"}
+                className="w-[200px] h-[200px] object-contain bg-white"
+              />
             </div>
           )}
 
-          {/* Merchant UPI ID */}
+          {/* UPI ID — vendor's personal UPI for direct flow, otherwise merchant. */}
           <div className="bg-muted rounded-lg px-4 py-3 mb-6">
             <p className="text-xs text-muted-foreground mb-1">Or pay manually to UPI ID</p>
-            <p className="font-mono font-semibold text-sm select-all">{pmSettings?.merchantUpiId ?? "merchant@upi"}</p>
+            <p className="font-mono font-semibold text-sm select-all">
+              {directUpi?.upiId ?? pmSettings?.merchantUpiId ?? "merchant@upi"}
+            </p>
           </div>
 
           {/* Instructions */}
-          <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">How to pay:</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>Open any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
-              <li>Scan the QR code above or enter the UPI ID</li>
-              <li>Enter the exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></li>
-              <li>Complete the payment and click "I Have Paid" below</li>
-            </ol>
-          </div>
+          {directUpi ? (
+            <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg p-3">
+              <p className="font-medium text-foreground">Direct payment partnership active.</p>
+              <p>
+                Scan the custom vendor QR code above using any UPI App (GPay/PhonePe/Paytm) to pay
+                the vendor directly. Once paid, click confirm.
+              </p>
+              <p className="text-xs">Exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></p>
+            </div>
+          ) : (
+            <div className="text-left space-y-2 mb-6 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">How to pay:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Open any UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
+                <li>Scan the QR code above or enter the UPI ID</li>
+                <li>Enter the exact amount: <span className="font-semibold text-foreground">{formatPrice(totalPrice)}</span></li>
+                <li>Complete the payment and click "I Have Paid" below</li>
+              </ol>
+            </div>
+          )}
 
           {/* Optional proof upload */}
           <div className="mb-6">
@@ -481,7 +543,7 @@ const CheckoutPage = () => {
             {upiConfirming ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirming...</>
             ) : (
-              <><CheckCircle className="h-4 w-4 mr-2" /> I Have Paid</>
+              <><CheckCircle className="h-4 w-4 mr-2" /> {directUpi ? "Confirm Direct Payment" : "I Have Paid"}</>
             )}
           </Button>
           <Button variant="ghost" size="sm" asChild>
@@ -602,6 +664,20 @@ const CheckoutPage = () => {
             </div>
           </div>
 
+          {directUpi ? (
+            <div className="bg-card rounded-xl marketplace-shadow p-6 border-2 border-primary/30">
+              <h2 className="font-semibold mb-2 flex items-center gap-2">
+                <QrCode className="h-5 w-5 text-primary" />
+                Direct Vendor Checkout
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                This order is processed through a direct payment partnership with{" "}
+                <span className="font-medium text-foreground">{directUpi.storeName}</span>.
+                After placing your order you'll see their UPI QR code — scan it with any UPI app to pay
+                the vendor directly. The standard Razorpay gateway is disabled for this checkout.
+              </p>
+            </div>
+          ) : (
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
             {codBlockedByItem && (
@@ -665,6 +741,7 @@ const CheckoutPage = () => {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="md:col-span-2">

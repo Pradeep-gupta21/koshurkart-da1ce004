@@ -40,14 +40,33 @@ const VendorSettings = () => {
   const [logo, setLogo] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
+  // Influencer (commission-exempt) direct UPI checkout configuration.
+  const [isExempt, setIsExempt] = useState(false);
+  const [directUpiId, setDirectUpiId] = useState("");
+  const [directUpiQrUrl, setDirectUpiQrUrl] = useState<string | null>(null);
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [savingDirect, setSavingDirect] = useState(false);
+
   useEffect(() => {
     if (!vendorId) return;
-    vendorService.getById(vendorId).then((v) => {
+    (async () => {
+      const v = await vendorService.getById(vendorId);
       setStoreName(v.store_name);
       setDescription(v.description ?? "");
       setLogo(v.logo ?? null);
+      // Fetch the influencer-checkout fields directly (vendorService.getById may not surface them).
+      const { data: directRow } = await supabase
+        .from("vendors")
+        .select("is_commission_exempt, direct_upi_id, direct_upi_qr_url")
+        .eq("id", vendorId)
+        .maybeSingle();
+      if (directRow) {
+        setIsExempt(!!directRow.is_commission_exempt);
+        setDirectUpiId(directRow.direct_upi_id ?? "");
+        setDirectUpiQrUrl(directRow.direct_upi_qr_url ?? null);
+      }
       setLoading(false);
-    });
+    })();
     // Live KYC status updates from admin actions
     refreshVendor();
     const channel = supabase
@@ -60,6 +79,7 @@ const VendorSettings = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [vendorId]);
+
 
   const handleSave = async () => {
     if (!vendorId) {
@@ -93,6 +113,43 @@ const VendorSettings = () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Save the influencer/exempt vendor's personal UPI checkout block.
+  const handleSaveDirectUpi = async () => {
+    if (!vendorId) return;
+    const trimmedUpi = directUpiId.trim();
+    // Basic UPI VPA format: handle@provider
+    if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(trimmedUpi)) {
+      toast({ title: "Invalid UPI ID", description: "Use the format name@bank (e.g. yourname@okaxis).", variant: "destructive" });
+      return;
+    }
+    setSavingDirect(true);
+    try {
+      let qrUrl: string | null = directUpiQrUrl;
+      if (qrFile) {
+        // Reuse uploadLogo's bucket/path conventions so storage RLS passes.
+        qrUrl = await vendorService.uploadLogo(vendorId, qrFile);
+      }
+      if (!qrUrl) {
+        toast({ title: "QR code required", description: "Upload your personal UPI payment QR image to continue.", variant: "destructive" });
+        setSavingDirect(false);
+        return;
+      }
+      const { error } = await supabase
+        .from("vendors")
+        .update({ direct_upi_id: trimmedUpi, direct_upi_qr_url: qrUrl })
+        .eq("id", vendorId);
+      if (error) throw error;
+      setDirectUpiId(trimmedUpi);
+      setDirectUpiQrUrl(qrUrl);
+      setQrFile(null);
+      toast({ title: "Direct UPI checkout updated" });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "Could not save UPI details.", variant: "destructive" });
+    } finally {
+      setSavingDirect(false);
     }
   };
 
@@ -149,6 +206,65 @@ const VendorSettings = () => {
       </Card>
 
       <ShippingServiceabilityCard vendorId={vendorId} />
+
+      {isExempt && (
+        <Card className="border-primary/40">
+          <CardHeader>
+            <CardTitle>Direct Influencer Checkout Payout Setup</CardTitle>
+            <CardDescription>
+              You're on a commission-exempt partnership. Configure your personal UPI so checkout takes
+              buyers directly to you — bypassing the standard Razorpay gateway and routing 100% of the
+              order amount to your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="direct-upi-id">Your Personal UPI ID</Label>
+              <Input
+                id="direct-upi-id"
+                placeholder="e.g. name@okaxis"
+                value={directUpiId}
+                onChange={(e) => setDirectUpiId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Format: handle@bankprovider</p>
+            </div>
+            <div>
+              <Label>Upload UPI Payment QR Code Image</Label>
+              <div className="flex items-center gap-4 mt-1">
+                {(qrFile || directUpiQrUrl) && (
+                  <img
+                    src={qrFile ? URL.createObjectURL(qrFile) : directUpiQrUrl!}
+                    alt="UPI QR preview"
+                    className="h-24 w-24 rounded-md border object-contain bg-white"
+                  />
+                )}
+                <Label htmlFor="upi-qr" className="cursor-pointer">
+                  <div className="inline-flex items-center gap-2 px-3 py-2 border rounded-md text-sm hover:bg-accent">
+                    <Upload className="h-4 w-4" /> {directUpiQrUrl ? "Replace QR" : "Upload QR"}
+                  </div>
+                  <Input
+                    id="upi-qr"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => setQrFile(e.target.files?.[0] ?? null)}
+                  />
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Buyers will scan this QR to pay you directly via any UPI app.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveDirectUpi} disabled={savingDirect}>
+                {savingDirect && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save Direct UPI
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
 
 
       <Card>
