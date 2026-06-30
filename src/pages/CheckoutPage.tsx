@@ -543,7 +543,7 @@ const CheckoutPage = () => {
             {upiConfirming ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirming...</>
             ) : (
-              <><CheckCircle className="h-4 w-4 mr-2" /> I Have Paid</>
+              <><CheckCircle className="h-4 w-4 mr-2" /> {directUpi ? "Confirm Direct Payment" : "I Have Paid"}</>
             )}
           </Button>
           <Button variant="ghost" size="sm" asChild>
