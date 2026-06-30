@@ -511,13 +511,64 @@ Deno.serve(async (req) => {
 
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
 
+  // ---- Razorpay Route split (upfront, on the order) ----
+  // 93% → vendor linked account, 7% retained in our merchant account (which
+  // is where Razorpay deducts its processing fees from). Commission-exempt
+  // vendors (influencers) get 100% — no admin cut.
+  const PLATFORM_FEE_PCT = 0.07;
+  const vendorPaise = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.vendor_id) continue;
+    const linePaise = Math.round(l.unit_price * l.quantity * 100);
+    vendorPaise.set(l.vendor_id, (vendorPaise.get(l.vendor_id) ?? 0) + linePaise);
+  }
+
+  const transfers: Array<{ account: string; amount: number; currency: string; on_hold: 0 | 1; notes: Record<string, string> }> = [];
+  const skippedTransfers: Array<{ vendor_id: string; reason: string }> = [];
+  if (vendorPaise.size > 0) {
+    const vendorIds = [...vendorPaise.keys()];
+    const { data: vRows } = await service
+      .from("vendors")
+      .select("id, razorpay_account_id, store_name, is_commission_exempt")
+      .in("id", vendorIds);
+    for (const v of (vRows ?? []) as any[]) {
+      const subPaise = vendorPaise.get(v.id) ?? 0;
+      if (subPaise <= 0) continue;
+      if (!v.razorpay_account_id) {
+        skippedTransfers.push({ vendor_id: v.id, reason: "missing_razorpay_account_id" });
+        continue;
+      }
+      const feePct = v.is_commission_exempt ? 0 : PLATFORM_FEE_PCT;
+      const sharePaise = Math.round(subPaise * (1 - feePct));
+      if (sharePaise < 100) {
+        skippedTransfers.push({ vendor_id: v.id, reason: "share_below_min" });
+        continue;
+      }
+      transfers.push({
+        account: v.razorpay_account_id,
+        amount: sharePaise,
+        currency: "INR",
+        on_hold: 0,
+        notes: {
+          order_id: orderId,
+          vendor_id: v.id,
+          vendor_name: v.store_name ?? "",
+          commission_exempt: v.is_commission_exempt ? "true" : "false",
+        },
+      });
+    }
+  }
+
+  const rpBody: Record<string, unknown> = { amount: amountPaise, currency: "INR", receipt };
+  if (transfers.length > 0) rpBody.transfers = transfers;
+
   const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: "Basic " + btoa(`${keyId}:${keySecret}`),
     },
-    body: JSON.stringify({ amount: amountPaise, currency: "INR", receipt }),
+    body: JSON.stringify(rpBody),
   });
   if (!rpRes.ok) {
     const errBody = await rpRes.text();
@@ -525,7 +576,7 @@ Deno.serve(async (req) => {
     await service.from("analytics_events").insert({
       event_type: "checkout_failed",
       user_id: user.id,
-      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId },
+      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId, body: errBody.slice(0, 500) },
     });
     return json({ error: "Failed to create Razorpay order" }, 502);
   }
@@ -534,7 +585,10 @@ Deno.serve(async (req) => {
     .from("payments")
     .update({ razorpay_order_id: rpOrder.id })
     .eq("id", payment.id);
-  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise });
+  await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise, transfers: transfers.length, skipped_transfers: skippedTransfers });
+  if (skippedTransfers.length > 0) {
+    console.warn("[create-checkout] vendors skipped from Route split", skippedTransfers);
+  }
 
   return json({
     orderId,
