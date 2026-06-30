@@ -664,6 +664,20 @@ const CheckoutPage = () => {
             </div>
           </div>
 
+          {directUpi ? (
+            <div className="bg-card rounded-xl marketplace-shadow p-6 border-2 border-primary/30">
+              <h2 className="font-semibold mb-2 flex items-center gap-2">
+                <QrCode className="h-5 w-5 text-primary" />
+                Direct Vendor Checkout
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                This order is processed through a direct payment partnership with{" "}
+                <span className="font-medium text-foreground">{directUpi.storeName}</span>.
+                After placing your order you'll see their UPI QR code — scan it with any UPI app to pay
+                the vendor directly. The standard Razorpay gateway is disabled for this checkout.
+              </p>
+            </div>
+          ) : (
           <div className="bg-card rounded-xl marketplace-shadow p-6">
             <h2 className="font-semibold mb-4">Payment Method</h2>
             {codBlockedByItem && (
