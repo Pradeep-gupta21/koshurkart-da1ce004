@@ -15,6 +15,7 @@ import RoleRoute from "@/components/auth/RoleRoute";
 import VendorStatusGate from "@/components/auth/VendorStatusGate";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import WhatsAppFloatingButton from "@/components/support/WhatsAppFloatingButton";
 import HomePage from "@/pages/HomePage";
 import SearchPage from "@/pages/SearchPage";
 import ProductDetailPage from "@/pages/ProductDetailPage";
@@ -156,6 +157,7 @@ const App = () => (
                   </Suspense>
                 </main>
                 <Footer />
+                <WhatsAppFloatingButton />
                 
               </div>
               </SidebarProvider>
