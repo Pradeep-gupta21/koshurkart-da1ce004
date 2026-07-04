@@ -157,6 +157,7 @@ const App = () => (
                   </Suspense>
                 </main>
                 <Footer />
+                <WhatsAppFloatingButton />
                 
               </div>
               </SidebarProvider>
