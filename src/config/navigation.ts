@@ -77,7 +77,7 @@ export const shopperNav: NavSection[] = [
     id: "help",
     label: "Help & Settings",
     items: [
-      { id: "help", label: "Customer Service", to: "/help", icon: HelpCircle },
+      { id: "help", label: "Customer Service", to: "/support", icon: HelpCircle },
       { id: "privacy", label: "Privacy Policy", to: "/privacy-policy", icon: FileText },
     ],
   },
