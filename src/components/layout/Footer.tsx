@@ -38,6 +38,7 @@ const Footer = () => (
         <div>
           <h4 className="font-sans font-semibold mb-3 text-sm tracking-wide uppercase text-accent/90">Support</h4>
           <nav className="flex flex-col gap-2 text-sm opacity-70">
+            <Link to="/support" className="hover:text-accent hover:opacity-100 transition-colors">Support</Link>
             <span>Help Center</span>
             <span>Contact Us</span>
             <Link to="/about-us" className="hover:text-accent hover:opacity-100 transition-colors">About Us</Link>
