@@ -8,7 +8,8 @@ import { paymentService } from "@/services/paymentService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2, Printer, Receipt } from "lucide-react";
+import { User, ShoppingCart, LogOut, Store, ChevronDown, ChevronUp, Package, Truck, CalendarIcon, MapPin, CheckCircle2, Clock, Bell, CreditCard, Undo2, Printer, Receipt, MessageCircle } from "lucide-react";
+import { buildWhatsAppUrl, getSupportWhatsAppNumber } from "@/lib/supportConfig";
 import ReturnRequestModal, { type ReturnItem } from "@/components/orders/ReturnRequestModal";
 import { openReturnSlip } from "@/lib/printReturnSlip";
 import { openInvoice } from "@/lib/printInvoice";
@@ -452,6 +453,56 @@ const ProfilePage = () => {
 
                       {/* Tracking history timeline */}
                       <TrackingTimeline orderId={o.id} />
+
+                      {/* Chat support for this order */}
+                      {(() => {
+                        const supportMessage = [
+                          "Hi KoshurKart,",
+                          "I need assistance with my order.",
+                          "",
+                          o?.id ? `Order ID: ${o.id}` : null,
+                          o?.created_at
+                            ? `Order Date: ${new Date(o.created_at).toLocaleDateString("en-IN")}`
+                            : null,
+                          o?.order_status ? `Order Status: ${o.order_status}` : null,
+                          o?.order_items?.[0]?.title
+                            ? `Product: ${o.order_items[0].title}`
+                            : null,
+                          "",
+                          "Issue:",
+                          "[Please describe your issue here]",
+                        ]
+                          .filter((line) => line !== null)
+                          .join("\n");
+                        const supportUrl = buildWhatsAppUrl(supportMessage);
+                        const available = getSupportWhatsAppNumber() !== null;
+                        return (
+                          <div className="pt-2 border-t">
+                            <p className="text-xs text-muted-foreground mb-2">Need help with this order?</p>
+                            {available ? (
+                              <UIButton
+                                asChild
+                                size="sm"
+                                variant="outline"
+                                className="w-full md:w-auto border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                              >
+                                <a href={supportUrl} target="_blank" rel="noopener noreferrer">
+                                  <MessageCircle className="h-4 w-4 mr-2" /> Chat Support
+                                </a>
+                              </UIButton>
+                            ) : (
+                              <UIButton
+                                size="sm"
+                                variant="outline"
+                                disabled
+                                className="w-full md:w-auto"
+                              >
+                                <MessageCircle className="h-4 w-4 mr-2" /> Support Unavailable
+                              </UIButton>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
