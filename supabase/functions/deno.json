@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": true,
+    "lib": ["deno.window"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../../src/*"]
+    }
+  },
+  "imports": {
+    "@/": "../../src/",
+    "zod": "npm:zod@3.23.8"
+  }
+}
