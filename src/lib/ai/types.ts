@@ -91,5 +91,3 @@ export interface AgentChatPayload {
   sessionId?: string;
 }
 
-/* Convenience aliases so hook consumers don't import the wire union name. */
-export type { AIStreamEvent as AgentStreamEvent };

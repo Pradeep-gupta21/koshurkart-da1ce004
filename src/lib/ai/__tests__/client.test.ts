@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { parseSSEStream, SSE_DONE } from "../sse";
 import { AIClient } from "../client";
 import { AITransportError, type AIChatTransport } from "../transport";
-import type { AIStreamEvent } from "@/ai/types/chat";
+import type { AgentStreamEvent } from "../events";
 
 /** Build a `ReadableStream<Uint8Array>` from raw SSE text chunks. */
 function streamOf(...chunks: string[]): ReadableStream<Uint8Array> {
@@ -32,9 +32,9 @@ function fakeTransport(...chunks: string[]): AIChatTransport {
 }
 
 async function collect(
-  events: AsyncIterable<AIStreamEvent>,
-): Promise<AIStreamEvent[]> {
-  const out: AIStreamEvent[] = [];
+  events: AsyncIterable<AgentStreamEvent>,
+): Promise<AgentStreamEvent[]> {
+  const out: AgentStreamEvent[] = [];
   for await (const e of events) out.push(e);
   return out;
 }

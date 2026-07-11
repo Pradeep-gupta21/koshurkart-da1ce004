@@ -44,3 +44,19 @@ export { StreamingCursor } from "./StreamingCursor";
 export { TypingIndicator } from "./TypingIndicator";
 export { Markdown } from "./Markdown";
 export type { MarkdownProps } from "./Markdown";
+
+/* ---- AI-OS orchestration renderers (Phase 2.3) ------------------- */
+export { ActivityTimeline } from "./ActivityTimeline";
+export type { ActivityTimelineProps } from "./ActivityTimeline";
+export { ToolCard } from "./ToolCard";
+export type { ToolCardProps } from "./ToolCard";
+export { PlannerProgress } from "./PlannerProgress";
+export type { PlannerProgressProps } from "./PlannerProgress";
+export { AgentBadge } from "./AgentBadge";
+export type { AgentBadgeProps } from "./AgentBadge";
+export { MemoryEvent } from "./MemoryEvent";
+export type { MemoryEventProps } from "./MemoryEvent";
+export { ReflectionCard } from "./ReflectionCard";
+export type { ReflectionCardProps } from "./ReflectionCard";
+export { JobStatus } from "./JobStatus";
+export type { JobStatusProps } from "./JobStatus";

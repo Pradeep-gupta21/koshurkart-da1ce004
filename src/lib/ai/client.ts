@@ -17,11 +17,12 @@
  * transport directly — that is the networking/presentation boundary.
  */
 
-import type { AIError, AIStreamEvent } from "@/ai/types/chat";
+import type { AIError } from "@/ai/types/chat";
 import { parseSSEStream } from "./sse";
 import { AITransportError, type AIChatTransport } from "./transport";
 import { createSupabaseAIChatTransport } from "./supabaseTransport";
 import type { AgentChatPayload } from "./types";
+import type { AgentStreamEvent } from "./events";
 
 /** Options for constructing an {@link AIClient}. */
 export interface AIClientConfig {
@@ -58,7 +59,7 @@ export class AIClient {
   async *streamChat(
     payload: AgentChatPayload,
     signal: AbortSignal,
-  ): AsyncGenerator<AIStreamEvent, void, unknown> {
+  ): AsyncGenerator<AgentStreamEvent, void, unknown> {
     let body: ReadableStream<Uint8Array>;
     try {
       body = await this.transport.openChatStream(payload, signal);
@@ -95,9 +96,9 @@ export function defaultAIClient(): AIClient {
  * ------------------------------------------------------------------ */
 
 /** Parse one SSE data payload into an event, tolerating malformed lines. */
-function safeParseEvent(data: string): AIStreamEvent | null {
+function safeParseEvent(data: string): AgentStreamEvent | null {
   try {
-    return JSON.parse(data) as AIStreamEvent;
+    return JSON.parse(data) as AgentStreamEvent;
   } catch {
     // A stray non-JSON keep-alive or partial line — skip it rather than fail
     // the whole stream.

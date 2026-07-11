@@ -13,6 +13,7 @@
 import { useChat } from "./ChatProvider";
 import { MessageBubble } from "./MessageBubble";
 import { AutoScroll } from "./AutoScroll";
+import { ActivityTimeline } from "./ActivityTimeline";
 import { cn } from "@/lib/utils";
 
 export interface MessageListProps {
@@ -34,17 +35,22 @@ export function MessageList({ className, emptyState }: MessageListProps): JSX.El
 
   return (
     <AutoScroll className={className}>
-      <ol
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-        aria-label="Conversation"
-        className={cn("flex flex-col gap-3 p-4")}
-      >
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
-      </ol>
+      <div className="flex flex-col">
+        <ol
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Conversation"
+          className={cn("flex flex-col gap-3 p-4")}
+        >
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+        </ol>
+        {/* Orchestration activity for the in-progress turn (memory, plan,
+            delegation, tools, reflection, jobs). Renders nothing when idle. */}
+        <ActivityTimeline />
+      </div>
     </AutoScroll>
   );
 }

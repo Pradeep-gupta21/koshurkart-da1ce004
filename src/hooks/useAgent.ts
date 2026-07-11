@@ -23,10 +23,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIClient, defaultAIClient } from "@/lib/ai";
 import type {
+  ActivityEntry,
   AgentChatPayload,
   AgentMessage,
   AIError,
   ChatAudience,
+  PlanInfo,
+  ToolInvocationState,
 } from "@/lib/ai";
 
 /* ------------------------------------------------------------------ *
@@ -66,6 +69,19 @@ export interface UseAgentResult {
   readonly streaming: boolean;
   /** The most recent turn error, or `null`. Cleared when a new turn starts. */
   readonly error: AIError | null;
+  /**
+   * Ordered orchestration timeline for the current turn — memory recalls,
+   * planner snapshots, delegations, tool invocations, reflection, and jobs.
+   * Reset when a new turn starts. Populated only for the orchestration events
+   * the backend emits; empty for a plain streaming reply.
+   */
+  readonly activity: ActivityEntry[];
+  /** The latest planner snapshot for the current turn, or `null`. */
+  readonly plan: PlanInfo | null;
+  /** Tool invocations for the current turn (call merged with result). */
+  readonly toolInvocations: ToolInvocationState[];
+  /** Name of the sub-agent currently handling the turn via delegation, if any. */
+  readonly currentAgent: string | null;
   /** Send a user message and stream the assistant reply. No-op if blank. */
   send: (text: string) => Promise<void>;
   /** Abort the in-flight turn (if any) and mark the reply `cancelled`. */
@@ -89,6 +105,9 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
   const [loading, setLoading] = useState<boolean>(false);
   const [streaming, setStreaming] = useState<boolean>(false);
   const [error, setError] = useState<AIError | null>(null);
+  // Single ordered source for all orchestration events this turn; plan /
+  // toolInvocations / currentAgent are derived from it below.
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
   // Stable dependencies — memoized so they don't re-create the callbacks.
   const client = useMemo<AIClient>(
@@ -131,6 +150,7 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
       setError(null);
       setLoading(true);
       setStreaming(false);
+      setActivity([]); // Orchestration timeline is per-turn.
       setMessages((prev) => {
         const next = appendUser
           ? [...prev, makeUserMessage(generateId(), text)]
@@ -167,11 +187,97 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
               break;
             }
             case "tool_call": {
+              const call = event.toolCall;
               setMessages((prev) =>
                 patch(prev, assistantId, (m) => ({
                   ...m,
-                  toolCalls: [...(m.toolCalls ?? []), event.toolCall],
+                  toolCalls: [...(m.toolCalls ?? []), call],
                 })),
+              );
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: `tool:${call.id}`,
+                  at: Date.now(),
+                  kind: "tool",
+                  invocation: {
+                    id: call.id,
+                    name: call.name,
+                    arguments: call.arguments,
+                    status: "running",
+                  },
+                }),
+              );
+              break;
+            }
+            case "tool_result": {
+              setActivity((prev) =>
+                resolveToolResult(
+                  prev,
+                  event.toolCallId,
+                  event.result,
+                  event.isError === true,
+                  event.toolName,
+                ),
+              );
+              break;
+            }
+            case "memory": {
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: generateId(),
+                  at: Date.now(),
+                  kind: "memory",
+                  data: event.data,
+                }),
+              );
+              break;
+            }
+            case "plan": {
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: `plan:${event.plan.id}`,
+                  at: Date.now(),
+                  kind: "plan",
+                  plan: event.plan,
+                }),
+              );
+              break;
+            }
+            case "delegation": {
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: generateId(),
+                  at: Date.now(),
+                  kind: "delegation",
+                  agent: event.agent,
+                  phase: event.phase,
+                  objective: event.objective,
+                }),
+              );
+              break;
+            }
+            case "reflection": {
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: generateId(),
+                  at: Date.now(),
+                  kind: "reflection",
+                  phase: event.phase,
+                  success: event.success,
+                  feedback: event.feedback,
+                  selfCorrected: event.selfCorrected,
+                }),
+              );
+              break;
+            }
+            case "job": {
+              setActivity((prev) =>
+                upsertActivity(prev, {
+                  id: `job:${event.job.id}`,
+                  at: Date.now(),
+                  kind: "job",
+                  job: event.job,
+                }),
               );
               break;
             }
@@ -263,14 +369,115 @@ export function useAgent(options: UseAgentOptions): UseAgentResult {
     setError(null);
     setLoading(false);
     setStreaming(false);
+    setActivity([]);
   }, []);
 
-  return { messages, loading, streaming, error, send, cancel, retry, reset };
+  // --- Derived orchestration views (single source: `activity`) -----------
+  const plan = useMemo<PlanInfo | null>(() => {
+    for (let i = activity.length - 1; i >= 0; i--) {
+      const entry = activity[i];
+      if (entry.kind === "plan") return entry.plan;
+    }
+    return null;
+  }, [activity]);
+
+  const toolInvocations = useMemo<ToolInvocationState[]>(
+    () => activity.flatMap((e) => (e.kind === "tool" ? [e.invocation] : [])),
+    [activity],
+  );
+
+  const currentAgent = useMemo<string | null>(() => {
+    let active: string | null = null;
+    for (const e of activity) {
+      if (e.kind === "delegation") active = e.phase === "start" ? e.agent : null;
+    }
+    return active;
+  }, [activity]);
+
+  return {
+    messages,
+    loading,
+    streaming,
+    error,
+    activity,
+    plan,
+    toolInvocations,
+    currentAgent,
+    send,
+    cancel,
+    retry,
+    reset,
+  };
 }
 
 /* ------------------------------------------------------------------ *
  * Pure helpers (no React) — presentation-free message transforms
  * ------------------------------------------------------------------ */
+
+/**
+ * Insert an activity entry, or replace an existing one with the same `id`
+ * (used for plan/tool/job entries that update in place). On replace the
+ * original `at` timestamp is preserved so ordering stays stable.
+ */
+function upsertActivity(
+  list: ActivityEntry[],
+  entry: ActivityEntry,
+): ActivityEntry[] {
+  const idx = list.findIndex((e) => e.id === entry.id);
+  if (idx === -1) return [...list, entry];
+  const next = list.slice();
+  next[idx] = { ...entry, at: list[idx].at };
+  return next;
+}
+
+/**
+ * Mark a tool invocation resolved from a `tool_result` event. If the matching
+ * `tool_call` was never seen (result-first), a completed entry is created.
+ */
+function resolveToolResult(
+  list: ActivityEntry[],
+  toolCallId: string,
+  result: unknown,
+  isError: boolean,
+  toolName: string | undefined,
+): ActivityEntry[] {
+  const status: ToolInvocationState["status"] = isError ? "failed" : "succeeded";
+  const idx = list.findIndex(
+    (e) => e.kind === "tool" && e.invocation.id === toolCallId,
+  );
+
+  if (idx === -1) {
+    return [
+      ...list,
+      {
+        id: `tool:${toolCallId}`,
+        at: Date.now(),
+        kind: "tool",
+        invocation: {
+          id: toolCallId,
+          name: toolName ?? "tool",
+          status,
+          result,
+          isError,
+        },
+      },
+    ];
+  }
+
+  const existing = list[idx] as Extract<ActivityEntry, { kind: "tool" }>;
+  const next = list.slice();
+  next[idx] = {
+    ...existing,
+    invocation: {
+      ...existing.invocation,
+      name: toolName ?? existing.invocation.name,
+      status,
+      result,
+      isError,
+    },
+  };
+  return next;
+}
 
 /** Replace the message with `id` by applying `fn`; others pass through. */
 function patch(

@@ -18,7 +18,6 @@ export type {
   AgentMessage,
   AgentMessageStatus,
   AgentChatPayload,
-  AgentStreamEvent,
   AIStreamEvent,
   AIError,
   AIErrorCode,
@@ -37,6 +36,21 @@ export {
   createSupabaseAIChatTransport,
 } from "./supabaseTransport";
 export type { SupabaseAIChatTransportConfig } from "./supabaseTransport";
+
+/* ---- Agent stream event protocol (rich, forward-compatible) ------ */
+export { isBaseStreamEvent, toolCallOf } from "./events";
+export type {
+  AgentStreamEvent,
+  AgentOrchestrationEventType,
+  MemoryEventData,
+  PlanInfo,
+  PlanStepInfo,
+  PlanStepStatus,
+  JobInfo,
+  ToolInvocationState,
+  ToolInvocationStatus,
+  ActivityEntry,
+} from "./events";
 
 /* ---- SSE parsing ------------------------------------------------- */
 export { parseSSEStream, SSE_DONE } from "./sse";

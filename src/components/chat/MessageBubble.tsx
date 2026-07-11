@@ -13,18 +13,19 @@
 
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import type { AgentMessage } from "@/lib/ai";
+import type { AgentMessage, ToolInvocationState } from "@/lib/ai";
 import { Markdown } from "./Markdown";
 import { StreamingCursor } from "./StreamingCursor";
 import { TypingIndicator } from "./TypingIndicator";
+import { ToolCard } from "./ToolCard";
 
 export interface MessageBubbleProps {
   message: AgentMessage;
 }
 
-/** Per-role container + bubble styling. */
+/** Per-role container + bubble styling (text-bearing roles only). */
 const ROLE_STYLES: Record<
-  AgentMessage["role"],
+  "user" | "assistant" | "system",
   { row: string; bubble: string; label: string }
 > = {
   user: {
@@ -43,15 +44,35 @@ const ROLE_STYLES: Record<
       "bg-transparent text-muted-foreground text-xs italic border border-dashed border-border",
     label: "System",
   },
-  tool: {
-    row: "justify-start",
-    bubble:
-      "bg-accent/40 text-accent-foreground font-mono text-xs rounded-bl-sm border border-border",
-    label: "Tool",
-  },
 };
 
+/** Adapt a persisted `role: "tool"` message into a `ToolInvocationState`. */
+function toolInvocationFromMessage(message: AgentMessage): ToolInvocationState {
+  const toolName =
+    typeof message.metadata?.toolName === "string"
+      ? (message.metadata.toolName as string)
+      : "tool";
+  return {
+    id: message.toolCallId ?? message.id,
+    name: toolName,
+    status: message.status === "error" ? "failed" : "succeeded",
+    result: message.content,
+    isError: message.status === "error",
+  };
+}
+
 function MessageBubbleImpl({ message }: MessageBubbleProps): JSX.Element {
+  // Tool messages get a dedicated card rather than a chat bubble.
+  if (message.role === "tool") {
+    return (
+      <li className="flex w-full justify-start" data-role="tool">
+        <div className="max-w-[85%]">
+          <ToolCard invocation={toolInvocationFromMessage(message)} />
+        </div>
+      </li>
+    );
+  }
+
   const styles = ROLE_STYLES[message.role];
   const isStreaming = message.status === "streaming";
   const isPending = message.status === "pending";
@@ -77,10 +98,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps): JSX.Element {
         <span className="sr-only">{styles.label} said: </span>
 
         {/* Content */}
-        {message.role === "tool" ? (
-          // Tool output is raw text, not markdown, to preserve exact formatting.
-          <pre className="whitespace-pre-wrap break-words">{message.content}</pre>
-        ) : isAwaitingFirstToken ? (
+        {isAwaitingFirstToken ? (
           <TypingIndicator />
         ) : (
           <div className="inline">

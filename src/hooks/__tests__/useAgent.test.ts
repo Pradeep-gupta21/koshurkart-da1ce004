@@ -40,6 +40,9 @@ const done = (finishReason = "stop") =>
 const errorEvent = (message: string) =>
   `data: ${JSON.stringify({ type: "error", error: { code: "network", message, retryable: true } })}\n\n`;
 
+/** Serialize any orchestration event as an SSE data line. */
+const evt = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`;
+
 describe("useAgent", () => {
   it("streams an assistant reply and settles as complete", async () => {
     const client = scriptedClient(delta("Hel"), delta("lo"), done(), `data: ${SSE_DONE}\n\n`);
@@ -153,6 +156,90 @@ describe("useAgent", () => {
     act(() => result.current.reset());
     expect(result.current.messages).toHaveLength(0);
     expect(result.current.error).toBeNull();
+  });
+
+  it("reduces orchestration events into activity/plan/tools/agent state", async () => {
+    const client = scriptedClient(
+      evt({ type: "memory", data: { phase: "recall", scope: "conversation", count: 3 } }),
+      evt({ type: "delegation", phase: "start", agent: "vendor-agent", objective: "lookup" }),
+      evt({
+        type: "plan",
+        phase: "start",
+        plan: {
+          id: "p1",
+          objective: "answer the question",
+          steps: [
+            { id: "s1", description: "find order", status: "running", toolName: "order_lookup" },
+            { id: "s2", description: "summarize", status: "pending" },
+          ],
+        },
+      }),
+      evt({ type: "tool_call", toolCall: { id: "t1", name: "order_lookup", arguments: { id: "42" } } }),
+      evt({ type: "tool_result", toolCallId: "t1", result: { status: "shipped" } }),
+      evt({ type: "reflection", phase: "complete", success: true, selfCorrected: false }),
+      evt({ type: "job", job: { id: "j1", kind: "email", status: "queued" } }),
+      delta("Done."),
+      done(),
+    );
+
+    const { result } = renderHook(() => useAgent({ audience: "vendor", client }));
+    await act(async () => {
+      await result.current.send("where is order 42?");
+    });
+
+    // Timeline captured every orchestration event, in order.
+    const kinds = result.current.activity.map((a) => a.kind);
+    expect(kinds).toEqual([
+      "memory",
+      "delegation",
+      "plan",
+      "tool",
+      "reflection",
+      "job",
+    ]);
+
+    // Derived views.
+    expect(result.current.plan?.id).toBe("p1");
+    expect(result.current.plan?.steps).toHaveLength(2);
+    expect(result.current.toolInvocations).toHaveLength(1);
+    expect(result.current.toolInvocations[0]).toMatchObject({
+      id: "t1",
+      name: "order_lookup",
+      status: "succeeded",
+      result: { status: "shipped" },
+    });
+    // Delegation "start" with no "complete" ⇒ agent still active.
+    expect(result.current.currentAgent).toBe("vendor-agent");
+
+    // The assistant text still streamed normally alongside the activity.
+    expect(result.current.messages[1]).toMatchObject({
+      role: "assistant",
+      content: "Done.",
+      status: "complete",
+    });
+  });
+
+  it("clears activity at the start of each new turn", async () => {
+    const first = scriptedClient(
+      evt({ type: "job", job: { id: "j1", kind: "reindex", status: "running" } }),
+      delta("one"),
+      done(),
+    );
+    const { result, rerender } = renderHook(
+      ({ client }) => useAgent({ audience: "admin", client }),
+      { initialProps: { client: first } },
+    );
+    await act(async () => {
+      await result.current.send("a");
+    });
+    expect(result.current.activity).toHaveLength(1);
+
+    const second = scriptedClient(delta("two"), done());
+    rerender({ client: second });
+    await act(async () => {
+      await result.current.send("b");
+    });
+    expect(result.current.activity).toHaveLength(0);
   });
 
   it("cancel() aborts an in-flight turn and marks the reply cancelled", async () => {
