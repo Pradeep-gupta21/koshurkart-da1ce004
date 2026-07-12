@@ -8,7 +8,13 @@
 // return the same order/payment instead of creating duplicates.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
-import { calculateOrderAmount, assertAmountConsistency } from "../_shared/pricing.ts";
+import {
+  calculateOrderAmount,
+  assertAmountConsistency,
+  calculateCommissionSplit,
+  calculateVendorTransferAmount,
+  getVendorCommissionPercentage,
+} from "../_shared/pricing.ts";
 
 const DEBUG_PRICING = Deno.env.get("DEBUG_PRICING") === "true";
 
@@ -407,28 +413,60 @@ Deno.serve(async (req) => {
     }
   } catch (_) { /* defaults */ }
 
-  // Per-vendor commission: exempt vendors (influencer partners) get 0% cut and
-  // receive 100% of their line subtotal. Non-exempt vendors are charged the
-  // active platform commission percentage.
-  let commission = 0;
-  if (commissionEnabled && commissionPct > 0) {
-    const vendorIds = Array.from(new Set(lines.map((l: any) => l.vendor_id).filter(Boolean)));
-    let exemptIds = new Set<string>();
-    if (vendorIds.length > 0) {
-      const { data: vendorRows } = await service
-        .from("vendors")
-        .select("id, is_commission_exempt")
-        .in("id", vendorIds);
-      exemptIds = new Set((vendorRows ?? []).filter((v: any) => v.is_commission_exempt).map((v: any) => v.id));
-    }
-    let chargeableSubtotal = 0;
-    for (const l of lines as any[]) {
-      if (l.vendor_id && exemptIds.has(l.vendor_id)) continue;
-      chargeableSubtotal += Number(l.unit_price) * Number(l.quantity);
-    }
-    commission = Math.round(chargeableSubtotal * commissionPct) / 100;
+  // Platform commission setting, in the shape getVendorCommissionPercentage
+  // expects. That helper is the single place that decides the rate a vendor
+  // pays — both the recorded payment split and the Route transfers below defer
+  // to it, so they can never derive from two independently-maintained numbers.
+  const platformSettings = { commission: { enabled: commissionEnabled, percentage: commissionPct } };
+
+  // Per-vendor subtotal in integer paise, using the same per-line rounding as
+  // calculateOrderAmount so the vendor parts sum back to amountPaise exactly.
+  // Computed once here and reused for the Route transfers[] split.
+  const vendorPaise = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.vendor_id) continue;
+    const linePaise = Math.round(l.unit_price * l.quantity * 100);
+    vendorPaise.set(l.vendor_id, (vendorPaise.get(l.vendor_id) ?? 0) + linePaise);
   }
-  const vendorEarnings = Math.round((total - commission) * 100) / 100;
+
+  // Resolve each vendor's exemption flag so getVendorCommissionPercentage can
+  // decide the rate (exempt vendors — influencer partners — pay 0%).
+  const commissionVendorIds = [...vendorPaise.keys()];
+  const vendorInfo = new Map<string, { id: string; is_commission_exempt: boolean }>();
+  if (commissionVendorIds.length > 0) {
+    const { data: vendorRows } = await service
+      .from("vendors")
+      .select("id, is_commission_exempt")
+      .in("id", commissionVendorIds);
+    for (const v of (vendorRows ?? []) as any[]) {
+      vendorInfo.set(v.id, { id: v.id, is_commission_exempt: !!v.is_commission_exempt });
+    }
+  }
+
+  // Aggregate the per-vendor split via the shared helpers. The rate for each
+  // vendor comes solely from getVendorCommissionPercentage (which already folds
+  // in exemption), so platform_commission / vendor_earnings recorded on the
+  // payment row are the exact sum of the same splits used to build the Route
+  // transfers — the recorded numbers and the money actually moved cannot drift.
+  let platformCommissionPaise = 0;
+  let vendorEarningsPaise = 0;
+  for (const [vendorId, subPaise] of vendorPaise) {
+    const v = vendorInfo.get(vendorId) ?? { id: vendorId, is_commission_exempt: false };
+    const pct = getVendorCommissionPercentage(v, platformSettings);
+    const split = calculateCommissionSplit(subPaise, pct, false);
+    platformCommissionPaise += split.platformCommissionPaise;
+    vendorEarningsPaise += split.vendorSharePaise;
+  }
+  const commission = platformCommissionPaise / 100;
+  const vendorEarnings = vendorEarningsPaise / 100;
+
+  // Headline rate recorded on the payment row = what a non-exempt vendor pays.
+  // Routed through the same helper so the enabled/percentage decision lives in
+  // exactly one place; per-vendor exemptions are reflected in the amounts above.
+  const recordedCommissionPct = getVendorCommissionPercentage(
+    { id: "__platform__", is_commission_exempt: false },
+    platformSettings,
+  );
 
   // ---- 7. Idempotent payment row ----
   const { data: existingPayment } = await service
@@ -450,7 +488,7 @@ Deno.serve(async (req) => {
         payment_method,
         payment_provider: payment_method === "razorpay" ? "razorpay" : null,
         payment_status: "pending",
-        commission_percentage: commissionPct,
+        commission_percentage: recordedCommissionPct,
         platform_commission: commission,
         vendor_earnings: vendorEarnings,
       })
@@ -512,17 +550,14 @@ Deno.serve(async (req) => {
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
 
   // ---- Razorpay Route split (upfront, on the order) ----
-  // 93% → vendor linked account, 7% retained in our merchant account (which
-  // is where Razorpay deducts its processing fees from). Commission-exempt
-  // vendors (influencers) get 100% — no admin cut.
-  const PLATFORM_FEE_PCT = 0.07;
-  const vendorPaise = new Map<string, number>();
-  for (const l of lines) {
-    if (!l.vendor_id) continue;
-    const linePaise = Math.round(l.unit_price * l.quantity * 100);
-    vendorPaise.set(l.vendor_id, (vendorPaise.get(l.vendor_id) ?? 0) + linePaise);
-  }
-
+  // Vendor receives (100 - commission)% of their line subtotal; the platform
+  // commission share is retained in our merchant account (where Razorpay
+  // deducts its processing fees from — never charged to the vendor).
+  // Commission-exempt vendors (influencers) get 100% — no admin cut. The rate
+  // comes from the SAME getVendorCommissionPercentage helper and the split from
+  // the SAME calculateCommissionSplit family as the payments row above (over the
+  // same `vendorPaise` map), so the transfer amount is guaranteed equal to the
+  // recorded vendor_earnings.
   const transfers: Array<{ account: string; amount: number; currency: string; on_hold: 0 | 1; notes: Record<string, string> }> = [];
   const skippedTransfers: Array<{ vendor_id: string; reason: string }> = [];
   if (vendorPaise.size > 0) {
@@ -538,8 +573,8 @@ Deno.serve(async (req) => {
         skippedTransfers.push({ vendor_id: v.id, reason: "missing_razorpay_account_id" });
         continue;
       }
-      const feePct = v.is_commission_exempt ? 0 : PLATFORM_FEE_PCT;
-      const sharePaise = Math.round(subPaise * (1 - feePct));
+      const pct = getVendorCommissionPercentage(v, platformSettings);
+      const sharePaise = calculateVendorTransferAmount(subPaise, pct, false);
       if (sharePaise < 100) {
         skippedTransfers.push({ vendor_id: v.id, reason: "share_below_min" });
         continue;

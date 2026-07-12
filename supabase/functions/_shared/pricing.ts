@@ -73,3 +73,82 @@ export function assertAmountConsistency(
   }
   return null;
 }
+
+export interface CommissionSplit {
+  platformCommissionPaise: number; // integer paise retained by the platform
+  vendorSharePaise: number; // integer paise owed to the vendor
+  commissionPct: number; // effective percent actually applied (0 when exempt)
+}
+
+/**
+ * Single source of truth for the commission split. Given a vendor's line
+ * subtotal in integer paise, split it into the platform's commission and the
+ * vendor's payout using the same paise-based integer math as the rest of this
+ * file — the DB-recorded commission and the Razorpay Route transfer amount both
+ * flow through here so they can never drift.
+ *
+ * `commissionPct` is a whole-percent value (e.g. 5 for 5%), matching the shape
+ * stored in `platform_settings.commission.percentage`. When `isExempt` is true
+ * the commission is forced to 0 and the vendor receives 100%.
+ *
+ * The vendor share is floored to the paise so that any sub-paise rounding
+ * remainder accrues to the platform commission, never the vendor. By
+ * construction `platformCommissionPaise + vendorSharePaise === lineAmountPaise`
+ * exactly (no rounding leakage).
+ */
+export function calculateCommissionSplit(
+  lineAmountPaise: number,
+  commissionPct: number,
+  isExempt: boolean,
+): CommissionSplit {
+  const effectivePct = isExempt ? 0 : commissionPct;
+  // Floor the vendor share; the platform absorbs whatever paise remain so the
+  // two parts always reconstruct lineAmountPaise exactly.
+  const vendorSharePaise = Math.floor((lineAmountPaise * (100 - effectivePct)) / 100);
+  const platformCommissionPaise = lineAmountPaise - vendorSharePaise;
+  return { platformCommissionPaise, vendorSharePaise, commissionPct: effectivePct };
+}
+
+/**
+ * The exact paise a vendor should receive via a Razorpay Route transfer for a
+ * given line subtotal. Thin wrapper that delegates to calculateCommissionSplit()
+ * so the transfer amount is arithmetically identical to the vendor share that is
+ * recorded on the payment row — never a parallel calculation.
+ */
+export function calculateVendorTransferAmount(
+  lineAmountPaise: number,
+  commissionPct: number,
+  isExempt: boolean,
+): number {
+  return calculateCommissionSplit(lineAmountPaise, commissionPct, isExempt).vendorSharePaise;
+}
+
+/**
+ * Single decision point for "what commission percentage does THIS vendor pay?".
+ * Returns a whole-percent value (e.g. 5 for 5%) suitable for passing straight
+ * into calculateCommissionSplit() / calculateVendorTransferAmount().
+ *
+ * Today the answer is simply: exempt vendors pay 0%, everyone else pays the
+ * platform's configured rate (0 when commission is disabled). This function is
+ * deliberately the ONLY place that rate is decided — it is the extension point
+ * where tiered/vendor-specific commission logic will be injected later (vendor
+ * tier lookups, bulk-order discounts, contract-specific rates, promo periods,
+ * etc.). Add such rules HERE so every caller — the recorded payment split and
+ * the Razorpay Route transfer alike — stays in lockstep automatically.
+ */
+export function getVendorCommissionPercentage(
+  vendor: { is_commission_exempt: boolean; id: string },
+  platformSettings: { commission: { enabled: boolean; percentage: number } },
+): number {
+  // If this vendor has a commission exemption, they pay 0%.
+  if (vendor.is_commission_exempt) return 0;
+
+  // Otherwise, use the platform's configured commission.
+  // (In the future, this is where vendor tier lookups, bulk discounts,
+  // contract-specific rates, or other business rules will be injected.
+  // Keep this function as the single point of decision for "what % does vendor X pay?")
+  if (platformSettings.commission.enabled && platformSettings.commission.percentage > 0) {
+    return platformSettings.commission.percentage;
+  }
+  return 0;
+}
