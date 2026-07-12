@@ -559,7 +559,7 @@ Deno.serve(async (req) => {
   // same `vendorPaise` map), so the transfer amount is guaranteed equal to the
   // recorded vendor_earnings.
   const transfers: Array<{ account: string; amount: number; currency: string; on_hold: 0 | 1; notes: Record<string, string> }> = [];
-  const skippedTransfers: Array<{ vendor_id: string; reason: string }> = [];
+  const skippedTransfers: Array<{ vendor_id: string; reason: string; amount_paise: number }> = [];
   if (vendorPaise.size > 0) {
     const vendorIds = [...vendorPaise.keys()];
     const { data: vRows } = await service
@@ -570,13 +570,15 @@ Deno.serve(async (req) => {
       const subPaise = vendorPaise.get(v.id) ?? 0;
       if (subPaise <= 0) continue;
       if (!v.razorpay_account_id) {
-        skippedTransfers.push({ vendor_id: v.id, reason: "missing_razorpay_account_id" });
+        // Record the payout this vendor would have received, for visibility.
+        const owedPaise = calculateVendorTransferAmount(subPaise, getVendorCommissionPercentage(v, platformSettings), false);
+        skippedTransfers.push({ vendor_id: v.id, reason: "missing_razorpay_account_id", amount_paise: owedPaise });
         continue;
       }
       const pct = getVendorCommissionPercentage(v, platformSettings);
       const sharePaise = calculateVendorTransferAmount(subPaise, pct, false);
       if (sharePaise < 100) {
-        skippedTransfers.push({ vendor_id: v.id, reason: "share_below_min" });
+        skippedTransfers.push({ vendor_id: v.id, reason: "share_below_min", amount_paise: sharePaise });
         continue;
       }
       transfers.push({
@@ -623,6 +625,32 @@ Deno.serve(async (req) => {
   await logSuccess("razorpay", { razorpay_order_id: rpOrder.id, amount_paise: amountPaise, transfers: transfers.length, skipped_transfers: skippedTransfers });
   if (skippedTransfers.length > 0) {
     console.warn("[create-checkout] vendors skipped from Route split", skippedTransfers);
+
+    // Persist skipped transfers so this otherwise-silent money leak is queryable
+    // and an admin can act on it, and flag the payment row. This is best-effort
+    // bookkeeping ONLY: the customer's payment has already succeeded, so a
+    // failure here must NEVER fail the order — we log and proceed regardless.
+    try {
+      const issueRows = skippedTransfers.map((s) => ({
+        order_id: orderId,
+        vendor_id: s.vendor_id,
+        reason: s.reason,
+        amount_paise: s.amount_paise,
+      }));
+      const { error: issuesErr } = await service.from("payment_transfer_issues").insert(issueRows);
+      if (issuesErr) {
+        console.error("[create-checkout] failed to record payment_transfer_issues", issuesErr);
+      }
+      const { error: flagErr } = await service
+        .from("payments")
+        .update({ has_transfer_issues: true })
+        .eq("id", payment.id);
+      if (flagErr) {
+        console.error("[create-checkout] failed to set payments.has_transfer_issues", flagErr);
+      }
+    } catch (e) {
+      console.error("[create-checkout] error persisting transfer issues", e);
+    }
   }
 
   return json({
