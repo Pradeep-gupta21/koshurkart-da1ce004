@@ -76,14 +76,36 @@ const VendorReturns = () => {
 
   const approve = async (id: string) => {
     setActing(id);
-    const { error } = await supabase.rpc("vendor_approve_return", { _order_item_id: id });
+    // Route approval through the vendor-approve-return Edge Function so the
+    // Razorpay transfer reversal + customer refund happen (in that order) BEFORE
+    // the DB balance reversal. The function calls the vendor_approve_return RPC
+    // internally, so this replaces the old direct supabase.rpc(...) call.
+    const { data, error } = await supabase.functions.invoke("vendor-approve-return", {
+      body: JSON.stringify({ order_item_id: id }),
+    });
     setActing(null);
     if (error) {
-      logger.error("vendor.return_approve", error.message, { id, code: (error as any).code });
-      toast({ title: "Approval failed", description: error.message, variant: "destructive" });
+      // functions.invoke wraps a non-2xx response in a FunctionsHttpError whose
+      // `.message` is generic ("…returned a non-2xx status code"); the real,
+      // stage-specific message from the function is the JSON body on `.context`.
+      let message = error.message;
+      try {
+        const body = await (error as { context?: Response }).context?.json();
+        if (body?.error) message = body.error as string;
+      } catch {
+        /* keep the generic message if the body can't be parsed */
+      }
+      logger.error("vendor.return_approve", message, { id });
+      toast({ title: "Approval failed", description: message, variant: "destructive" });
       return;
     }
-    toast({ title: "Return approved", description: "Amount deducted from your wallet balance." });
+    const refunded = (data as { refund_id?: string | null } | null)?.refund_id;
+    toast({
+      title: "Return approved",
+      description: refunded
+        ? "Customer refunded and amount deducted from your wallet balance."
+        : "Amount deducted from your wallet balance.",
+    });
     fetchRows();
   };
 
