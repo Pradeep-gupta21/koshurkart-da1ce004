@@ -1,6 +1,6 @@
 // Razorpay webhook — server-side backup to client verification.
 // Configure in Razorpay Dashboard → Settings → Webhooks with events:
-//   payment.captured, payment.failed
+//   payment.captured, payment.failed, transfer.processed, transfer.failed
 // Set the webhook secret as RAZORPAY_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
@@ -51,6 +51,127 @@ Deno.serve(async (req) => {
 
     const event = JSON.parse(rawBody);
     const eventType: string = event?.event ?? "";
+
+    const service = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // ---- Razorpay Route transfer events (per-vendor payout tracking) ----
+    // Structurally different from payment.* events (no payment entity), so they
+    // are handled up front. create-checkout stamps notes.order_id + notes.vendor_id
+    // on every Route transfer it creates, which is how we match a transfer back
+    // to our order_items line(s). One transfer aggregates a vendor's whole
+    // subtotal for an order, so it can span multiple order_items rows.
+    if (eventType === "transfer.processed" || eventType === "transfer.failed") {
+      const transfer = event?.payload?.transfer?.entity;
+      const transferId: string | undefined = transfer?.id;
+      const transferEventId: string | undefined = event?.id ?? transferId;
+      if (!transfer || !transferEventId) {
+        return new Response(JSON.stringify({ ok: true, ignored: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Dedupe: insert into webhook_events; if duplicate (PK conflict) → already processed
+      const transferDedupeKey = `${eventType}:${transferEventId}`;
+      const { error: tDedupeErr } = await service
+        .from("webhook_events")
+        .insert({
+          provider_event_id: transferDedupeKey,
+          provider: "razorpay",
+          event_type: eventType,
+          payload: event,
+        });
+      if (tDedupeErr && (tDedupeErr as { code?: string }).code === "23505") {
+        return new Response(JSON.stringify({ ok: true, deduped: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const notesOrderId: string | undefined = transfer?.notes?.order_id;
+      const notesVendorId: string | undefined = transfer?.notes?.vendor_id;
+      const transferStatus: string = transfer?.status; // 'processed' | 'failed'
+      const transferError = eventType === "transfer.failed" ? (transfer?.error ?? null) : null;
+
+      // Update every order_items row for this (order, vendor). .select() lets us
+      // detect the no-match anomaly from the returned row count.
+      const { data: updatedItems, error: updErr } = await service
+        .from("order_items")
+        .update({
+          razorpay_transfer_id: transferId,
+          transfer_status: transferStatus,
+          transfer_processed_at: new Date().toISOString(),
+          transfer_error: transferError,
+        })
+        .eq("order_id", notesOrderId)
+        .eq("vendor_id", notesVendorId)
+        .select("id");
+      if (updErr) console.error("Webhook: order_items transfer update failed", updErr.code);
+
+      if (!updatedItems || updatedItems.length === 0) {
+        // No line item matched — log the anomaly the same way payment_amount_mismatch
+        // does (analytics_events + log_payment_event), then return 200 so Razorpay
+        // stops retrying.
+        await service.from("analytics_events").insert({
+          event_type: "transfer_orphan",
+          metadata: {
+            source: "webhook",
+            event: eventType,
+            transfer_id: transferId,
+            order_id: notesOrderId,
+            vendor_id: notesVendorId,
+            status: transferStatus,
+          },
+        });
+        const { data: orphanPay } = await service
+          .from("payments")
+          .select("id")
+          .eq("order_id", notesOrderId)
+          .maybeSingle();
+        if (orphanPay) {
+          await service.rpc("log_payment_event", {
+            p_payment_id: orphanPay.id,
+            p_event_type: "webhook_transfer_orphan",
+            p_message: `No order_items matched ${eventType} transfer`,
+            p_metadata: { transfer_id: transferId, vendor_id: notesVendorId },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true, found: false }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // On failure, reuse the Phase-2 flag so the payment shows a transfer issue.
+      if (eventType === "transfer.failed") {
+        await service.from("payments")
+          .update({ has_transfer_issues: true })
+          .eq("order_id", notesOrderId);
+      }
+
+      const { data: transferPay } = await service
+        .from("payments")
+        .select("id")
+        .eq("order_id", notesOrderId)
+        .maybeSingle();
+      if (transferPay) {
+        await service.rpc("log_payment_event", {
+          p_payment_id: transferPay.id,
+          p_event_type: eventType === "transfer.failed" ? "webhook_transfer_failed" : "webhook_transfer_processed",
+          p_message: `Route transfer ${transferStatus} via Razorpay webhook`,
+          p_metadata: { transfer_id: transferId, vendor_id: notesVendorId, error: transferError },
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const eventId: string | undefined = event?.id ?? event?.payload?.payment?.entity?.id;
     const payment = event?.payload?.payment?.entity;
     if (!payment || !eventId) {
@@ -59,11 +180,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const service = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     // Dedupe: insert into webhook_events; if duplicate (PK conflict) → already processed
     const dedupeKey = `${eventType}:${eventId}`;
