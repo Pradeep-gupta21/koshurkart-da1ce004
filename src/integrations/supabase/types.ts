@@ -1342,6 +1342,56 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_payment_setup: {
+        Row: {
+          account_holder_name: string | null
+          account_number: string | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          ifsc_code: string | null
+          is_completed: boolean
+          payment_destination_type: string
+          updated_at: string
+          upi_id: string | null
+          vendor_id: string
+        }
+        Insert: {
+          account_holder_name?: string | null
+          account_number?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          ifsc_code?: string | null
+          is_completed?: boolean
+          payment_destination_type: string
+          updated_at?: string
+          upi_id?: string | null
+          vendor_id: string
+        }
+        Update: {
+          account_holder_name?: string | null
+          account_number?: string | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          ifsc_code?: string | null
+          is_completed?: boolean
+          payment_destination_type?: string
+          updated_at?: string
+          upi_id?: string | null
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_payment_setup_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: true
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_serviceability: {
         Row: {
           created_at: string
@@ -1463,6 +1513,8 @@ export type Database = {
           kyc_submitted_at: string | null
           logo: string | null
           pan_number: string | null
+          payment_setup_completed: boolean
+          payment_setup_completed_at: string | null
           phone: string | null
           phone_verified_at: string | null
           pickup_address_line1: string | null
@@ -1516,6 +1568,8 @@ export type Database = {
           kyc_submitted_at?: string | null
           logo?: string | null
           pan_number?: string | null
+          payment_setup_completed?: boolean
+          payment_setup_completed_at?: string | null
           phone?: string | null
           phone_verified_at?: string | null
           pickup_address_line1?: string | null
@@ -1569,6 +1623,8 @@ export type Database = {
           kyc_submitted_at?: string | null
           logo?: string | null
           pan_number?: string | null
+          payment_setup_completed?: boolean
+          payment_setup_completed_at?: string | null
           phone?: string | null
           phone_verified_at?: string | null
           pickup_address_line1?: string | null
