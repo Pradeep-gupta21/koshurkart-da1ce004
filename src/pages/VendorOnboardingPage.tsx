@@ -60,12 +60,52 @@ const VendorOnboardingPage = () => {
     setHighest((h) => Math.max(h, draft.currentStep));
   }, [draft.currentStep]);
 
-  // If already a verified vendor, push to dashboard
+  // If already a verified vendor, check payment setup status and redirect
   useEffect(() => {
-    if (vendorStatus === "verified" || vendorStatus === "approved") {
+    if (vendorStatus !== "verified" && vendorStatus !== "approved") return;
+    if (!vendorId) {
       navigate("/vendor", { replace: true });
+      return;
     }
-  }, [vendorStatus, navigate]);
+
+    let cancelled = false;
+
+    const checkPaymentSetup = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("vendors")
+          .select("payment_setup_completed")
+          .eq("id", vendorId)
+          .single();
+
+        if (cancelled) return; // Cleanup guard: don't navigate if component unmounted
+
+        if (error) {
+          console.error("Failed to fetch payment setup status:", error);
+          // Fail open: redirect to dashboard, vendor can complete setup manually
+          navigate("/vendor", { replace: true });
+          return;
+        }
+
+        const done = data?.payment_setup_completed ?? false;
+        navigate(
+          done ? "/vendor" : "/vendor/payment-setup?fromOnboarding=true",
+          { replace: true }
+        );
+      } catch (e) {
+        if (!cancelled) {
+          console.error("Unexpected error checking payment setup:", e);
+          navigate("/vendor", { replace: true }); // Fail open
+        }
+      }
+    };
+
+    checkPaymentSetup();
+
+    return () => {
+      cancelled = true; // Cleanup: prevent stale callbacks after unmount
+    };
+  }, [vendorStatus, vendorId, navigate]);
 
   const setValid = (step: number, ok: boolean) =>
     setStepValid((p) => (p[step] === ok ? p : { ...p, [step]: ok }));
