@@ -2,7 +2,7 @@
 // Authenticated vendor-only via ownership check.
 // Fixes: #6 (LIMIT 1), #7 (enum constants), #8/#11 (error vs null),
 //        #9 (CORS PUT), #10 (atomic RPC)
-// deno-lint-ignore-file no-explicit-any
+// deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 /* ─────────────────── CORS ────────────────────────────────────────── */
@@ -34,7 +34,6 @@ const PAYMENT_DESTINATION_TYPES = {
 
 type PaymentDestinationType = (typeof PAYMENT_DESTINATION_TYPES)[keyof typeof PAYMENT_DESTINATION_TYPES];
 
-const VALID_DESTINATION_TYPES = new Set<string>(Object.values(PAYMENT_DESTINATION_TYPES));
 
 /* ─────────────────── Validation ──────────────────────────────────── */
 

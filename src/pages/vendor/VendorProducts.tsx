@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { productService } from "@/services/productService";
-import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote, AlertCircle, CheckCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { MARKETPLACE_CATEGORIES, formatCategoryLabel } from "@/config/categories";
@@ -32,6 +32,24 @@ const VendorProducts = () => {
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+
+  // Gate product creation behind payment setup
+  const { data: vendorPaymentStatus, isLoading: isLoadingPaymentStatus, error: paymentStatusQueryError } = useQuery({
+    queryKey: ['vendor-payment-status', vendorId],
+    queryFn: async () => {
+      const { data, error } = await (await import("@/integrations/supabase/client")).supabase
+        .from("vendors")
+        .select("payment_setup_completed")
+        .eq("id", vendorId)
+        .single();
+      if (error) throw error;
+      return { paymentSetupCompleted: data?.payment_setup_completed ?? false };
+    },
+    enabled: !!vendorId,
+  });
+  const paymentSetupCompleted = vendorPaymentStatus?.paymentSetupCompleted ?? false;
+  const paymentStatusError = paymentStatusQueryError ? "Unable to load payment setup status. Please refresh." : null;
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -54,7 +72,34 @@ const VendorProducts = () => {
       toast({ title: "Product created" });
       closeDialog();
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e.status === 403 || e.code === '42501' || e.message?.includes('RLS')) {
+        const errorMessage = e.message?.toLowerCase() || '';
+        const errorDetails = e.details?.toLowerCase() || '';
+        
+        if (
+          errorMessage.includes('payment') || 
+          errorDetails.includes('payment_setup_completed')
+        ) {
+          toast({ 
+            title: "Payment setup required", 
+            description: "Complete your payment setup to publish products.",
+            variant: "destructive"
+          });
+          navigate("/vendor/payment-setup");
+          return;
+        }
+        
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have permission to perform this action. Contact support if this persists.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
   });
 
   const updateMutation = useMutation({
@@ -64,7 +109,34 @@ const VendorProducts = () => {
       toast({ title: "Product updated" });
       closeDialog();
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e.status === 403 || e.code === '42501' || e.message?.includes('RLS')) {
+        const errorMessage = e.message?.toLowerCase() || '';
+        const errorDetails = e.details?.toLowerCase() || '';
+        
+        if (
+          errorMessage.includes('payment') || 
+          errorDetails.includes('payment_setup_completed')
+        ) {
+          toast({ 
+            title: "Payment setup required", 
+            description: "Complete your payment setup to publish products.",
+            variant: "destructive"
+          });
+          navigate("/vendor/payment-setup");
+          return;
+        }
+        
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have permission to perform this action. Contact support if this persists.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -171,9 +243,19 @@ const VendorProducts = () => {
           <h1 className="text-2xl font-bold">Products</h1>
           <p className="text-muted-foreground">Manage your product inventory</p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { if (!v) closeDialog(); else setOpen(true); }}>
+        <Dialog open={open} onOpenChange={(v) => { if (!v) closeDialog(); else if (!paymentSetupCompleted) { toast({ title: "Payment Setup Required", description: "Complete your payment setup before adding products.", variant: "destructive" }); navigate("/vendor/payment-setup"); } else setOpen(true); }}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" /> Add Product</Button>
+            <button
+              disabled={!paymentSetupCompleted || isLoadingPaymentStatus}
+              title={!paymentSetupCompleted ? "Complete your payment setup first" : undefined}
+              className={`px-4 py-2 rounded font-semibold flex items-center ${
+                paymentSetupCompleted && !isLoadingPaymentStatus
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {isLoadingPaymentStatus ? "Loading..." : <><Plus className="h-4 w-4 mr-2" /> Create Product</>}
+            </button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -276,6 +358,48 @@ const VendorProducts = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {paymentStatusError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded mb-6">
+          <p className="text-red-800">{paymentStatusError}</p>
+          <button onClick={() => window.location.reload()} className="mt-2 text-red-600 underline">
+            Refresh page
+          </button>
+        </div>
+      )}
+
+      {isLoadingPaymentStatus && (
+        <div className="mb-6 h-12 w-full bg-muted animate-pulse rounded"></div>
+      )}
+
+      {!isLoadingPaymentStatus && !paymentStatusError && !paymentSetupCompleted && (
+        <div className="mb-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-800">Payment Setup Incomplete</h3>
+              <p className="text-yellow-700 text-sm mt-1">
+                You must complete your payment setup before you can publish products.
+              </p>
+              <button
+                onClick={() => navigate("/vendor/payment-setup")}
+                className="mt-2 px-3 py-1 bg-yellow-600 text-white rounded text-sm hover:bg-yellow-700"
+              >
+                Complete Payment Setup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isLoadingPaymentStatus && !paymentStatusError && paymentSetupCompleted && (
+        <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-400 rounded">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            <span className="text-green-800 font-semibold">✓ Payment Setup Complete</span>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-4">
