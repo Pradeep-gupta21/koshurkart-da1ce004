@@ -100,6 +100,7 @@ export const adminNav: NavSection[] = [
       { id: "a-pricing", label: "Dynamic Pricing", to: "/admin/pricing", icon: IndianRupee },
       { id: "a-payments", label: "Payments", to: "/admin/payments", icon: CreditCard, badgeKey: "pendingPayments" },
       { id: "a-transfer-issues", label: "Transfer Issues", to: "/admin/transfer-issues", icon: AlertTriangle },
+      { id: "a-payment-audit", label: "Payment Audit", to: "/admin/payment-audit", icon: BarChart3 },
       { id: "a-menu", label: "Menu", to: "/admin/menu", icon: LayoutGrid },
       { id: "a-security", label: "Security", to: "/admin/security", icon: ShieldAlert },
       { id: "a-settings", label: "Settings", to: "/admin/settings", icon: Settings },
