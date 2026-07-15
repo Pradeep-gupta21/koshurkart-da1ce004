@@ -1,6 +1,7 @@
 // Razorpay webhook — server-side backup to client verification.
 // Configure in Razorpay Dashboard → Settings → Webhooks with events:
-//   payment.captured, payment.failed, transfer.processed, transfer.failed
+//   payment.captured, payment.failed, transfer.processed, transfer.failed,
+//   refund.processed, refund.failed
 // Set the webhook secret as RAZORPAY_WEBHOOK_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
@@ -170,6 +171,74 @@ Deno.serve(async (req) => {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ---- Razorpay refund events (Phase 5: return refund tracking) ----
+    if (eventType === "refund.processed" || eventType === "refund.failed") {
+      const refund = event?.payload?.refund?.entity;
+      const refundId: string | undefined = refund?.id;
+      if (!refundId) {
+        return new Response(JSON.stringify({ ok: true, ignored: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        if (eventType === "refund.processed") {
+          await service
+            .from("order_items")
+            .update({ return_refunded_at: new Date().toISOString() })
+            .eq("razorpay_refund_id", refundId)
+            .throwOnError();
+        } else {
+          const { data: failedItems } = await service
+            .from("order_items")
+            .update({
+              transfer_status: "refund_failed",
+              transfer_error: refund?.reason_code ?? null,
+            })
+            .eq("razorpay_refund_id", refundId)
+            .select("order_id")
+            .throwOnError();
+
+          const orderIds = [...new Set((failedItems ?? []).map((r: { order_id: string }) => r.order_id))];
+          if (orderIds.length > 0) {
+            await service
+              .from("payments")
+              .update({ has_transfer_issues: true })
+              .in("order_id", orderIds)
+              .throwOnError();
+          }
+        }
+
+        const { error: rDedupeErr } = await service
+          .from("webhook_events")
+          .insert({
+            provider_event_id: `${eventType}:${refundId}`,
+            provider: "razorpay",
+            event_type: eventType,
+            payload: event,
+          });
+        if ((rDedupeErr as { code?: string } | null)?.code === "23505") {
+          return new Response(JSON.stringify({ ok: true, deduped: true }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (rDedupeErr) throw rDedupeErr;
+
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (refundErr) {
+        console.error("Webhook: refund handling error", (refundErr as Error).message);
+        return new Response(JSON.stringify({ error: "transient_failure" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const eventId: string | undefined = event?.id ?? event?.payload?.payment?.entity?.id;
