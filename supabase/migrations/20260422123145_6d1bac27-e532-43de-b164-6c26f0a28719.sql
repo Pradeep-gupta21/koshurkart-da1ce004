@@ -160,6 +160,13 @@ BEGIN
           withdrawable_balance = GREATEST(COALESCE(withdrawable_balance, 0) - _vendor_share, 0),
           total_sales = GREATEST(COALESCE(total_sales, 0) - 1, 0)
       WHERE id = _vendor_row.vendor_id;
+
+      -- Shadow ledger: mirror the reversal debit in the same transaction.
+      INSERT INTO public.vendor_wallet_ledger
+        (vendor_id, order_id, type, amount, description)
+      VALUES
+        (_vendor_row.vendor_id, NEW.id, 'return_deduction', -_vendor_share,
+         'Earnings reversed on order ' || NEW.order_status);
     END LOOP;
   END IF;
 

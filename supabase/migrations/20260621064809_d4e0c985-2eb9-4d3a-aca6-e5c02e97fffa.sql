@@ -43,6 +43,8 @@ DECLARE
   _status text;
   _title text;
   _amount numeric;
+  _payment record;
+  _total_items numeric;
 BEGIN
   SELECT oi.vendor_id, oi.order_id, oi.price, oi.quantity, oi.return_status, oi.title
     INTO _vendor_id, _order_id, _price, _qty, _status, _title
@@ -62,15 +64,33 @@ BEGIN
     RAISE EXCEPTION 'Return is not in requested state (current: %)', _status;
   END IF;
 
-  _amount := COALESCE(_price, 0) * COALESCE(_qty, 0);
+  -- Look up the payment that credited this order so we debit the same
+  -- vendor_earnings share that was originally credited (not the raw line price).
+  SELECT * INTO _payment
+  FROM public.payments
+  WHERE order_id = _order_id AND credited_at IS NOT NULL
+  LIMIT 1;
+
+  -- Sum of all order line totals (same denominator used in the credit formula).
+  SELECT SUM(price * quantity) INTO _total_items
+  FROM public.order_items WHERE order_id = _order_id;
+
+  -- This line item's proportional share of vendor_earnings, mirroring the
+  -- on_payment_success credit formula exactly.
+  _amount := COALESCE(
+    (COALESCE(_payment.vendor_earnings, _payment.amount)
+     * (COALESCE(_price, 0) * COALESCE(_qty, 0)))
+    / NULLIF(_total_items, 0),
+    0
+  );
 
   UPDATE public.order_items
      SET return_status = 'approved'
    WHERE id = _order_item_id;
 
   UPDATE public.vendors
-     SET total_earnings = COALESCE(total_earnings, 0) - _amount,
-         withdrawable_balance = COALESCE(withdrawable_balance, 0) - _amount
+     SET total_earnings = GREATEST(COALESCE(total_earnings, 0) - _amount, 0),
+         withdrawable_balance = GREATEST(COALESCE(withdrawable_balance, 0) - _amount, 0)
    WHERE id = _vendor_id;
 
   INSERT INTO public.vendor_wallet_ledger (vendor_id, order_id, order_item_id, type, amount, description)
