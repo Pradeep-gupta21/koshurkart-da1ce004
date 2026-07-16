@@ -1,3 +1,4 @@
+/* SECURITY NOTE: Payment creation and status mutation are server-side only via service_role and webhooks. Client-side payment writes are blocked at the RLS layer. */
 import { supabase } from '@/integrations/supabase/client';
 import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
@@ -117,147 +118,10 @@ export const paymentService = {
   },
 
   // ---- Payment record methods ----
+  // createPayment(), processPayment(), and updatePaymentStatus() removed.
+  // Payment creation and status mutation are server-side only (service_role + webhooks).
+  // Client-side writes are blocked at the RLS layer.
 
-  async createPayment(
-    userId: string,
-    orderId: string,
-    amount: number,
-    method: string = 'card',
-    provider?: string,
-    upiId?: string
-  ) {
-    // Fetch live commission settings from DB
-    const settings = await fetchPlatformSettings();
-    const { commission, vendorEarnings } = calculateCommission(amount, settings);
-
-    const insertData: Record<string, unknown> = {
-      user_id: userId,
-      order_id: orderId,
-      amount,
-      payment_method: method,
-      payment_provider: provider ?? null,
-      payment_status: 'pending',
-      commission_percentage: settings.percentage,
-      platform_commission: commission,
-      vendor_earnings: vendorEarnings,
-    };
-    if (upiId) insertData.upi_id = upiId;
-
-    const { data, error } = await supabase
-      .from('payments')
-      .insert(insertData as any)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Full payment orchestrator:
-   * 1. Creates payment with pending status
-   * 2. Verifies via gateway (or returns UPI QR for manual flow)
-   * 3. Syncs payment + order statuses
-   */
-  async processPayment(
-    userId: string,
-    orderId: string,
-    amount: number,
-    method: string,
-    upiId?: string
-  ): Promise<{
-    success: boolean;
-    payment: any;
-    transactionId: string | null;
-    error?: string;
-    awaitingUpi?: boolean;
-    qrCodeUrl?: string;
-    awaitingRazorpay?: boolean;
-    razorpayOrderId?: string;
-    razorpayKeyId?: string;
-  }> {
-    // Idempotency: if a pending payment already exists for this user+order,
-    // reuse it instead of creating a duplicate row (prevents double-click double-charge).
-    const { data: existing } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('order_id', orderId)
-      .in('payment_status', ['pending', 'pending_verification'])
-      .maybeSingle();
-
-    const provider = method === 'razorpay' ? 'razorpay' : undefined;
-    const payment = existing
-      ? existing
-      : await this.createPayment(userId, orderId, amount, method, provider, upiId);
-
-    // Fetch payment method settings for merchant details
-    const pmSettings = await fetchPaymentMethodSettings();
-
-    // UPI flow: generate QR and return for manual confirmation
-    if (method === 'upi') {
-      const upiLink = `upi://pay?pa=${encodeURIComponent(pmSettings.merchantUpiId)}&pn=${encodeURIComponent(pmSettings.merchantName)}&am=${amount}&tn=Order-${orderId.slice(0, 8)}&cu=INR`;
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
-
-      // Store QR code URL on the payment
-      await supabase
-        .from('payments')
-        .update({ qr_code_url: qrCodeUrl } as any)
-        .eq('id', payment.id);
-
-      return {
-        success: false,
-        awaitingUpi: true,
-        payment: { ...payment, qr_code_url: qrCodeUrl },
-        transactionId: null,
-        qrCodeUrl,
-      };
-    }
-
-    // COD flow: deterministic success, no gateway needed
-    if (method === 'cod') {
-      await this.updatePaymentStatus(payment.id, 'pending');
-      await orderService.updateOrderStatus(orderId, {
-        payment_status: 'pending',
-        order_status: 'confirmed',
-      });
-      return { success: true, payment, transactionId: null };
-    }
-
-    // Razorpay flow: create Razorpay order via edge function
-    if (method === 'razorpay') {
-      try {
-        const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
-          body: { amount, currency: 'INR', orderId },
-        });
-
-        if (error || !data?.razorpayOrderId) {
-          await this.updatePaymentStatus(payment.id, 'failed');
-          return { success: false, payment, transactionId: null, error: 'Failed to create Razorpay order.' };
-        }
-
-        // Store razorpay_order_id on the payment record
-        await supabase
-          .from('payments')
-          .update({ razorpay_order_id: data.razorpayOrderId } as any)
-          .eq('id', payment.id);
-
-        return {
-          success: false,
-          awaitingRazorpay: true,
-          payment: { ...payment, razorpay_order_id: data.razorpayOrderId },
-          transactionId: null,
-          razorpayOrderId: data.razorpayOrderId,
-          razorpayKeyId: data.keyId,
-        };
-      } catch (err: any) {
-        await this.updatePaymentStatus(payment.id, 'failed');
-        return { success: false, payment, transactionId: null, error: err.message ?? 'Razorpay initialization failed.' };
-      }
-    }
-
-    // Unsupported method fallback
-    return { success: false, payment, transactionId: null, error: 'Unsupported payment method.' };
-  },
 
   /**
    * Confirm Razorpay payment after successful checkout
@@ -360,18 +224,6 @@ export const paymentService = {
     return data ?? [];
   },
 
-  async updatePaymentStatus(paymentId: string, status: string, transactionId?: string) {
-    const updates: { payment_status: string; transaction_id?: string } = { payment_status: status };
-    if (transactionId) updates.transaction_id = transactionId;
-    const { data, error } = await supabase
-      .from('payments')
-      .update(updates)
-      .eq('id', paymentId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
 
   // ---- Payout methods ----
 

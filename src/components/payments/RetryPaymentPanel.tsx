@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { paymentService } from "@/services/paymentService";
 import { fetchPaymentMethodSettings } from "@/config/platformSettings";
-import { useAuth } from "@/hooks/useAuth";
 import { Loader2, QrCode, RefreshCw, Upload } from "lucide-react";
+import QRCode from "react-qr-code";
 
 interface RetryPaymentPanelProps {
   payment: {
@@ -21,7 +22,6 @@ interface RetryPaymentPanelProps {
 }
 
 export default function RetryPaymentPanel({ payment, onUpdated }: RetryPaymentPanelProps) {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [showUpi, setShowUpi] = useState(payment.payment_method === "upi" && payment.payment_status === "pending");
@@ -32,23 +32,15 @@ export default function RetryPaymentPanel({ payment, onUpdated }: RetryPaymentPa
   const isRazorpay = payment.payment_method === "razorpay";
 
   const retryUpi = async () => {
-    if (!user) return;
     setBusy(true);
     try {
-      const result = await paymentService.processPayment(
-        user.id,
-        payment.order_id,
-        Number(payment.amount),
-        "upi"
-      );
-      if (result.awaitingUpi && result.qrCodeUrl) {
-        setQrUrl(result.qrCodeUrl);
-        setShowUpi(true);
-        toast({ title: "Scan the QR code", description: "Pay using any UPI app, then confirm below." });
-        onUpdated();
-      } else if (result.error) {
-        toast({ title: "Could not start UPI", description: result.error, variant: "destructive" });
-      }
+      const pm = await fetchPaymentMethodSettings();
+      const upiLink = `upi://pay?pa=${encodeURIComponent(pm.merchantUpiId)}&pn=${encodeURIComponent(pm.merchantName ?? 'Marketplace')}&am=${payment.amount}&tn=Order-${payment.order_id.slice(0, 8)}&cu=INR`;
+      
+      setQrUrl(upiLink);
+      setShowUpi(true);
+      toast({ title: "Scan the QR code", description: "Pay using any UPI app, then confirm below." });
+      onUpdated();
     } catch (e: any) {
       toast({ title: "Retry failed", description: e?.message ?? "Unknown error", variant: "destructive" });
     } finally {
@@ -74,36 +66,35 @@ export default function RetryPaymentPanel({ payment, onUpdated }: RetryPaymentPa
   };
 
   const retryRazorpay = async () => {
-    if (!user) return;
     setBusy(true);
     try {
       const pm = await fetchPaymentMethodSettings();
-      const result = await paymentService.processPayment(
-        user.id,
-        payment.order_id,
-        Number(payment.amount),
-        "razorpay"
-      );
-      if (!result.razorpayOrderId || !result.razorpayKeyId) {
-        toast({ title: "Retry failed", description: result.error ?? "Could not initialize Razorpay", variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
+        body: { amount: Number(payment.amount), currency: 'INR', orderId: payment.order_id },
+      });
+
+      if (error || !data?.razorpayOrderId || !data?.keyId) {
+        toast({ title: "Retry failed", description: "Could not initialize Razorpay", variant: "destructive" });
         return;
       }
+
       const loaded = await paymentService.loadRazorpayScript();
       if (!loaded) {
         toast({ title: "Razorpay unavailable", description: "Failed to load checkout script.", variant: "destructive" });
         return;
       }
+
       const rzp = new window.Razorpay({
-        key: result.razorpayKeyId,
+        key: data.keyId,
         amount: Math.round(Number(payment.amount) * 100),
         currency: "INR",
         name: pm.merchantName ?? "Marketplace",
         description: `Order #${payment.order_id.slice(0, 8)}`,
-        order_id: result.razorpayOrderId,
+        order_id: data.razorpayOrderId,
         handler: async (resp: any) => {
           try {
             await paymentService.confirmRazorpayPayment(
-              result.payment.id,
+              payment.id,
               payment.order_id,
               resp.razorpay_payment_id,
               resp.razorpay_order_id,
@@ -116,8 +107,8 @@ export default function RetryPaymentPanel({ payment, onUpdated }: RetryPaymentPa
           }
         },
         modal: {
-          ondismiss: async () => {
-            await paymentService.updatePaymentStatus(result.payment.id, "failed");
+          ondismiss: () => {
+            // Payment status on dismissal is handled server-side via webhook / timeout.
             onUpdated();
           },
         },
@@ -146,7 +137,25 @@ export default function RetryPaymentPanel({ payment, onUpdated }: RetryPaymentPa
           <div className="flex items-center gap-2 text-sm font-medium">
             <QrCode className="w-4 h-4" /> Scan to pay
           </div>
-          <img src={qrUrl} alt="UPI QR code" className="w-48 h-48 mx-auto rounded-md border border-border" />
+          <div className="mx-auto w-48 h-48 bg-white p-2 rounded-md border border-border">
+            <QRCode
+              value={(() => {
+                if (!qrUrl) return "";
+                if (qrUrl.toLowerCase().startsWith("http")) {
+                  try {
+                    const url = new URL(qrUrl);
+                    return url.searchParams.get("data") || url.searchParams.get("chl") || qrUrl;
+                  } catch {
+                    return qrUrl;
+                  }
+                }
+                return qrUrl;
+              })()}
+              size={256}
+              style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+              viewBox={`0 0 256 256`}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="proof" className="text-xs">Upload payment screenshot (optional)</Label>
             <Input

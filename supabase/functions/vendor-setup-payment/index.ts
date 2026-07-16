@@ -183,18 +183,48 @@ Deno.serve(async (req) => {
       }
 
       // setup === null means no setup exists yet — that's a valid state, return null
+      // Mask PCI-sensitive fields before returning to the client.
+      // Raw values are kept in the database; only the masked representation is sent over the wire.
+      let maskedSetup: Record<string, unknown> | null = null;
+      if (setup) {
+        const rawIfsc: string | null = setup.ifsc_code ?? null;
+        const rawAccount: string | null = setup.account_number ?? null;
+        const rawUpi: string | null = setup.upi_id ?? null;
+
+        // IFSC: first 4 characters + 'XXXXXX'
+        const maskedIfsc = rawIfsc
+          ? (rawIfsc.length <= 4 ? "****" : rawIfsc.slice(0, 4) + "XXXXXX")
+          : null;
+
+        // Account number: '****' + last 4 digits
+        const maskedAccount = rawAccount
+          ? (rawAccount.length <= 4 ? "****" : "****" + rawAccount.slice(-4))
+          : null;
+
+        // UPI ID: first 3 chars + '***' + @domain; if no '@', just first 3 + '***'
+        let maskedUpi: string | null = null;
+        if (rawUpi) {
+          const parts = rawUpi.split("@");
+          if (parts.length !== 2) {
+            maskedUpi = "***";
+          } else {
+            maskedUpi = parts[0].slice(0, 3) + "***@" + parts[1];
+          }
+        }
+
+        maskedSetup = {
+          paymentDestinationType: setup.payment_destination_type,
+          ifscCode: maskedIfsc,
+          accountNumber: maskedAccount,
+          accountHolderName: setup.account_holder_name,
+          upiId: maskedUpi,
+          isCompleted: setup.is_completed,
+          completedAt: setup.completed_at,
+        };
+      }
+
       return json({
-        paymentSetup: setup
-          ? {
-              paymentDestinationType: setup.payment_destination_type,
-              ifscCode: setup.ifsc_code,
-              accountNumber: setup.account_number,
-              accountHolderName: setup.account_holder_name,
-              upiId: setup.upi_id,
-              isCompleted: setup.is_completed,
-              completedAt: setup.completed_at,
-            }
-          : null,
+        paymentSetup: maskedSetup,
         vendorStatus: {
           paymentSetupCompleted: vendorRow.payment_setup_completed,
           defaultAccountHolder: vendorRow.bank_account_holder ?? vendorRow.store_name,
