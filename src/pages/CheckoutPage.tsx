@@ -245,10 +245,19 @@ const CheckoutPage = () => {
         }
       },
       modal: {
-        ondismiss: async () => {
-          await paymentService.updatePaymentStatus(payment.id, 'failed');
-          const reason = encodeURIComponent("Payment was cancelled.");
-          navigate(`/payment/failed?orderId=${currentOrderId}&paymentId=${payment.id}&reason=${reason}`, { replace: true });
+        ondismiss: () => {
+          // Do NOT write to the DB here — the RLS layer blocks client-side payment
+          // mutations. Razorpay will emit a payment.failed webhook that sets the
+          // terminal status server-side. We just log and stay on page.
+          logger.warn('checkout.razorpay_dismissed', 'Razorpay modal dismissed by user', {
+            payment_id: payment.id,
+            order_id: currentOrderId,
+          });
+          toast({
+            title: 'Payment window closed.',
+            description: 'You can try again when ready.',
+          });
+          setFlowState("form");
         },
       },
       theme: { color: "#0F172A" },

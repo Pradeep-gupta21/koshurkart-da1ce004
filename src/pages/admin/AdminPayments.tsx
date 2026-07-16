@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { paymentService } from "@/services/paymentService";
-import { orderService } from "@/services/orderService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -54,22 +53,21 @@ const AdminPayments = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Payment | null>(null);
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [resyncing, setResyncing] = useState(false);
 
-  const fetchPayments = async () => {
-    setLoading(true);
+  const fetchPayments = async (silent = false) => {
+    if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from("payments")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(500);
     if (!error) setPayments((data as Payment[]) ?? []);
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   useEffect(() => { fetchPayments(); }, []);
@@ -107,51 +105,46 @@ const AdminPayments = () => {
     };
   }, [selected]);
 
-  const handleApprove = async (p: Payment) => {
-    setActionLoading(p.id);
-    try {
-      if (p.payment_method === "upi") {
-        await paymentService.verifyUpiPayment(p.id, p.order_id, "approve");
-      } else {
-        await paymentService.updatePaymentStatus(p.id, "success");
-        await orderService.updateOrderStatus(p.order_id, { payment_status: "paid", order_status: "confirmed" });
+  /**
+   * Shared helper: routes an admin approve/reject action through the
+   * `admin-verify-payment` edge function. The function validates the admin JWT,
+   * applies the state change via service_role (bypassing RLS), audits the event
+   * via log_payment_event, and releases reserved stock on reject.
+   */
+  const adminPaymentAction = useCallback(
+    async (p: Payment, action: "approve" | "reject") => {
+      setProcessingId(p.id);
+      try {
+        await paymentService.adminVerifyPayment(p.id, p.order_id, action);
+        const label = action === "approve" ? "approved" : "rejected";
+        const statusLabel = action === "approve" ? "success" : "failed";
+        toast({
+          title: `Payment ${label}`,
+          description: `Order ${p.order_id.slice(0, 8)} payment marked as ${statusLabel}.`,
+        });
+        await fetchPayments(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : `Failed to ${action} payment.`;
+        toast({ title: "Error", description: msg, variant: "destructive" });
+      } finally {
+        setProcessingId(null);
       }
-      toast({ title: "Payment approved", description: `Payment for order ${p.order_id.slice(0, 8)} marked as success.` });
-      fetchPayments();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to approve payment.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    }
-    setActionLoading(null);
-  };
+    },
+    [fetchPayments]
+  );
 
-  const handleReject = async (p: Payment) => {
-    setActionLoading(p.id);
-    try {
-      if (p.payment_method === "upi") {
-        await paymentService.verifyUpiPayment(p.id, p.order_id, "reject");
-      } else {
-        await paymentService.updatePaymentStatus(p.id, "failed");
-        await orderService.updateOrderStatus(p.order_id, { payment_status: "failed" });
-      }
-      toast({ title: "Payment rejected", description: `Payment for order ${p.order_id.slice(0, 8)} marked as failed.` });
-      fetchPayments();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to reject payment.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    }
-    setActionLoading(null);
-  };
+  const handleApprove = (p: Payment) => adminPaymentAction(p, "approve");
+  const handleReject  = (p: Payment) => adminPaymentAction(p, "reject");
 
   const handleResync = async (p: Payment) => {
     if (!p.razorpay_order_id && !p.razorpay_payment_id) {
       toast({ title: "Cannot re-sync", description: "No Razorpay reference on this payment.", variant: "destructive" });
       return;
     }
-    setResyncing(true);
+    setProcessingId(p.id);
     try {
       const { data, error } = await supabase.functions.invoke("admin-resync-payment", {
-        body: { payment_id: p.id },
+        body: { paymentId: p.id },
       });
       if (error) throw error;
       toast({
@@ -160,7 +153,7 @@ const AdminPayments = () => {
           ? `Status from Razorpay: ${(data as { status: string }).status}`
           : "Payment refreshed from Razorpay.",
       });
-      await fetchPayments();
+      await fetchPayments(true);
       // refresh selected payment reference
       const { data: fresh } = await supabase.from("payments").select("*").eq("id", p.id).maybeSingle();
       if (fresh) setSelected(fresh as Payment);
@@ -168,7 +161,7 @@ const AdminPayments = () => {
       const msg = err instanceof Error ? err.message : "Re-sync failed.";
       toast({ title: "Re-sync failed", description: msg, variant: "destructive" });
     }
-    setResyncing(false);
+    setProcessingId(null);
   };
 
   const filtered = useMemo(() => {
@@ -252,17 +245,17 @@ const AdminPayments = () => {
                   )}
                   {p.payment_status === "pending_verification" && (
                     <>
-                      <Button size="sm" variant="default" disabled={actionLoading === p.id} onClick={() => handleApprove(p)}>
+                      <Button size="sm" variant="default" disabled={processingId === p.id} onClick={() => handleApprove(p)}>
                         <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve
                       </Button>
-                      <Button size="sm" variant="destructive" disabled={actionLoading === p.id} onClick={() => handleReject(p)}>
+                      <Button size="sm" variant="destructive" disabled={processingId === p.id} onClick={() => handleReject(p)}>
                         <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
                       </Button>
                     </>
                   )}
                   {(p.payment_status === "failed" || p.payment_status === "pending") && (p.razorpay_order_id || p.razorpay_payment_id) && (
-                    <Button size="sm" variant="outline" onClick={() => handleResync(p)} disabled={resyncing}>
-                      {resyncing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                    <Button size="sm" variant="outline" onClick={() => handleResync(p)} disabled={processingId === p.id}>
+                      {processingId === p.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
                       Re-sync
                     </Button>
                   )}
@@ -361,8 +354,8 @@ const AdminPayments = () => {
 
               <div className="flex gap-2">
                 {(selected.razorpay_order_id || selected.razorpay_payment_id) && (
-                  <Button size="sm" onClick={() => handleResync(selected)} disabled={resyncing}>
-                    {resyncing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                  <Button size="sm" onClick={() => handleResync(selected)} disabled={processingId === selected.id}>
+                    {processingId === selected.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
                     Re-sync with Razorpay
                   </Button>
                 )}

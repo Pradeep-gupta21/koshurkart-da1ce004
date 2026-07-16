@@ -122,6 +122,19 @@ export const paymentService = {
   // Payment creation and status mutation are server-side only (service_role + webhooks).
   // Client-side writes are blocked at the RLS layer.
 
+  /**
+   * Admin-only: Verify and approve/reject a payment (UPI, COD, etc).
+   * Routes through the `admin-verify-payment` edge function so the status update
+   * is server-side validated and securely updates both payment and order.
+   */
+  async adminVerifyPayment(paymentId: string, orderId: string, action: 'approve' | 'reject') {
+    const { data, error } = await supabase.functions.invoke('admin-verify-payment', {
+      body: { paymentId, orderId, action },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
 
   /**
    * Confirm Razorpay payment after successful checkout

@@ -52,6 +52,27 @@ export const logger = {
     })();
   },
 
+  warn(scope: string, msg: string, meta?: unknown) {
+    // Always log locally
+    // eslint-disable-next-line no-console
+    console.warn(`[${scope}] ${msg}`, meta ?? "");
+
+    const key = `${scope}::${msg}`;
+    if (throttled(key)) return;
+
+    // Best-effort analytics (silent on failure — no recursion into logger)
+    void (async () => {
+      try {
+        await supabase.rpc("record_analytics_event" as any, {
+          _event_type: "client_warning",
+          _metadata: { scope, msg, ...safeMeta(meta) },
+        });
+      } catch {
+        /* swallow */
+      }
+    })();
+  },
+
   /** Test helper — clears the throttle map. */
   _resetThrottle() {
     recent.clear();
