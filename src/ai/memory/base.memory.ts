@@ -48,7 +48,7 @@ export class InMemoryStore<T> implements MemoryStore<T> {
   async get(id: string): Promise<T | undefined> {
     return this.map.get(id);
   }
-  async values(): Promise<T[]> {
+  async values(scopeKey?: string): Promise<T[]> {
     return [...this.map.values()];
   }
   async delete(id: string): Promise<boolean> {
@@ -165,7 +165,7 @@ export abstract class BaseMemory<T> implements Memory {
    */
   protected async all(context: MemoryContext): Promise<MemoryRecord<T>[]> {
     const scopeKey = this.scopeKey(context);
-    const values = await this.store.values();
+    const values = await this.store.values(scopeKey);
     const filtered = scopeKey
       ? values.filter((r) => r.scope.key === scopeKey)
       : values;
@@ -216,7 +216,7 @@ export abstract class BaseMemory<T> implements Memory {
       await this.store.clear();
       return memOk(size);
     }
-    const victims = (await this.store.values()).filter(
+    const victims = (await this.store.values(scopeKey)).filter(
       (r) => r.scope.key === scopeKey,
     );
     for (const record of victims) await this.store.delete(record.id);
@@ -258,7 +258,7 @@ export abstract class BaseMemory<T> implements Memory {
    */
   protected async enforceCapacity(scopeKey: string): Promise<void> {
     if (this.capacityPerScope <= 0) return;
-    const inScope = (await this.store.values())
+    const inScope = (await this.store.values(scopeKey))
       .filter((r) => r.scope.key === scopeKey)
       .sort((a, b) => a.updatedAt - b.updatedAt); // oldest first
     const overflow = inScope.length - this.capacityPerScope;

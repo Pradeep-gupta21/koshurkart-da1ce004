@@ -202,8 +202,8 @@ export interface MemoryStore<T> {
   put(id: string, value: T): Promise<void>;
   /** Fetch a value by id, or `undefined` if absent. */
   get(id: string): Promise<T | undefined>;
-  /** All stored values, in insertion order. */
-  values(): Promise<T[]>;
+  /** All stored values, optionally filtered by scope key, in insertion order. */
+  values(scopeKey?: string): Promise<T[]>;
   /** Remove a value by id. Returns true if one was actually removed. */
   delete(id: string): Promise<boolean>;
   /** Remove everything. */

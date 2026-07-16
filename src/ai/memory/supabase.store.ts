@@ -49,12 +49,14 @@ export class SupabaseMemoryStore<T = any> implements MemoryStore<MemoryRecord<T>
     return this.mapRow(data);
   }
 
-  async values(): Promise<MemoryRecord<T>[]> {
-    // In a real production system, this could be scoped by level/key first
-    // instead of pulling the entire table, but `BaseMemory` currently handles
-    // the filtering locally after fetching all values for small datasets.
-    // For large tables, `values()` usage inside `BaseMemory` will need a scoped index.
-    const { data, error } = await this.supabase.from("agent_memory").select("*");
+  async values(scopeKey?: string): Promise<MemoryRecord<T>[]> {
+    let query = this.supabase.from("agent_memory").select("*");
+    
+    if (scopeKey) {
+      query = query.eq("scope_key", scopeKey);
+    }
+    
+    const { data, error } = await query;
     
     if (error) {
       throw new Error(`SupabaseMemoryStore.values failed: ${error.message}`);
