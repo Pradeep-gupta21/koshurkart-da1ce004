@@ -16,18 +16,38 @@ import {
   getVendorCommissionPercentage,
 } from "../_shared/pricing.ts";
 
-const DEBUG_PRICING = Deno.env.get("DEBUG_PRICING") === "true";
+const IS_PRODUCTION = Deno.env.get("ENV") === "production";
+const rawDebug = Deno.env.get("DEBUG_PRICING") === "true";
+if (IS_PRODUCTION && rawDebug) {
+  console.error("[create-checkout] SECURITY WARNING: DEBUG_PRICING is enabled in production — forcing it off.");
+}
+const effectiveDebugPricing = IS_PRODUCTION ? false : rawDebug;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const ALLOWED_ORIGINS = [
+  "https://koshurkart.com",
+  "https://www.koshurkart.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+const PRIMARY_ORIGIN = "https://koshurkart.com";
 
-const json = (body: unknown, status = 200) =>
+const CORS_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": CORS_HEADERS,
+    "Vary": "Origin",
+  };
+}
+
+const json = (body: unknown, status = 200, req: Request) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 
 const BodySchema = z.object({
@@ -62,12 +82,12 @@ function modeFromKey(keyId: string | undefined): "test" | "live" {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
 
   // ---- Auth ----
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
 
   const anon = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -75,17 +95,17 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user }, error: userErr } = await anon.auth.getUser();
-  if (userErr || !user) return json({ error: "Unauthorized" }, 401);
+  if (userErr || !user) return json({ error: "Unauthorized" }, 401, req);
 
   // ---- Validate body ----
   let parsed;
   try {
     parsed = BodySchema.safeParse(await req.json());
   } catch {
-    return json({ error: "Invalid JSON" }, 400);
+    return json({ error: "Invalid JSON" }, 400, req);
   }
   if (!parsed.success) {
-    return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400);
+    return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400, req);
   }
   const { items, payment_method, client_quoted_total, idempotency_key, shipping } = parsed.data;
 
@@ -146,15 +166,16 @@ Deno.serve(async (req) => {
             amountPaise: Math.round(total * 100),
             currency: "INR",
           });
+          }, 200, req);
         }
         if (existingPayment.payment_method === "upi") {
           return json({
             ...base,
             qrCodeUrl: existingPayment.qr_code_url,
             merchantUpiId: existingPayment.upi_id,
-          });
+          }, 200, req);
         }
-        return json(base);
+        return json(base, 200, req);
       }
     }
   }
@@ -167,7 +188,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "rate_limited" },
     });
-    return json({ error: "Too many checkout attempts. Please wait a minute." }, 429);
+    return json({ error: "Too many checkout attempts. Please wait a minute." }, 429, req);
   }
 
   // Log every attempt for audit + rate-limit accounting.
@@ -184,9 +205,9 @@ Deno.serve(async (req) => {
     .select("id, title, price, discount_price, dynamic_price, stock, reserved_stock, status, vendor_id, images")
     .in("id", productIds);
 
-  if (prodErr) return json({ error: "Failed to load products" }, 500);
+  if (prodErr) return json({ error: "Failed to load products" }, 500, req);
   if (!products || products.length !== productIds.length) {
-    return json({ error: "One or more products not found" }, 404);
+    return json({ error: "One or more products not found" }, 404, req);
   }
 
   const byId = new Map(products.map((p: any) => [p.id, p]));
@@ -202,16 +223,16 @@ Deno.serve(async (req) => {
 
   for (const it of items) {
     const p: any = byId.get(it.product_id);
-    if (!p) return json({ error: `Product ${it.product_id} not available` }, 404);
-    if (p.status !== "active") return json({ error: `Product "${p.title}" is no longer available` }, 410);
+    if (!p) return json({ error: `Product ${it.product_id} not available` }, 404, req);
+    if (p.status !== "active") return json({ error: `Product "${p.title}" is no longer available` }, 410, req);
     const available = (p.stock ?? 0) - (p.reserved_stock ?? 0);
     if (available < it.quantity) {
-      return json({ error: `Only ${available} of "${p.title}" in stock` }, 409);
+      return json({ error: `Only ${available} of "${p.title}" in stock` }, 409, req);
     }
     // Server-chosen price: discount > dynamic > base. Never client.
     const unitPrice = Number(p.discount_price ?? p.dynamic_price ?? p.price);
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-      return json({ error: `Invalid price for "${p.title}"` }, 500);
+      return json({ error: `Invalid price for "${p.title}"` }, 500, req);
     }
     lines.push({
       product_id: p.id,
@@ -240,7 +261,7 @@ Deno.serve(async (req) => {
     });
     if (error) {
       await releaseReserved();
-      return json({ error: error.message || "Failed to reserve stock" }, 409);
+      return json({ error: error.message || "Failed to reserve stock" }, 409, req);
     }
     reserved.push({ product_id: ln.product_id, quantity: ln.quantity });
   }
@@ -271,6 +292,7 @@ Deno.serve(async (req) => {
     return json(
       { error: "Amount mismatch detected. Order not created.", code: "AMOUNT_MISMATCH" },
       422,
+      req,
     );
   }
 
@@ -281,7 +303,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "min_amount", total },
     });
-    return json({ error: "Order total must be at least ₹1" }, 400);
+    return json({ error: "Order total must be at least ₹1" }, 400, req);
   }
   if (total > 1_000_000) {
     await releaseReserved();
@@ -290,7 +312,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "max_amount", total },
     });
-    return json({ error: "Order total exceeds maximum allowed" }, 400);
+    return json({ error: "Order total exceeds maximum allowed" }, 400, req);
   }
 
   // Drift / tampering audit — log if client's quoted total disagrees with server.
@@ -363,15 +385,15 @@ Deno.serve(async (req) => {
           ? { razorpayOrderId: dupPay.razorpay_order_id, keyId, mode, amountPaise: Math.round(Number(dup.total_amount) * 100), currency: "INR" }
           : {}),
         ...(dupPay?.qr_code_url ? { qrCodeUrl: dupPay.qr_code_url, merchantUpiId: dupPay.upi_id } : {}),
-      });
+      }, 200, req);
     }
-    return json({ error: "Duplicate request" }, 409);
+    return json({ error: "Duplicate request" }, 409, req);
   }
 
   if (orderErr || !order) {
     await releaseReserved();
     console.error("order insert failed", orderErr);
-    return json({ error: "Failed to create order" }, 500);
+    return json({ error: "Failed to create order" }, 500, req);
   }
   const orderId = order.id;
 
@@ -389,7 +411,7 @@ Deno.serve(async (req) => {
   if (itemsErr) {
     await releaseReserved();
     console.error("order_items insert failed", itemsErr);
-    return json({ error: "Failed to create order items" }, 500);
+    return json({ error: "Failed to create order items" }, 500, req);
   }
 
   // ---- 6. Commission settings ----
@@ -496,13 +518,13 @@ Deno.serve(async (req) => {
       .single();
     if (error || !data) {
       console.error("payment insert failed", error);
-      return json({ error: "Failed to create payment record" }, 500);
+      return json({ error: "Failed to create payment record" }, 500, req);
     }
     payment = data;
   }
 
   // ---- 8. Branch by payment method ----
-  const debugBlock = DEBUG_PRICING
+  const debugBlock = effectiveDebugPricing
     ? {
         debug: {
           lines: pricing.line_breakdown,
@@ -523,7 +545,7 @@ Deno.serve(async (req) => {
   if (payment_method === "cod") {
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
     await logSuccess("cod");
-    return json({ orderId, paymentId: payment.id, total, method: "cod", mode, ...debugBlock });
+    return json({ orderId, paymentId: payment.id, total, method: "cod", mode, ...debugBlock }, 200, req);
   }
 
   if (payment_method === "upi") {
@@ -534,7 +556,7 @@ Deno.serve(async (req) => {
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
     await service.from("payments").update({ qr_code_url: qrCodeUrl, upi_id: merchantUpiId }).eq("id", payment.id);
     await logSuccess("upi");
-    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId, mode, amountPaise, currency: "INR", ...debugBlock });
+    return json({ orderId, paymentId: payment.id, total, method: "upi", qrCodeUrl, merchantUpiId, mode, amountPaise, currency: "INR", ...debugBlock }, 200, req);
   }
 
   // razorpay
@@ -544,7 +566,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "razorpay_not_configured", order_id: orderId },
     });
-    return json({ error: "Razorpay not configured" }, 500);
+    return json({ error: "Razorpay not configured" }, 500, req);
   }
 
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
@@ -615,7 +637,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId, body: errBody.slice(0, 500) },
     });
-    return json({ error: "Failed to create Razorpay order" }, 502);
+    return json({ error: "Failed to create Razorpay order" }, 502, req);
   }
   const rpOrder = await rpRes.json();
   await service
@@ -664,5 +686,5 @@ Deno.serve(async (req) => {
     amountPaise,
     currency: "INR",
     ...debugBlock,
-  });
+  }, 200, req);
 });

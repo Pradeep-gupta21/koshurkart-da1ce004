@@ -5,11 +5,7 @@
 // Set the webhook secret as RAZORPAY_WEBHOOK_SECRET.
 import { createClient } from "@supabase/supabase-js";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-razorpay-signature",
-};
+const jsonHeaders = { "Content-Type": "application/json" };
 
 async function verifyWebhookSignature(body: string, signature: string, secret: string): Promise<boolean> {
   const encoder = new TextEncoder();
@@ -29,7 +25,6 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const signature = req.headers.get("x-razorpay-signature");
@@ -37,7 +32,7 @@ Deno.serve(async (req) => {
     if (!signature || !secret) {
       return new Response(JSON.stringify({ error: "Missing signature or secret" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -46,7 +41,7 @@ Deno.serve(async (req) => {
     if (!valid) {
       return new Response(JSON.stringify({ error: "Invalid signature" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -71,7 +66,7 @@ Deno.serve(async (req) => {
       if (!transfer || !transferEventId) {
         return new Response(JSON.stringify({ ok: true, ignored: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
 
@@ -88,7 +83,7 @@ Deno.serve(async (req) => {
       if (tDedupeErr && (tDedupeErr as { code?: string }).code === "23505") {
         return new Response(JSON.stringify({ ok: true, deduped: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
 
@@ -142,7 +137,7 @@ Deno.serve(async (req) => {
         }
         return new Response(JSON.stringify({ ok: true, found: false }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
 
@@ -169,7 +164,7 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -180,7 +175,7 @@ Deno.serve(async (req) => {
       if (!refundId) {
         return new Response(JSON.stringify({ ok: true, ignored: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
 
@@ -223,20 +218,20 @@ Deno.serve(async (req) => {
         if ((rDedupeErr as { code?: string } | null)?.code === "23505") {
           return new Response(JSON.stringify({ ok: true, deduped: true }), {
             status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: jsonHeaders,
           });
         }
         if (rDedupeErr) throw rDedupeErr;
 
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       } catch (refundErr) {
         console.error("Webhook: refund handling error", (refundErr as Error).message);
         return new Response(JSON.stringify({ error: "transient_failure" }), {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
     }
@@ -246,7 +241,7 @@ Deno.serve(async (req) => {
     if (!payment || !eventId) {
       return new Response(JSON.stringify({ ok: true, ignored: true }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -277,7 +272,7 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify({ ok: true, deduped: true }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -296,7 +291,7 @@ Deno.serve(async (req) => {
       console.error("Webhook: payment row not found");
       return new Response(JSON.stringify({ ok: true, found: false }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -324,7 +319,7 @@ Deno.serve(async (req) => {
         });
         return new Response(JSON.stringify({ ok: true, mismatch: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         });
       }
 
@@ -386,13 +381,13 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonHeaders,
     });
   } catch (err) {
     console.error("Webhook error:", (err as Error).message);
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonHeaders,
     });
   }
 });

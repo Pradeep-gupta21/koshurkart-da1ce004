@@ -8,18 +8,32 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 /* ─────────────────── CORS ────────────────────────────────────────── */
 
 // #9: Include PUT in allowed methods
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const ALLOWED_ORIGINS = [
+  "https://koshurkart.com",
+  "https://www.koshurkart.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+const PRIMARY_ORIGIN = "https://koshurkart.com";
+const CORS_ALLOW_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+    "Access-Control-Allow-Headers": CORS_ALLOW_HEADERS,
+    "Vary": "Origin",
+  };
+}
 
 /** JSON response helper — CORS headers on EVERY response (including errors). */
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -122,14 +136,14 @@ function validatePayload(body: Record<string, unknown>): {
 Deno.serve(async (req) => {
   // CORS preflight — #9: includes PUT
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(req) });
   }
 
   try {
     /* ── Auth ─────────────────────────────────────────────────────── */
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Unauthorized" }, 401);
+      return json({ error: "Unauthorized" }, 401, req);
     }
 
     const anon = createClient(
@@ -139,7 +153,7 @@ Deno.serve(async (req) => {
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
     if (userError || !user) {
-      return json({ error: "Unauthorized" }, 401);
+      return json({ error: "Unauthorized" }, 401, req);
     }
 
     /* ── Get vendor ID for this user ─────────────────────────────── */
@@ -159,10 +173,10 @@ Deno.serve(async (req) => {
     // #8/#11: Distinguish query error from null result
     if (vendorErr) {
       console.error("Vendor query failed:", vendorErr.message);
-      return json({ error: "Failed to look up vendor record", details: vendorErr.message }, 500);
+      return json({ error: "Failed to look up vendor record", details: vendorErr.message }, 500, req);
     }
     if (!vendorRow) {
-      return json({ error: "Vendor not found" }, 404);
+      return json({ error: "Vendor not found" }, 404, req);
     }
 
     const vendorId = vendorRow.id;
@@ -179,7 +193,7 @@ Deno.serve(async (req) => {
 
       if (setupErr) {
         console.error("Payment setup query failed:", setupErr.message);
-        return json({ error: "Failed to load payment setup", details: setupErr.message }, 500);
+        return json({ error: "Failed to load payment setup", details: setupErr.message }, 500, req);
       }
 
       // setup === null means no setup exists yet — that's a valid state, return null
@@ -229,7 +243,7 @@ Deno.serve(async (req) => {
           paymentSetupCompleted: vendorRow.payment_setup_completed,
           defaultAccountHolder: vendorRow.bank_account_holder ?? vendorRow.store_name,
         },
-      });
+      }, 200, req);
     }
 
     /* ── POST/PUT: upsert payment setup ──────────────────────────── */
@@ -244,7 +258,7 @@ Deno.serve(async (req) => {
         for (const e of errors) {
           fieldErrors[e.field] = e.message;
         }
-        return json({ error: "Validation failed", errors, fieldErrors }, 400);
+        return json({ error: "Validation failed", errors, fieldErrors }, 400, req);
       }
 
       // #10: Use atomic RPC instead of two separate queries
@@ -262,17 +276,17 @@ Deno.serve(async (req) => {
 
       if (rpcError) {
         console.error("Atomic upsert RPC failed:", rpcError.message);
-        return json({ error: "Failed to save payment setup", details: rpcError.message }, 500);
+        return json({ error: "Failed to save payment setup", details: rpcError.message }, 500, req);
       }
 
       // The RPC returns jsonb — guard against null/undefined/invalid responses
       if (!rpcResult || typeof rpcResult !== "object") {
         console.error("RPC returned invalid response:", JSON.stringify(rpcResult));
-        return json({ error: "RPC returned invalid response", code: "INVALID_RPC_RESPONSE" }, 500);
+        return json({ error: "RPC returned invalid response", code: "INVALID_RPC_RESPONSE" }, 500, req);
       }
       if (!(rpcResult as any).success) {
         console.error("RPC returned failure:", JSON.stringify(rpcResult));
-        return json({ error: (rpcResult as any).error ?? "Payment setup failed", code: "PAYMENT_SETUP_FAILED" }, 400);
+        return json({ error: (rpcResult as any).error ?? "Payment setup failed", code: "PAYMENT_SETUP_FAILED" }, 400, req);
       }
 
       console.log(`Payment setup saved for vendor ${vendorId}:`, JSON.stringify({
@@ -284,12 +298,12 @@ Deno.serve(async (req) => {
       return json({
         success: true,
         message: "Payment setup saved successfully",
-      });
+      }, 200, req);
     }
 
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed" }, 405, req);
   } catch (err) {
     console.error("vendor-setup-payment error:", (err as Error).message);
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, req);
   }
 });

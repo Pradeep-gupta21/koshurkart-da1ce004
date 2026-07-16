@@ -4,26 +4,40 @@
 // deno-lint-ignore no-import-prefix
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const ALLOWED_ORIGINS = [
+  "https://koshurkart.com",
+  "https://www.koshurkart.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+const PRIMARY_ORIGIN = "https://koshurkart.com";
+const CORS_ALLOW_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
 
-function json(body: unknown, status = 200) {
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": CORS_ALLOW_HEADERS,
+    "Vary": "Origin",
+  };
+}
+
+function json(body: unknown, status = 200, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
 
   try {
     /* ── Auth ─────────────────────────────────────────────────────────── */
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -31,10 +45,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
-    if (userError || !user) return json({ error: "Unauthorized" }, 401);
+    if (userError || !user) return json({ error: "Unauthorized" }, 401, req);
 
     const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
-    if (!isAdmin) return json({ error: "Forbidden" }, 403);
+    if (!isAdmin) return json({ error: "Forbidden" }, 403, req);
 
     /* ── Service client (bypasses RLS) ────────────────────────────────── */
     const svc = createClient(
@@ -55,7 +69,7 @@ Deno.serve(async (req) => {
 
     if (vendorErr) {
       console.error("vendors query failed:", vendorErr.message);
-      return json({ error: "Failed to query vendors" }, 500);
+      return json({ error: "Failed to query vendors" }, 500, req);
     }
 
     const vendorIds = (vendors ?? []).map((v: any) => v.id);
@@ -75,7 +89,7 @@ Deno.serve(async (req) => {
           orphaned_requests: [],
         },
         generated_at: new Date().toISOString(),
-      });
+      }, 200, req);
     }
 
     /* ── 2. COD delivered earnings per vendor ──────────────────────────── */
@@ -309,9 +323,9 @@ Deno.serve(async (req) => {
       generated_at: new Date().toISOString(),
     };
 
-    return json(response);
+    return json(response, 200, req);
   } catch (err) {
     console.error("audit-payment-reconciliation error:", (err as Error).message);
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, req);
   }
 });

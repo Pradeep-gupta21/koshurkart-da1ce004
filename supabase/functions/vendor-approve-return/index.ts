@@ -21,26 +21,40 @@ import {
   getVendorCommissionPercentage,
 } from "../_shared/pricing.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const ALLOWED_ORIGINS = [
+  "https://koshurkart.com",
+  "https://www.koshurkart.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+const PRIMARY_ORIGIN = "https://koshurkart.com";
+const CORS_ALLOW_HEADERS =
+  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
 
-const json = (body: unknown, status = 200) =>
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": CORS_ALLOW_HEADERS,
+    "Vary": "Origin",
+  };
+}
+
+const json = (body: unknown, status = 200, req: Request) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
 
   try {
     // ---- Auth ----
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -48,20 +62,20 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userErr } = await anon.auth.getUser();
-    if (userErr || !user) return json({ error: "Unauthorized" }, 401);
+    if (userErr || !user) return json({ error: "Unauthorized" }, 401, req);
 
     // ---- Input ----
     let payload: unknown;
-    try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+    try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
     const orderItemId = (payload as { order_item_id?: string })?.order_item_id;
     if (!orderItemId || typeof orderItemId !== "string") {
-      return json({ error: "order_item_id is required" }, 400);
+      return json({ error: "order_item_id is required" }, 400, req);
     }
 
     // ---- Razorpay creds ----
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
-    if (!keyId || !keySecret) return json({ error: "Razorpay credentials not configured" }, 500);
+    if (!keyId || !keySecret) return json({ error: "Razorpay credentials not configured" }, 500, req);
     const rzpAuth = "Basic " + btoa(`${keyId}:${keySecret}`);
 
     const service = createClient(
@@ -87,7 +101,7 @@ Deno.serve(async (req) => {
         order_item_id: orderItemId,
         code: lockErr?.code,
       });
-      return json({ error: "Return is not in requested state or is already being processed" }, 409);
+      return json({ error: "Return is not in requested state or is already being processed" }, 409, req);
     }
 
     const item = locked;
@@ -104,20 +118,20 @@ Deno.serve(async (req) => {
       await service.from("order_items")
         .update({ return_status: "requested" })
         .eq("id", item.id);
-      return json({ error: "Vendor not found" }, 404);
+      return json({ error: "Vendor not found" }, 404, req);
     }
     const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
     if (vendor.user_id !== user.id && !isAdmin) {
       await service.from("order_items")
         .update({ return_status: "requested" })
         .eq("id", item.id);
-      return json({ error: "Forbidden" }, 403);
+      return json({ error: "Forbidden" }, 403, req);
     }
 
     // ---- Amounts ----
     const linePaise = Math.round(Number(item.price) * Number(item.quantity) * 100);
     if (!Number.isFinite(linePaise) || linePaise <= 0) {
-      return json({ error: "Invalid line amount" }, 400);
+      return json({ error: "Invalid line amount" }, 400, req);
     }
 
     // ---- Commission — MUST be resolved BEFORE any DB writes or gateway calls ----
@@ -143,12 +157,12 @@ Deno.serve(async (req) => {
     } catch (commErr) {
       console.error("[vendor-approve-return] getVendorCommissionPercentage threw", commErr);
       await service.from("order_items").update({ return_status: "requested" }).eq("id", item.id);
-      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500);
+      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500, req);
     }
     if (pct == null || !Number.isFinite(pct) || pct < 0 || pct > 100) {
       console.error("[vendor-approve-return] commission out of range", { pct, vendor_id: item.vendor_id });
       await service.from("order_items").update({ return_status: "requested" }).eq("id", item.id);
-      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500);
+      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500, req);
     }
 
     const vendorSharePaise = calculateVendorTransferAmount(linePaise, pct, false);
@@ -184,10 +198,10 @@ Deno.serve(async (req) => {
           { order_item_id: item.id, transfer_id: item.razorpay_transfer_id, status: revRes.status, body: errText.slice(0, 500) },
         );
         return json({
-          error: "Transfer reversal failed; refund not attempted. Safe to retry.",
-          stage: "reversal",
-          razorpay_status: revRes.status,
-        }, 502);
+          success: false,
+          error: "Return processing failed. Please try again or contact support.",
+          retryable: true,
+        }, 502, req);
       }
       reversalId = (await revRes.json())?.id ?? null;
 
@@ -200,7 +214,11 @@ Deno.serve(async (req) => {
           "[vendor-approve-return] reversal succeeded but id persist FAILED — reconcile manually",
           { order_item_id: item.id, reversal_id: reversalId, code: revPersistErr.code },
         );
-        return json({ error: "Reversal recorded at gateway but not in DB; reconcile before retry.", stage: "reversal_persist" }, 500);
+        return json({
+          success: false,
+          error: "Return processing failed. Please try again or contact support.",
+          retryable: true,
+        }, 500, req);
       }
     } else if (!transferProcessed) {
       console.log("[vendor-approve-return] no processed transfer; skipping reversal", {
@@ -257,12 +275,10 @@ Deno.serve(async (req) => {
             },
           );
           return json({
-            error: "Refund failed after reversal. Vendor debited, customer NOT yet refunded — retry to complete.",
-            stage: "refund",
-            partial_failure: true,
-            reversal_id: reversalId,
-            razorpay_status: refRes.status,
-          }, 502);
+            success: false,
+            error: "Return processing failed. Please try again or contact support.",
+            retryable: true,
+          }, 502, req);
         }
         refundId = (await refRes.json())?.id ?? null;
 
@@ -275,7 +291,11 @@ Deno.serve(async (req) => {
             "[vendor-approve-return] refund succeeded but id persist FAILED — reconcile manually",
             { order_item_id: item.id, refund_id: refundId, code: refPersistErr.code },
           );
-          return json({ error: "Refund issued at gateway but not recorded in DB; reconcile before retry.", stage: "refund_persist" }, 500);
+          return json({
+            success: false,
+            error: "Return processing failed. Please try again or contact support.",
+            retryable: true,
+          }, 500, req);
         }
       }
     }
@@ -290,12 +310,10 @@ Deno.serve(async (req) => {
         { order_item_id: item.id, reversal_id: reversalId, refund_id: refundId, code: (rpcErr as { code?: string }).code, message: rpcErr.message },
       );
       return json({
-        error: "Razorpay reversal/refund done but DB reversal failed — retry to finish.",
-        stage: "db_rpc",
-        reversal_id: reversalId,
-        refund_id: refundId,
-        message: rpcErr.message,
-      }, 500);
+        success: false,
+        error: "Return processing failed. Please try again or contact support.",
+        retryable: true,
+      }, 500, req);
     }
 
     return json({
@@ -305,9 +323,9 @@ Deno.serve(async (req) => {
       refund_id: refundId,
       reversed_amount_paise: transferProcessed ? vendorSharePaise : 0,
       refunded_amount_paise: refundId ? linePaise : 0,
-    });
+    }, 200, req);
   } catch (err) {
     console.error("[vendor-approve-return] unexpected error", (err as Error).message);
-    return json({ error: "Internal server error" }, 500);
+    return json({ error: "Internal server error" }, 500, req);
   }
 });
