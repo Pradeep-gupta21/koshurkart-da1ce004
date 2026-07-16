@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
       }
       reversalId = (await revRes.json())?.id ?? null;
 
-      const { error: revPersistErr } = await service
+      const { error: revPersistErr }  = await service
         .from("order_items")
         .update({ razorpay_reversal_id: reversalId })
         .eq("id", item.id);

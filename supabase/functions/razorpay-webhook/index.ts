@@ -3,7 +3,7 @@
 //   payment.captured, payment.failed, transfer.processed, transfer.failed,
 //   refund.processed, refund.failed
 // Set the webhook secret as RAZORPAY_WEBHOOK_SECRET.
-import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
