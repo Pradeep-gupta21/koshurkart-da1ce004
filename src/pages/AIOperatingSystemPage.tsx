@@ -2,12 +2,16 @@ import { useMemo } from "react";
 import { ChatProvider, ChatWindow } from "@/components/chat";
 import { AIClient } from "@/lib/ai";
 import { AIService } from "@/ai/services/ai.service";
-import { createMockProvider } from "@/ai/providers/mock.provider";
+import { createGeminiProvider } from "@/ai/providers/gemini.provider";
 import type { AgentChatPayload, AgentStreamEvent } from "@/lib/ai";
 import type { ChatMessage } from "@/ai/types/chat";
 
-class LocalMockClient extends AIClient {
-  private readonly ai = new AIService({ provider: createMockProvider() });
+class LocalGeminiClient extends AIClient {
+  private readonly ai = new AIService({
+    provider: createGeminiProvider({
+      apiKey: import.meta.env.VITE_GEMINI_API_KEY ?? "",
+    }),
+  });
   private messages: ChatMessage[] = [];
 
   async *streamChat(
@@ -40,11 +44,11 @@ class LocalMockClient extends AIClient {
 }
 
 export default function AIOperatingSystemPage() {
-  const mockClient = useMemo(() => new LocalMockClient(), []);
+  const geminiClient = useMemo(() => new LocalGeminiClient(), []);
 
   return (
     <div className="h-[calc(100vh-64px)] w-full flex flex-col bg-background">
-      <ChatProvider audience="admin" title="AI Operating System" client={mockClient}>
+      <ChatProvider audience="admin" title="AI Operating System" client={geminiClient}>
         <ChatWindow placeholder="Ask the AI OS anything..." />
       </ChatProvider>
     </div>
