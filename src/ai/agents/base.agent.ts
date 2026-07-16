@@ -34,6 +34,8 @@ import type {
   PlannerError,
   PlannerResult,
   PlannerState,
+  PlannerEventListener,
+  Unsubscribe,
 } from "@/ai/planner";
 import type { ToolExecutor, ToolLogger, ToolRegistry } from "@/ai/tools";
 import type { MemoryContext } from "@/ai/memory";
@@ -44,6 +46,7 @@ import type {
   AIStreamEvent,
   ChatAudience,
   ChatMessage,
+  FinishReason,
   ToolCall,
   ToolResult as WireToolResult,
   TokenUsage,
@@ -64,6 +67,12 @@ import {
   type AgentToolInvocation,
   type ReflectionMetadata,
 } from "./types";
+import {
+  AgentEventStream,
+  createPlannerBridge,
+  errorEvent,
+  type AgentStreamEvent,
+} from "./events";
 
 export abstract class BaseAgent<
   TServices extends Record<string, unknown> = Record<string, unknown>,
@@ -327,6 +336,268 @@ export abstract class BaseAgent<
 
     for await (const event of this.deps.ai.stream(request)) {
       yield event;
+    }
+  }
+
+  /* -------------------------------------------------------------- *
+   * Rich streaming turn (orchestration events)
+   * -------------------------------------------------------------- */
+
+  /**
+   * Stream a full turn as **rich** `AgentStreamEvent`s: the assistant text
+   * (`delta`) plus typed orchestration events for memory (`memory_*`), tool
+   * execution (`tool_*`), and reflection (`reflection_*`), terminated by a
+   * single `done`. Unlike `stream()`, this DRIVES the tool loop end to end.
+   *
+   * The base `AIStreamEvent` variants (`delta`/`tool_call`/`done`/`error`) are
+   * preserved, so existing SSE consumers keep working; orchestration events are
+   * purely additive. Emits only the memory events that actually occur (i.e.
+   * when conversation memory is wired). Never throws — failures surface as an
+   * `error` event.
+   */
+  async *streamTurn(
+    input: AgentInput,
+    invocation: AgentInvocation<TServices> = {},
+  ): AsyncIterable<AgentStreamEvent> {
+    if (invocation.signal?.aborted) {
+      yield errorEvent("Turn aborted before it started.", "invalid_request");
+      return;
+    }
+
+    const inputMessages = this.normalizeInput(input);
+    if (inputMessages.length === 0) {
+      yield errorEvent("Agent turn requires non-empty input.", "invalid_request");
+      return;
+    }
+
+    const hasMemory = Boolean(
+      this.deps.memory?.conversation && invocation.conversationId,
+    );
+
+    try {
+      // --- Recall -------------------------------------------------
+      if (hasMemory) yield { type: "memory_search", scope: "conversation" };
+      const history = await this.recallHistory(invocation);
+      const systemPrompt = await this.buildSystemPrompt(invocation);
+      if (hasMemory) {
+        yield { type: "memory_hit", scope: "conversation", count: history.length };
+      }
+
+      // Persist the incoming user turn(s) before generating.
+      await this.persistMessages(inputMessages, invocation);
+      if (hasMemory) {
+        yield {
+          type: "memory_store",
+          scope: "conversation",
+          count: inputMessages.length,
+        };
+      }
+
+      // --- Generate + tool loop -----------------------------------
+      const running: ChatMessage[] = [...history, ...inputMessages];
+      let finishReason: FinishReason = "stop";
+      let usage: TokenUsage | undefined;
+
+      for (let pass = 0; pass <= this.maxToolRoundtrips; pass++) {
+        if (invocation.signal?.aborted) {
+          yield this.doneOf("cancelled", usage);
+          return;
+        }
+
+        const request = this.buildRequest(running, systemPrompt, invocation);
+        let assistantText = "";
+        const toolCalls: ToolCall[] = [];
+        let failed = false;
+
+        for await (const event of this.deps.ai.stream(request)) {
+          if (event.type === "delta") {
+            assistantText += event.content;
+            yield event; // preserve base delta event
+          } else if (event.type === "tool_call") {
+            toolCalls.push(event.toolCall);
+            yield event; // preserve base tool_call (model's request)
+          } else if (event.type === "done") {
+            finishReason = event.finishReason;
+            usage = event.usage;
+          } else if (event.type === "error") {
+            yield event;
+            failed = true;
+            break;
+          }
+        }
+        if (failed) return;
+
+        const assistantMessage = AIService.createMessage(
+          "assistant",
+          assistantText,
+          toolCalls.length > 0 ? { toolCalls } : undefined,
+        );
+        await this.persistMessages([assistantMessage], invocation);
+
+        const canRunTools =
+          toolCalls.length > 0 &&
+          Boolean(this.deps.executor) &&
+          pass < this.maxToolRoundtrips;
+
+        if (!canRunTools) break;
+
+        running.push(assistantMessage);
+        const toolMessages = await this.streamToolCalls(toolCalls, invocation);
+        for await (const event of toolMessages.events) yield event;
+        running.push(...toolMessages.messages);
+        await this.persistMessages(toolMessages.messages, invocation);
+      }
+
+      // --- Reflection --------------------------------------------
+      if (this.reflectionEnabled) {
+        yield { type: "reflection_start" };
+        const reflection = await this.runReflection(
+          running,
+          systemPrompt,
+          invocation,
+          false,
+        );
+        yield {
+          type: "reflection_complete",
+          success: reflection.metadata.success,
+          feedback: reflection.metadata.feedback,
+          selfCorrected: reflection.metadata.selfCorrected,
+        };
+      }
+
+      // --- Compaction --------------------------------------------
+      if (this.compactAfterTurn) await this.maybeCompact(invocation);
+
+      yield this.doneOf(finishReason, usage);
+    } catch (caught) {
+      const error = this.normalizeThrow(caught);
+      yield errorEvent(error.message, "unknown", Boolean(error.retryable));
+    }
+  }
+
+  /**
+   * Execute the model's requested tool calls, producing both the `tool` turns
+   * to feed back to the model AND the `tool_start` / `tool_result` /
+   * `tool_error` events to stream. Kept separate from `runToolCalls` so the
+   * non-streaming `chat()` path is untouched.
+   */
+  private async streamToolCalls(
+    calls: readonly ToolCall[],
+    invocation: AgentInvocation<TServices>,
+  ): Promise<{ messages: ChatMessage[]; events: AsyncIterable<AgentStreamEvent> }> {
+    const executor: ToolExecutor<TServices> | undefined = this.deps.executor;
+    const messages: ChatMessage[] = [];
+    const events: AgentStreamEvent[] = [];
+    const delegationChain = invocation.metadata?.delegationChain as
+      | readonly string[]
+      | undefined;
+
+    for (const call of calls) {
+      events.push({
+        type: "tool_start",
+        toolCallId: call.id,
+        name: call.name,
+        arguments: call.arguments,
+      });
+
+      const result: WireToolResult = executor
+        ? await executor.run(call, { signal: invocation.signal, delegationChain })
+        : {
+            toolCallId: call.id,
+            result: {
+              code: "unavailable",
+              message: `No executor is wired to run tool "${call.name}".`,
+            },
+            isError: true,
+          };
+
+      if (result.isError) {
+        events.push({
+          type: "tool_error",
+          toolCallId: call.id,
+          name: call.name,
+          error: this.stringifyResult(result.result),
+        });
+      } else {
+        events.push({
+          type: "tool_result",
+          toolCallId: call.id,
+          name: call.name,
+          result: result.result,
+        });
+      }
+
+      messages.push(
+        AIService.createMessage("tool", this.stringifyResult(result.result), {
+          toolCallId: result.toolCallId,
+          metadata: { toolName: call.name, isError: result.isError },
+        }),
+      );
+    }
+
+    return {
+      messages,
+      events: (async function* () {
+        for (const event of events) yield event;
+      })(),
+    };
+  }
+
+  /** Build the terminal `done` event, omitting `usage` when absent. */
+  private doneOf(
+    finishReason: FinishReason,
+    usage: TokenUsage | undefined,
+  ): AgentStreamEvent {
+    return usage
+      ? { type: "done", finishReason, usage }
+      : { type: "done", finishReason };
+  }
+
+  /* -------------------------------------------------------------- *
+   * Rich streaming plan (planner events)
+   * -------------------------------------------------------------- */
+
+  /**
+   * Run the injected planner for a goal, streaming its lifecycle as
+   * `plan_start` / `plan_step` / `plan_complete` events (bridged from the
+   * planner's own event emitter). Yields a single `error` event when no
+   * planner is injected. The planner's final `PlannerResult` is awaited but
+   * surfaced through the events, mirroring `plan()`'s no-throw contract.
+   */
+  async *streamPlan(
+    goal: Goal,
+    invocation: AgentInvocation<TServices> = {},
+  ): AsyncIterable<AgentStreamEvent> {
+    const planner: Planner<TServices> | undefined = this.deps.planner;
+    if (!planner) {
+      yield errorEvent("No planner is injected into this agent.", "invalid_request");
+      return;
+    }
+
+    const stream = new AgentEventStream();
+    const listener: PlannerEventListener = createPlannerBridge((e) => stream.emit(e));
+
+    // Subscribe when the planner exposes an emitter (BasePlanner does).
+    const subscribable = planner as unknown as {
+      on?: (l: PlannerEventListener) => Unsubscribe;
+    };
+    const unsubscribe: Unsubscribe | undefined =
+      typeof subscribable.on === "function"
+        ? subscribable.on(listener)
+        : undefined;
+
+    const run = planner
+      .run(goal, this.toPlannerContext(invocation))
+      .catch(() => undefined)
+      .finally(() => {
+        unsubscribe?.();
+        stream.close();
+      });
+
+    try {
+      for await (const event of stream) yield event;
+    } finally {
+      await run;
     }
   }
 

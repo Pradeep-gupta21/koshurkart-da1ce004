@@ -2,6 +2,7 @@ import { BaseTool } from "../base.tool";
 import type { ToolContext, ToolResult } from "../types";
 import { ok, err } from "../types";
 import type { ChatAudience } from "@/ai/types/chat";
+import { isAgentOk } from "@/ai/agents/types";
 
 /**
  * KoshurKart — DelegateTaskTool
@@ -92,16 +93,14 @@ export class DelegateTaskTool<
       },
     });
 
-    if (!agentResult.ok) {
-      context.logger?.error(`Delegated agent (${input.targetAudience}) failed: ${agentResult.error.message}`);
+    if (isAgentOk(agentResult)) {
+      return ok(agentResult.response.message.content);
+    } else {
       return err({
         code: "execution_error",
-        message: `The delegated agent failed to complete the task: ${agentResult.error.message}`,
-        retryable: false
+        message: `Delegation failed: ${agentResult.error.message}`,
+        retryable: agentResult.error.retryable,
       });
     }
-
-    // 5. Return the agent's textual response back to the delegator
-    return ok(agentResult.data.message.content);
   }
 }
