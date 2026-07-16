@@ -213,7 +213,10 @@ export abstract class BaseAgent<
           Boolean(this.deps.executor) &&
           pass < this.maxToolRoundtrips;
 
-        if (!canRunTools) break;
+        if (!canRunTools) {
+          running.push(response.message);
+          break;
+        }
 
         // Run every requested tool and feed the results back as `tool` turns.
         running.push(response.message);
@@ -253,17 +256,48 @@ export abstract class BaseAgent<
             )
           );
           
-          const correctionRequest = this.buildRequest(running, systemPrompt, invocation);
-          const correctionResponse = await this.deps.ai.chat(correctionRequest);
-          roundtrips++;
+          let correctionResponse: AIChatResponse | undefined;
+
+          // Run a tool-resolving loop for the correction pass
+          for (let pass = 0; pass <= this.maxToolRoundtrips; pass++) {
+            if (invocation.signal?.aborted) {
+              return agentErr("Turn cancelled.", "cancelled");
+            }
+
+            const correctionRequest = this.buildRequest(running, systemPrompt, invocation);
+            correctionResponse = await this.deps.ai.chat(correctionRequest);
+            roundtrips++;
+            
+            await this.persistMessages([correctionResponse.message], invocation);
+            
+            const calls = correctionResponse.toolCalls ?? correctionResponse.message.toolCalls ?? [];
+            const canRunTools =
+              calls.length > 0 &&
+              Boolean(this.deps.executor) &&
+              pass < this.maxToolRoundtrips;
+
+            if (!canRunTools) {
+              running.push(correctionResponse.message);
+              break;
+            }
+
+            running.push(correctionResponse.message);
+            const toolMessages = await this.runToolCalls(
+              calls,
+              toolInvocations,
+              invocation,
+            );
+            running.push(...toolMessages);
+            await this.persistMessages(toolMessages, invocation);
+          }
           
-          await this.persistMessages([correctionResponse.message], invocation);
-          
-          finalResponse = this.buildAgentResponse(
-            correctionResponse,
-            toolInvocations,
-            roundtrips
-          );
+          if (correctionResponse) {
+            finalResponse = this.buildAgentResponse(
+              correctionResponse,
+              toolInvocations,
+              roundtrips
+            );
+          }
 
           // Second attempt reflection metadata is attached directly, even if it fails,
           // instead of looping forever.
