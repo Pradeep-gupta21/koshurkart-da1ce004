@@ -51,6 +51,7 @@ const RefundReturnPolicyPage = lazy(() => import("@/pages/RefundReturnPolicyPage
 const PrivacyPolicyPage = lazy(() => import("@/pages/PrivacyPolicyPage"));
 const AboutUsPage = lazy(() => import("@/pages/AboutUsPage"));
 const SupportPage = lazy(() => import("@/pages/SupportPage"));
+const AIOperatingSystemPage = lazy(() => import("@/pages/AIOperatingSystemPage"));
 
 const VendorDashboard = lazy(() => import("@/pages/vendor/VendorDashboard"));
 const VendorOverview = lazy(() => import("@/pages/vendor/VendorOverview"));
@@ -118,6 +119,7 @@ const App = () => (
                       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                       <Route path="/about-us" element={<AboutUsPage />} />
                       <Route path="/support" element={<SupportPage />} />
+                      <Route path="/os" element={<AIOperatingSystemPage />} />
 
                       {/* Authenticated routes */}
                       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
