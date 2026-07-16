@@ -29,14 +29,10 @@ AS $$
 BEGIN
   -- Only block when return_status actually changes.
   IF NEW.return_status IS DISTINCT FROM OLD.return_status THEN
-    -- Allow service_role (Edge Functions) to bypass this check.
+    -- ONLY allow service_role (Edge Functions using the service key) to bypass.
+    -- current_user is a Postgres role-level identity that cannot be spoofed
+    -- by client code, unlike session-level GUC settings.
     IF current_user = 'service_role' THEN
-      RETURN NEW;
-    END IF;
-
-    -- Allow admin user to bypass (if you have an admin ID setting).
-    IF current_setting('request.jwt.claims', true)::json->>'sub'
-         = current_setting('app.admin_id', true) THEN
       RETURN NEW;
     END IF;
 

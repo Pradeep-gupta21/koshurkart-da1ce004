@@ -120,8 +120,7 @@ Deno.serve(async (req) => {
         .eq("id", item.id);
       return json({ error: "Vendor not found" }, 404, req);
     }
-    const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
-    if (vendor.user_id !== user.id && !isAdmin) {
+    if (vendor.user_id !== user.id) {
       await service.from("order_items")
         .update({ return_status: "requested" })
         .eq("id", item.id);
@@ -303,7 +302,7 @@ Deno.serve(async (req) => {
     // ============================================================
     // STEP 3 — DB reversal via RPC (transitions processing → approved)
     // ============================================================
-    const { error: rpcErr } = await anon.rpc("vendor_approve_return", { _order_item_id: item.id });
+    const { error: rpcErr } = await service.rpc("vendor_approve_return", { _order_item_id: item.id, _caller_vendor_id: item.vendor_id });
     if (rpcErr) {
       console.error(
         "[vendor-approve-return] Razorpay steps done but vendor_approve_return RPC FAILED — DB reversal pending",

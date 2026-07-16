@@ -48,7 +48,7 @@ BEGIN
     
     -- Update Order
     UPDATE public.orders 
-    SET payment_status = 'paid', order_status = 'confirmed' 
+    SET payment_status = 'completed', order_status = 'confirmed' 
     WHERE id = v_order_id;
 
     -- Audit Log
@@ -107,3 +107,10 @@ BEGIN
   RETURN v_result;
 END;
 $$;
+
+-- =============================================================================
+-- Access Control: Restrict execution to service_role only.
+-- Prevents any client-side or authenticated-user invocation.
+-- =============================================================================
+REVOKE EXECUTE ON FUNCTION public.admin_process_payment(uuid, uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_process_payment(uuid, uuid, text, text, text) TO service_role;

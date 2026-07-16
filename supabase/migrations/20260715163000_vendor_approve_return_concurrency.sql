@@ -7,7 +7,11 @@
 --      before any Razorpay calls) instead of 'requested'.
 --   3. Status transition: processing → approved.
 
-CREATE OR REPLACE FUNCTION public.vendor_approve_return(_order_item_id uuid)
+-- Drop the old 1-argument overload so only the new secured 2-argument
+-- signature exists after this migration runs.
+DROP FUNCTION IF EXISTS public.vendor_approve_return(uuid);
+
+CREATE OR REPLACE FUNCTION public.vendor_approve_return(_order_item_id uuid, _caller_vendor_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -15,7 +19,6 @@ SET search_path = public
 AS $$
 DECLARE
   _vendor_id   uuid;
-  _user_id     uuid;
   _order_id    uuid;
   _price       numeric;
   _qty         integer;
@@ -37,8 +40,10 @@ BEGIN
     RAISE EXCEPTION 'Order item not found';
   END IF;
 
-  SELECT v.user_id INTO _user_id FROM public.vendors v WHERE v.id = _vendor_id;
-  IF _user_id IS DISTINCT FROM auth.uid() AND NOT public.has_role(auth.uid(), 'admin'::app_role) THEN
+  -- Verify the caller is the actual vendor for this order item.
+  -- This check uses explicit data-level authorization rather than auth.uid(),
+  -- which is unreliable when called via service_role (returns NULL).
+  IF _vendor_id IS DISTINCT FROM _caller_vendor_id THEN
     RAISE EXCEPTION 'Not authorized';
   END IF;
 

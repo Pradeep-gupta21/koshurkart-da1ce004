@@ -31,7 +31,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
+    const service = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data: isAdmin } = await service.rpc("has_role", { _user_id: user.id, _role: "admin" });
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -52,11 +57,6 @@ Deno.serve(async (req) => {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const service = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     const { data: payment, error: payErr } = await service
       .from("payments")

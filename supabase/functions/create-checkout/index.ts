@@ -165,7 +165,6 @@ Deno.serve(async (req) => {
             mode,
             amountPaise: Math.round(total * 100),
             currency: "INR",
-          });
           }, 200, req);
         }
         if (existingPayment.payment_method === "upi") {
