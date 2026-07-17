@@ -16,6 +16,7 @@ export interface KnowledgeNode<T = any> {
 export interface KnowledgeMetadata {
   tags?: string[];
   keywords?: string[];
+  description?: string;
   createdAt?: string;
   updatedAt?: string;
   source?: string;

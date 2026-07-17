@@ -20,7 +20,7 @@ export interface KnowledgeQuery {
   
   // Future RAG extensions:
   // similarityThreshold?: number;
-  // topK?: number;
+  topK?: number;
 }
 
 /**
