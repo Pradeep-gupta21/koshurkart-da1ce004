@@ -15,12 +15,13 @@
  */
 
 import type { ChatAudience } from "@/ai/types/chat";
-import { BRAND_KNOWLEDGE } from "@/ai/knowledge/brand";
-import { PRODUCT_KNOWLEDGE } from "@/ai/knowledge/products";
-import { VENDOR_KNOWLEDGE } from "@/ai/knowledge/vendors";
-import { BUSINESS_RULES } from "@/ai/knowledge/businessRules";
-import { HERITAGE_KNOWLEDGE } from "@/ai/knowledge/heritage";
-import { FAQ_KNOWLEDGE, SUPPORT_CHANNELS } from "@/ai/knowledge/faq";
+import { BRAND_KNOWLEDGE } from "@/ai/knowledge/domains/policies";
+import { PRODUCT_KNOWLEDGE } from "@/ai/knowledge/domains/products";
+import { VENDOR_KNOWLEDGE } from "@/ai/knowledge/domains/artisans";
+import { BUSINESS_RULES } from "@/ai/knowledge/domains/business";
+import { HERITAGE_KNOWLEDGE } from "@/ai/knowledge/domains/heritage";
+import { FAQ_KNOWLEDGE, SUPPORT_CHANNELS } from "@/ai/knowledge/domains/faqs";
+import { generateSystemPrompt } from "../core";
 
 /** The audience this prompt serves (ties into the AIService architecture). */
 export const CUSTOMER_AUDIENCE: ChatAudience = "customer";
@@ -48,11 +49,13 @@ const KNOWLEDGE_BASE = [
  * CUSTOMER_SYSTEM_PROMPT — the reusable, fully-composed system prompt for
  * the customer AI assistant.
  */
-export const CUSTOMER_SYSTEM_PROMPT: string = `You are the ${BRAND_KNOWLEDGE.companyName} Customer Assistant — the friendly, knowledgeable shopping guide for ${BRAND_KNOWLEDGE.companyName} (${BRAND_KNOWLEDGE.tagline}).
-
-# Who you are
-${BRAND_KNOWLEDGE.descriptor}
-You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You help customers discover authentic Kashmiri products, understand the artisans and heritage behind them, and complete their purchase with confidence.
+export const CUSTOMER_SYSTEM_PROMPT: string = generateSystemPrompt({
+  context: { audience: CUSTOMER_AUDIENCE },
+  rag: {
+    documents: [
+      {
+        title: "CUSTOMER SUPPORT OPERATIONS GUIDE",
+        content: `You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You help customers discover authentic Kashmiri products, understand the artisans and heritage behind them, and complete their purchase with confidence.
 
 # Your responsibilities
 - Help users discover products and find what they are looking for across the marketplace's categories.
@@ -78,13 +81,14 @@ You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You he
 - For account, security, order-tracking, and policy questions, mirror the FAQ and BUSINESS RULES.
 - If a request needs a human (disputes, account access, order-specific lookups you cannot see), hand off to support gracefully and ask for the order ID when relevant.
 
-# Tone
-Warm, respectful, and professional — a trusted guide to the valley's crafts. Concise over verbose. Honest over persuasive.
-
-# KNOWLEDGE BASE (your only source of truth)
-${KNOWLEDGE_BASE}
-
-# Reminder
-Everything you state must be traceable to the KNOWLEDGE BASE above. When in doubt, say you don't have that information and point the customer to support. Represent ${BRAND_KNOWLEDGE.companyName} and its artisans with honesty and care.`;
+Everything you state must be traceable to the KNOWLEDGE BASE above. When in doubt, say you don't have that information and point the customer to support. Represent ${BRAND_KNOWLEDGE.companyName} and its artisans with honesty and care.`
+      },
+      {
+        title: "KNOWLEDGE BASE",
+        content: KNOWLEDGE_BASE
+      }
+    ]
+  }
+});
 
 export default CUSTOMER_SYSTEM_PROMPT;

@@ -15,12 +15,13 @@
  */
 
 import type { ChatAudience } from "@/ai/types/chat";
-import { BRAND_KNOWLEDGE } from "@/ai/knowledge/brand";
-import { PRODUCT_KNOWLEDGE } from "@/ai/knowledge/products";
-import { VENDOR_KNOWLEDGE } from "@/ai/knowledge/vendors";
-import { BUSINESS_RULES } from "@/ai/knowledge/businessRules";
-import { HERITAGE_KNOWLEDGE } from "@/ai/knowledge/heritage";
-import { FAQ_KNOWLEDGE, SUPPORT_CHANNELS } from "@/ai/knowledge/faq";
+import { BRAND_KNOWLEDGE } from "@/ai/knowledge/domains/policies";
+import { PRODUCT_KNOWLEDGE } from "@/ai/knowledge/domains/products";
+import { VENDOR_KNOWLEDGE } from "@/ai/knowledge/domains/artisans";
+import { BUSINESS_RULES } from "@/ai/knowledge/domains/business";
+import { HERITAGE_KNOWLEDGE } from "@/ai/knowledge/domains/heritage";
+import { FAQ_KNOWLEDGE, SUPPORT_CHANNELS } from "@/ai/knowledge/domains/faqs";
+import { generateSystemPrompt } from "../core";
 
 /** The audience this prompt serves (ties into the AIService architecture). */
 export const VENDOR_AUDIENCE: ChatAudience = "vendor";
@@ -48,11 +49,13 @@ const KNOWLEDGE_BASE = [
  * VENDOR_SYSTEM_PROMPT — the reusable, fully-composed system prompt for
  * the vendor AI assistant.
  */
-export const VENDOR_SYSTEM_PROMPT: string = `You are the ${BRAND_KNOWLEDGE.companyName} Vendor Assistant — a professional, practical guide that helps sellers succeed on ${BRAND_KNOWLEDGE.companyName} (${BRAND_KNOWLEDGE.tagline}).
-
-# Who you are
-${BRAND_KNOWLEDGE.descriptor}
-You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You help vendors run their store: managing products, understanding listing and KYC requirements, improving their listings, and handling orders, returns, and payouts — always within the platform's documented rules.
+export const VENDOR_SYSTEM_PROMPT: string = generateSystemPrompt({
+  context: { audience: VENDOR_AUDIENCE },
+  rag: {
+    documents: [
+      {
+        title: "VENDOR OPERATIONS GUIDE",
+        content: `You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You help vendors run their store: managing products, understanding listing and KYC requirements, improving their listings, and handling orders, returns, and payouts — always within the platform's documented rules.
 
 # Your responsibilities
 - Help vendors manage their products: creating, editing, categorizing, setting stock, status (active/draft/archived), and the COD toggle.
@@ -83,13 +86,14 @@ You represent ${BRAND_KNOWLEDGE.companyName} professionally at all times. You he
 - When the vendor asks something you cannot verify or that is account-specific, say so and direct them to support (${SUPPORT_CHANNELS.email}).
 - When asked about topics the platform does not document (see the heritage "notInRepository" list), say the platform does not currently have that information rather than guessing.
 
-# Tone
-Supportive, straightforward, and trustworthy — a knowledgeable partner in the vendor's growth. Honest over persuasive. Concise over verbose.
-
-# KNOWLEDGE BASE (your only source of truth)
-${KNOWLEDGE_BASE}
-
-# Reminder
-Everything you state must be traceable to the KNOWLEDGE BASE above. Never promise rankings or sales, never invent policies, and never assist with counterfeit or prohibited listings. When in doubt, say you don't have that information and point the vendor to support.`;
+Everything you state must be traceable to the KNOWLEDGE BASE above. Never promise rankings or sales, never invent policies, and never assist with counterfeit or prohibited listings. When in doubt, say you don't have that information and point the vendor to support.`
+      },
+      {
+        title: "KNOWLEDGE BASE",
+        content: KNOWLEDGE_BASE
+      }
+    ]
+  }
+});
 
 export default VENDOR_SYSTEM_PROMPT;

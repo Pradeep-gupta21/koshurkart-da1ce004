@@ -5,12 +5,20 @@ import { AIService } from "@/ai/services/ai.service";
 import { createGroqProvider } from "@/ai/providers/groq.provider";
 import type { AgentChatPayload, AgentStreamEvent } from "@/lib/ai";
 import type { ChatMessage } from "@/ai/types/chat";
+import { ADMIN_SYSTEM_PROMPT } from "@/ai/prompts/admin.system";
+import { CUSTOMER_SYSTEM_PROMPT } from "@/ai/prompts/customer.system";
+import { VENDOR_SYSTEM_PROMPT } from "@/ai/prompts/vendor.system";
 
 class LocalGroqClient extends AIClient {
   private readonly ai = new AIService({
     provider: createGroqProvider({
-    apiKey: import.meta.env.VITE_GROQ_API_KEY ?? "",
+      apiKey: import.meta.env.VITE_GROQ_API_KEY ?? "",
     }),
+    systemPrompts: {
+      admin: ADMIN_SYSTEM_PROMPT,
+      customer: CUSTOMER_SYSTEM_PROMPT,
+      vendor: VENDOR_SYSTEM_PROMPT,
+    }
   });
   private messages: ChatMessage[] = [];
 
