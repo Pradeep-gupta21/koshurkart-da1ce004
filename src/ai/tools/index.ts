@@ -53,3 +53,9 @@ export type {
   ToolCall,
   JSONSchema,
 } from "@/ai/types/chat";
+
+/* ---- Commerce Tools Architecture -------------------------------- *
+ * Shared types, interfaces, and base tools for Commerce operations.
+ */
+export * from "./commerce";
+
