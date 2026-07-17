@@ -8,6 +8,7 @@ import type { ToolContext } from "../types";
 
 export interface IProductService {
   // Placeholder for future product operations
+  searchProducts(query: string, options?: { category?: string; maxPrice?: number; limit?: number }): Promise<any[]>;
 }
 
 export interface ICartService {
