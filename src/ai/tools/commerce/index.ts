@@ -1,13 +1,16 @@
 import type { ToolRegistry } from "../registry";
+import { CommerceToolRegistrar } from "./registration/CommerceToolRegistrar";
 
 export * from "./types";
 export * from "./base-commerce.tool";
+export * from "./registration";
 
 /**
  * Registers all commerce-related tools into the provided registry.
- * Concrete tool implementations will be wired up here in the future.
+ * Delegates to CommerceToolRegistrar which manages the full set of
+ * concrete tool instances (ProductSearch, Cart, Wishlist, Order, Customer).
  */
 export function registerCommerceTools(registry: ToolRegistry): ToolRegistry {
-  // registry.registerMany([...]);
+  CommerceToolRegistrar.register(registry);
   return registry;
 }

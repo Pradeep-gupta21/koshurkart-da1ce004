@@ -7,11 +7,13 @@ import { SupabaseCommerceProvider } from './SupabaseCommerceProvider';
  */
 export function bootstrapSupabaseProvider(): void {
   const provider = new SupabaseCommerceProvider();
-  
+
   Container.register('CommerceProvider', provider);
   Container.register('ProductService', provider.getProductService());
   Container.register('CartService', provider.getCartService());
   Container.register('WishlistService', provider.getWishlistService());
   Container.register('OrderService', provider.getOrderService());
   Container.register('CustomerService', provider.getCustomerService());
+  Container.register('InventoryService', provider.getInventoryService());
+  Container.register('ReviewService', provider.getReviewService());
 }

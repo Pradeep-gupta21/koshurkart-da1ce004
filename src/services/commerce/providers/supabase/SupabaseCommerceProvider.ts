@@ -4,6 +4,8 @@ import { SupabaseCartService } from './SupabaseCartService';
 import { SupabaseWishlistService } from './SupabaseWishlistService';
 import { SupabaseOrderService } from './SupabaseOrderService';
 import { SupabaseCustomerService } from './SupabaseCustomerService';
+import { SupabaseInventoryService } from './SupabaseInventoryService';
+import { SupabaseReviewService } from './SupabaseReviewService';
 
 export class SupabaseCommerceProvider implements ICommerceProvider {
   get name(): string {
@@ -33,5 +35,13 @@ export class SupabaseCommerceProvider implements ICommerceProvider {
 
   getCustomerService(): SupabaseCustomerService {
     return new SupabaseCustomerService();
+  }
+
+  getInventoryService(): SupabaseInventoryService {
+    return new SupabaseInventoryService();
+  }
+
+  getReviewService(): SupabaseReviewService {
+    return new SupabaseReviewService();
   }
 }
