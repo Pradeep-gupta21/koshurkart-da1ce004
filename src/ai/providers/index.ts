@@ -34,8 +34,16 @@ export {
 } from "./gemini.provider";
 export type { GeminiProviderConfig } from "./gemini.provider";
 
+// Real Groq provider — calls Groq's OpenAI-compatible API via direct fetch().
+export {
+  GroqProvider,
+  createGroqProvider,
+  DEFAULT_GROQ_MODEL,
+} from "./groq.provider";
+export type { GroqProviderConfig } from "./groq.provider";
+
 // Default provider used when none is explicitly chosen. Currently the mock,
-// since no composition root provides an API key. Swap to GeminiProvider
+// since no composition root provides an API key. Swap to GroqProvider
 // (or another adapter) once a key source is wired up.
 export { MockProvider as DefaultProvider } from "./mock.provider";
 

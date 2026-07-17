@@ -58,7 +58,7 @@ import type {
  * is always overridable via `GeminiProviderConfig.model` or the
  * per-request `AIRequestOptions.model`.
  */
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
 
 /** Default API base URL for the Gemini REST API. */
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com";
