@@ -53,31 +53,3 @@ export type {
   ToolCall,
   JSONSchema,
 } from "@/ai/types/chat";
-
-/* ---- Marketplace tools ------------------------------------------ *
- * Concrete, marketplace-specific tools built on the framework above.
- * These wrap `src/services/*` and integrate with the ToolRegistry /
- * ToolExecutor pipeline.
- */
-export {
-  ProductSearchTool,
-  ProductRecommendationTool,
-  OrderLookupTool,
-  VendorAnalyticsTool,
-  createMarketplaceTools,
-  registerMarketplaceTools,
-} from "./marketplace";
-export type {
-  MarketplaceServices,
-  ProductSummary,
-} from "./marketplace";
-
-/* ---- System tools ----------------------------------------------- *
- * Core system-level capabilities (like agent-to-agent delegation) that 
- * operate independently of business logic.
- */
-export {
-  DelegateTaskTool,
-  createSystemTools,
-  registerSystemTools,
-} from "./system";
