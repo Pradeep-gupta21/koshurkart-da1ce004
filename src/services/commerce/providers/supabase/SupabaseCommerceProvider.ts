@@ -6,6 +6,7 @@ import { SupabaseOrderService } from './SupabaseOrderService';
 import { SupabaseCustomerService } from './SupabaseCustomerService';
 import { SupabaseInventoryService } from './SupabaseInventoryService';
 import { SupabaseReviewService } from './SupabaseReviewService';
+import { SupabaseSearchService } from './SupabaseSearchService';
 
 export class SupabaseCommerceProvider implements ICommerceProvider {
   get name(): string {
@@ -43,5 +44,9 @@ export class SupabaseCommerceProvider implements ICommerceProvider {
 
   getReviewService(): SupabaseReviewService {
     return new SupabaseReviewService();
+  }
+
+  getSearchService(): SupabaseSearchService {
+    return new SupabaseSearchService();
   }
 }

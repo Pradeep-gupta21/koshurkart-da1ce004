@@ -6,6 +6,7 @@ import { IOrderService } from '../interfaces/IOrderService';
 import { ICustomerService } from '../interfaces/ICustomerService';
 import { IInventoryService } from '../interfaces/IInventoryService';
 import { IReviewService } from '../interfaces/IReviewService';
+import { ISearchService } from '../interfaces/ISearchService';
 
 export class ServiceFactory {
   static getProductService(): IProductService {
@@ -34,5 +35,9 @@ export class ServiceFactory {
 
   static getReviewService(): IReviewService {
     return Container.resolve<IReviewService>('ReviewService');
+  }
+
+  static getSearchService(): ISearchService {
+    return Container.resolve<ISearchService>('SearchService');
   }
 }

@@ -5,6 +5,7 @@ import { IOrderService } from '../interfaces/IOrderService';
 import { ICustomerService } from '../interfaces/ICustomerService';
 import { IInventoryService } from '../interfaces/IInventoryService';
 import { IReviewService } from '../interfaces/IReviewService';
+import { ISearchService } from '../interfaces/ISearchService';
 
 export interface ICommerceProvider {
   get name(): string;
@@ -16,4 +17,5 @@ export interface ICommerceProvider {
   getCustomerService(): ICustomerService;
   getInventoryService(): IInventoryService;
   getReviewService(): IReviewService;
+  getSearchService(): ISearchService;
 }

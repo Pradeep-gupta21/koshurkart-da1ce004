@@ -5,5 +5,6 @@ export * from './SupabaseOrderService';
 export * from './SupabaseCustomerService';
 export * from './SupabaseInventoryService';
 export * from './SupabaseReviewService';
+export * from './SupabaseSearchService';
 export * from './SupabaseCommerceProvider';
 export * from './bootstrap';
