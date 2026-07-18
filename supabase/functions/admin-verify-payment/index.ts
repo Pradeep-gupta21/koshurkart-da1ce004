@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-
+import { validateActionRequest } from '../_shared/validation.ts';
+import { handleRpcError } from '../_shared/rpcErrorMapper.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -51,24 +52,33 @@ Deno.serve(async (req) => {
       _user_id: userId,
       _role: 'admin',
     });
-    if (roleErr || !isAdmin) {
+    if (roleErr) {
+      const mappedErr = handleRpcError(roleErr, "Failed to verify admin role");
+      return new Response(JSON.stringify({ error: mappedErr.error }), {
+        status: mappedErr.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (!isAdmin) {
       return new Response(JSON.stringify({ error: 'Forbidden: admin only' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const body = (await req.json()) as Body;
-    if (!body?.paymentId || !body?.orderId || !['approve', 'reject'].includes(body?.action)) {
-      return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+    let body: Body;
+    try {
+      body = (await req.json()) as Body;
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(body.paymentId)) {
-      return new Response(JSON.stringify({ error: 'Invalid payment ID format' }), {
+    const valErr = validateActionRequest(body, true);
+    if (valErr) {
+      return new Response(JSON.stringify(valErr), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -84,13 +94,11 @@ Deno.serve(async (req) => {
     });
 
     if (rpcErr) {
-      if (rpcErr.message.includes('not found') || rpcErr.message.includes('not in a pending state')) {
-        return new Response(JSON.stringify({ error: rpcErr.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw rpcErr;
+      const mappedErr = handleRpcError(rpcErr);
+      return new Response(JSON.stringify({ error: mappedErr.error }), {
+        status: mappedErr.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response(JSON.stringify(result), {

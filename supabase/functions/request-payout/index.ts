@@ -12,6 +12,8 @@
 //    - Inserts the payout record idempotently (unique idempotency_key).
 // 4. Only service_role can invoke the RPC; client writes to payouts are blocked by RLS.
 import { createClient } from "@supabase/supabase-js";
+import { validatePayoutRequest } from "../_shared/validation.ts";
+import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
 
 const ALLOWED_ORIGINS = [
   "https://koshurkart.com",
@@ -61,64 +63,16 @@ Deno.serve(async (req) => {
     // ---- Parse body ----
     let payload: unknown;
     try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
-    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-      return json({ error: "Invalid JSON payload structure" }, 400, req);
-    }
-
-    const body = payload as {
-      amount?: unknown;
-      methodId?: unknown;
-      idempotencyKey?: unknown;
-      // Deprecated alias — some older clients send the RPC param name directly.
-      // We detect and reject conflicts between the two to avoid silent misrouting.
-      p_idempotency_key?: unknown;
-    };
-
-    const { amount, methodId } = body;
-    const idempotencyKey = body.idempotencyKey;
-    const legacyKey = body.p_idempotency_key;
-
-    if (typeof amount !== "number" || !Number.isFinite(amount)) {
-      return json({ error: "amount must be a finite number", errorCode: "INVALID_AMOUNT" }, 400, req);
-    }
-
-    // ---- Idempotency key validation ----
-    // Reject if the deprecated p_idempotency_key alias is present with a
-    // different value — two conflicting keys in the same request are ambiguous
-    // and indicate a client integration bug.
-    if (
-      legacyKey !== undefined &&
-      legacyKey !== null &&
-      legacyKey !== idempotencyKey
-    ) {
-      return json({
-        error: 'Use "idempotencyKey" (not "p_idempotency_key"). Both are present but have different values.',
-        errorCode: "CONFLICTING_IDEMPOTENCY_KEY_FORMATS",
-      }, 400, req);
-    }
-
-    // Canonical key: prefer idempotencyKey; fall back to legacy alias if only
-    // that one is present (graceful transition window for old clients).
-    const resolvedKey = idempotencyKey ?? legacyKey;
-
-    if (resolvedKey === undefined || resolvedKey === null) {
-      return json({ error: "idempotencyKey is required in the request body", errorCode: "MISSING_IDEMPOTENCY_KEY" }, 400, req);
-    }
-
-    if (typeof resolvedKey !== "string") {
-      return json({ error: "idempotencyKey must be a string", errorCode: "INVALID_IDEMPOTENCY_KEY" }, 400, req);
-    }
-
-    if (resolvedKey.trim() === "") {
-      return json({ error: "idempotencyKey cannot be empty", errorCode: "MISSING_IDEMPOTENCY_KEY" }, 400, req);
-    }
     
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(resolvedKey)) {
-      return json({ error: "idempotencyKey must be a valid UUIDv4", errorCode: "INVALID_IDEMPOTENCY_KEY_FORMAT" }, 400, req);
+    const valErr = validatePayoutRequest(payload);
+    if (valErr) {
+      return json(valErr, 400, req);
     }
 
-    const idempotencyKeyValue: string = resolvedKey;
+    const body = payload as Record<string, any>;
+    const amount = body.amount;
+    const methodId = body.methodId;
+    const idempotencyKeyValue = body.idempotencyKey ?? body.p_idempotency_key;
 
     // ---- Service-role client (bypasses RLS for authoritative reads + writes) ----
     const service = createClient(
@@ -159,25 +113,11 @@ Deno.serve(async (req) => {
       });
 
     if (rpcErr) {
-      const msg: string = (rpcErr as { message?: string }).message ?? "";
-      // Postgres RAISE EXCEPTION messages from the RPC are user-facing 400s.
-      const isClientError =
-        msg.includes("Insufficient balance") ||
-        msg.includes("must be greater than 0") ||
-        msg.includes("Vendor not found") ||
-        msg.includes("Unauthorized payment method");
-      if (isClientError) {
-        return json({ error: msg }, 400, req);
+      const mappedErr = handleRpcError(rpcErr);
+      if (mappedErr.status === 500) {
+        console.error("[request-payout] request_payout RPC error", rpcErr.code, rpcErr.message);
       }
-      // Idempotency key was reused with different parameters — return 409 Conflict.
-      if (msg.includes("Idempotency key collision with mismatched parameters")) {
-        return json({ error: msg }, 409, req);
-      }
-      if (msg.includes("IDEMPOTENCY_TERMINAL")) {
-        return json({ error: msg }, 409, req);
-      }
-      console.error("[request-payout] request_payout RPC error", rpcErr.code, msg);
-      return json({ error: "Failed to create payout request" }, 500, req);
+      return json({ error: mappedErr.error }, mappedErr.status, req);
     }
 
     const payout = Array.isArray(payoutRows) ? payoutRows[0] : payoutRows;

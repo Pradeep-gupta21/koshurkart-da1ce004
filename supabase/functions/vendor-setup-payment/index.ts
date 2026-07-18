@@ -4,6 +4,7 @@
 //        #9 (CORS PUT), #10 (atomic RPC)
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
 
 /* ─────────────────── CORS ────────────────────────────────────────── */
 
@@ -275,8 +276,11 @@ Deno.serve(async (req) => {
       );
 
       if (rpcError) {
-        console.error("Atomic upsert RPC failed:", rpcError.message);
-        return json({ error: "Failed to save payment setup", details: rpcError.message }, 500, req);
+        const mappedErr = handleRpcError(rpcError, "Failed to save payment setup");
+        if (mappedErr.status === 500) {
+          console.error("Atomic upsert RPC failed:", rpcError.code, rpcError.message);
+        }
+        return json({ error: mappedErr.error, details: rpcError.message }, mappedErr.status, req);
       }
 
       // The RPC returns jsonb — guard against null/undefined/invalid responses

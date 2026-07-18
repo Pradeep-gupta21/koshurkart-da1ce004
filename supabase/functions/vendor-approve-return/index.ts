@@ -26,6 +26,8 @@
 //   2. Refund customer          (only after reversal succeeds)
 //   3. vendor_approve_return    (DB balance deduction + ledger row)
 import { createClient } from "@supabase/supabase-js";
+import { validateVendorApproveReturnRequest } from "../_shared/validation.ts";
+import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
 import {
   calculateVendorTransferAmount,
   getVendorCommissionPercentage,
@@ -130,25 +132,16 @@ Deno.serve(async (req) => {
     // ---- Input ----
     let payload: unknown;
     try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
-    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-      return json({ error: "Invalid JSON payload structure" }, 400, req);
-    }
-    const orderItemId = (payload as { order_item_id?: string })?.order_item_id;
-    if (!orderItemId || typeof orderItemId !== "string") {
-      return json({ error: "order_item_id is required" }, 400, req);
+
+    const valErr = validateVendorApproveReturnRequest(payload);
+    if (valErr) {
+      return json(valErr, 400, req);
     }
 
-    // Idempotency key identifying THIS logical operation attempt. A retry of the
-    // same operation (client resend after a network drop) carries the same key
-    // and may resume; a different key on an in-flight item is a genuine conflict.
-    // When the caller supplies none we generate a random one — it can never match
-    // a stored key, so keyless requests fail closed (409) on in-flight items.
-    const bodyKey = (payload as { idempotency_key?: unknown })?.idempotency_key;
-    const headerKey = req.headers.get("Idempotency-Key");
-    const rawKey = typeof bodyKey === "string" ? bodyKey : headerKey;
-    if (rawKey != null && (rawKey.length === 0 || rawKey.length > 128)) {
-      return json({ error: "idempotency_key must be 1-128 characters" }, 400, req);
-    }
+    const body = payload as Record<string, any>;
+    const orderItemId = body.order_item_id;
+    const rawKey = body.idempotency_key;
+
     const idempotencyKey = rawKey ?? crypto.randomUUID();
 
     // ---- Razorpay creds ----
@@ -479,15 +472,9 @@ Deno.serve(async (req) => {
     // ============================================================
     const { error: rpcErr } = await service.rpc("vendor_approve_return", { _order_item_id: item.id, _caller_vendor_id: item.vendor_id });
     if (rpcErr) {
-      console.error(
-        "[vendor-approve-return] Razorpay steps done but vendor_approve_return RPC FAILED — DB reversal pending",
-        { order_item_id: item.id, reversal_id: reversalId, refund_id: refundId, code: (rpcErr as { code?: string }).code, message: rpcErr.message },
-      );
-      return json({
-        success: false,
-        error: "Return processing failed. Please try again or contact support.",
-        retryable: true,
-      }, 500, req);
+      const mappedErr = handleRpcError(rpcErr, "Failed to commit return state");
+      console.error("[vendor-approve-return] Final state commit failed", rpcErr);
+      return json({ error: mappedErr.error }, mappedErr.status, req);
     }
 
     return json({
