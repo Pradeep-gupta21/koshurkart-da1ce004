@@ -5,55 +5,84 @@ import { orderService } from './orderService';
 import { calculateCommission, fetchPlatformSettings, fetchPaymentMethodSettings, type PaymentMethodSettings } from '@/config/platformSettings';
 import { withRetry } from '@/lib/retry';
 
+export interface PayoutResult {
+  httpStatus?: number;
+  retryable?: boolean;
+  [key: string]: any;
+}
+
+export interface NormalizedError extends Error {
+  status: number;
+  errorCode: string;
+  retryable: boolean;
+}
+
+const errorCodeMap: Record<string, { message: string; retryable: boolean }> = {
+  'MISSING_IDEMPOTENCY_KEY': { message: 'Idempotency key is missing. Please try again.', retryable: false },
+  'RAZORPAY_SERVER_ERROR': { message: 'Payment gateway is currently experiencing issues. We will retry.', retryable: true },
+  'RAZORPAY_CLIENT_ERROR': { message: 'Invalid payment reference. Please check your details.', retryable: false },
+  'CONFLICTING_IDEMPOTENCY_KEY_FORMATS': { message: 'Conflicting idempotency keys provided.', retryable: false },
+  'RETURN_NOT_PENDING': { message: 'This return is no longer pending. Please refresh the page.', retryable: false },
+  'ROW_LOCKED_BY_ANOTHER_REQUEST': { message: 'Another request is currently processing this item. Please wait and try again.', retryable: true },
+  'INVALID_AMOUNT': { message: 'The requested amount is invalid.', retryable: false },
+};
+
 /**
- * Normalize a raw Supabase Functions error into a plain Error annotated with
- * { status, errorCode } so that withRetry / the UI can classify it correctly.
- *
- * Why this is necessary:
- *   FunctionsHttpError carries the HTTP status at `err.context.status`, NOT at
- *   `err.status`. withRetry's defaultIsTransient() reads `e.status`, so without
- *   normalization it would always fall through to `return false`, meaning 5xx
- *   gateway errors are never retried and 4xx/5xx are indistinguishable to the UI.
- *
- * Classification:
- *   • FunctionsHttpError 4xx  → status 400, non-transient (business rejection).
- *   • FunctionsHttpError 5xx  → status 503, transient,  errorCode UNCERTAIN_STATE.
- *   • FunctionsRelayError     → status 503, transient,  errorCode UNCERTAIN_STATE
- *     (infrastructure relay failure; request may or may not have reached the DB).
- *   • FunctionsFetchError     → status 503, transient,  errorCode UNCERTAIN_STATE
- *     (network-level failure; same Two-Generals uncertainty).
- *   • Anything else           → re-thrown as-is.
+ * Shared error normalizer that maps specific Edge Function error codes
+ * to standardized client messages, HTTP statuses, and retry logic.
  */
-function normalizeFunctionsError(err: unknown): never {
+export async function normalizeError(err: unknown): Promise<never> {
+  // If already normalized, just re-throw
+  if (err && typeof err === 'object' && 'status' in err && 'retryable' in err) {
+    throw err;
+  }
+
+  let httpStatus = 500;
+  let exactMessage = err instanceof Error ? err.message : 'Unknown error';
+  let exactErrorCode = 'UNCERTAIN_STATE';
+  let retryable = true;
+
   if (err instanceof FunctionsHttpError) {
-    const httpStatus: number = (err.context as { status: number }).status;
-    if (httpStatus >= 400 && httpStatus < 500) {
-      // Definitive server rejection — funds were NOT touched.
-      throw Object.assign(
-        new Error(`HTTP ${httpStatus}: ${err.message}`),
-        { status: httpStatus },
-      );
+    const response = err.context as Response;
+    httpStatus = response.status;
+    
+    try {
+      const body = await response.clone().json();
+      if (body) {
+        if (typeof body.error === 'string') exactMessage = body.error;
+        if (typeof body.errorCode === 'string') exactErrorCode = body.errorCode;
+      }
+    } catch {
+      // fallback if not JSON
     }
-    // 5xx — server received the request but something went wrong after.
-    // State is uncertain; do not claim the payout failed.
-    throw Object.assign(
-      new Error(err.message),
-      { status: 503, errorCode: 'UNCERTAIN_STATE' },
-    );
+  } else if (err instanceof FunctionsRelayError || err instanceof FunctionsFetchError) {
+    httpStatus = 503;
+    exactErrorCode = 'UNCERTAIN_STATE';
+    retryable = true;
+  } else {
+    // Generic errors
+    const anyErr = err as any;
+    if (anyErr.status) httpStatus = anyErr.status;
+    if (anyErr.errorCode) exactErrorCode = anyErr.errorCode;
   }
 
-  if (err instanceof FunctionsRelayError || err instanceof FunctionsFetchError) {
-    // Infrastructure / network failure. The request may or may not have reached
-    // the database. Treat as uncertain so the UI does not falsely claim funds
-    // were not deducted.
-    throw Object.assign(
-      new Error((err as Error).message),
-      { status: 503, errorCode: 'UNCERTAIN_STATE' },
-    );
+  // 5xx errors are retryable; 4xx are definitive rejections
+  if (httpStatus >= 500) {
+    retryable = true;
+  } else if (httpStatus >= 400 && httpStatus < 500) {
+    retryable = false;
   }
 
-  // Not a Supabase Functions error — re-throw untouched.
-  throw err;
+  if (exactErrorCode in errorCodeMap) {
+    const override = errorCodeMap[exactErrorCode];
+    exactMessage = override.message;
+    retryable = override.retryable;
+  }
+
+  throw Object.assign(
+    new Error(exactMessage),
+    { status: httpStatus, errorCode: exactErrorCode, retryable }
+  );
 }
 
 declare global {
@@ -152,11 +181,9 @@ export const paymentService = {
             shipping,
           },
         });
-        if (error) throw error;
+        if (error) await normalizeError(error);
         if (data?.error) {
-          const e = new Error(data.error) as Error & { status?: number };
-          e.status = 400;
-          throw e;
+          await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
         }
         return data as CheckoutResult;
       },
@@ -183,8 +210,8 @@ export const paymentService = {
     const { data, error } = await supabase.functions.invoke('admin-verify-payment', {
       body: { paymentId, orderId, action },
     });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
     return data;
   },
 
@@ -208,8 +235,8 @@ export const paymentService = {
       },
     });
 
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
 
     return data;
   },
@@ -240,8 +267,8 @@ export const paymentService = {
     const { data, error } = await supabase.functions.invoke('confirm-upi-payment', {
       body: { paymentId, orderId, proofUrl },
     });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
     return data;
   },
 
@@ -252,7 +279,7 @@ export const paymentService = {
    */
   async uploadPaymentProof(file: File): Promise<string> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    if (!user) await normalizeError(new Error('Not authenticated'));
 
     const ext = file.name.split('.').pop() ?? 'png';
     const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -260,12 +287,12 @@ export const paymentService = {
     const { error: upErr } = await supabase.storage
       .from('payment-proofs')
       .upload(path, file, { cacheControl: '3600', upsert: false });
-    if (upErr) throw upErr;
+    if (upErr) await normalizeError(upErr);
 
     const { data, error: signErr } = await supabase.storage
       .from('payment-proofs')
       .createSignedUrl(path, 60 * 60);
-    if (signErr || !data?.signedUrl) throw signErr ?? new Error('Failed to sign URL');
+    if (signErr || !data?.signedUrl) await normalizeError(signErr ?? new Error('Failed to sign URL'));
     return data.signedUrl;
   },
 
@@ -275,7 +302,7 @@ export const paymentService = {
       .select('*')
       .eq('order_id', orderId)
       .maybeSingle();
-    if (error) throw error;
+    if (error) await normalizeError(error);
     return data;
   },
 
@@ -285,10 +312,36 @@ export const paymentService = {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    if (error) throw error;
+    if (error) await normalizeError(error);
     return data ?? [];
   },
 
+
+  async approveReturn(id: string, idempotencyKey: string) {
+    const { data, error } = await supabase.functions.invoke("vendor-approve-return", {
+      body: JSON.stringify({ order_item_id: id, idempotency_key: idempotencyKey }),
+    });
+    if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
+    return data as { refund_id?: string | null } | null;
+  },
+
+  async rejectReturn(id: string) {
+    const { error } = await supabase.rpc("vendor_reject_return", { _order_item_id: id });
+    if (error) await normalizeError(error);
+  },
+
+  async getReturns(vendorId: string) {
+    const { data, error } = await supabase
+      .from("order_items")
+      .select("id, order_id, title, image, price, quantity, return_status, return_reason, return_description, return_photos, return_requested_at, return_lock_key, updated_at")
+      .eq("vendor_id", vendorId)
+      .neq("return_status", "none")
+      .order("return_requested_at", { ascending: false, nullsFirst: false });
+    
+    if (error) await normalizeError(error);
+    return data ?? [];
+  },
 
   // ---- Payout methods ----
 
@@ -298,7 +351,7 @@ export const paymentService = {
       .select('*')
       .eq('vendor_id', vendorId)
       .order('requested_at', { ascending: false });
-    if (error) throw error;
+    if (error) await normalizeError(error);
     return data ?? [];
   },
 
@@ -320,15 +373,15 @@ export const paymentService = {
    *   - 4xx business failures (insufficient balance, IDOR, terminal idempotency key)
    *     bubble immediately without retrying — the caller must handle and clear the key.
    */
-  async requestPayout(vendorId: string, amount: number, methodId?: string, idempotencyKey?: string) {
+  async requestPayout(vendorId: string, amount: number, methodId?: string, idempotencyKey?: string): Promise<PayoutResult> {
     // Strict guard: callers must supply a stable key before invoking this method.
     // An absent or empty key would let the server generate its own (or error), breaking
     // the idempotency contract and potentially causing duplicate fund reservations.
     if (!idempotencyKey || idempotencyKey.trim() === '') {
-      throw Object.assign(
+      await normalizeError(Object.assign(
         new Error('requestPayout: idempotencyKey is required and must be a non-empty UUID string.'),
-        { status: 400 },
-      );
+        { status: 400, errorCode: 'MISSING_IDEMPOTENCY_KEY' }
+      ));
     }
 
     return withRetry(
@@ -338,20 +391,24 @@ export const paymentService = {
         });
 
         // Supabase Functions errors carry status at err.context.status, not err.status.
-        // normalizeFunctionsError re-throws a plain Error annotated with { status, errorCode }
+        // normalizeError re-throws a plain Error annotated with { status, errorCode, retryable }
         // so withRetry's defaultIsTransient() can correctly classify 4xx vs 5xx, and
         // so the UI can detect UNCERTAIN_STATE without inspecting raw Supabase types.
-        if (error) normalizeFunctionsError(error);
+        if (error) await normalizeError(error);
 
         // Application-level error in the response body (e.g. IDEMPOTENCY_TERMINAL,
         // Insufficient Funds). The edge function returned HTTP 200 with an error field,
         // meaning the server definitively rejected the request before touching funds.
-        // Tag status 400 so withRetry does not retry it.
         if (data?.error) {
-          throw Object.assign(new Error(data.error), { status: 400 });
+          await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
         }
 
-        return data;
+        // Return a PayoutResult with explicit success HTTP status preserved.
+        return {
+          ...data,
+          httpStatus: 200,
+          retryable: false,
+        } as PayoutResult;
       },
       {
         scope: 'requestPayout',
@@ -377,8 +434,8 @@ export const paymentService = {
     const { data, error } = await supabase.functions.invoke('verify-upi-payment', {
       body: { paymentId, orderId, action, ...options },
     });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
     return data;
   },
 
