@@ -1,4 +1,8 @@
 // create-checkout: single backend source of truth for orders + payments.
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 // The client sends only product_ids + quantities. Server re-prices from DB,
 // reserves stock, creates order/items/payment, and (for razorpay/upi) creates
 // the gateway artifact — all using DB-derived amounts in INR.
@@ -6,7 +10,7 @@
 // Idempotency: clients SHOULD send a stable `idempotency_key` (UUID) per
 // checkout attempt. Retries with the same key (e.g. due to network drops)
 // return the same order/payment instead of creating duplicates.
-// deno-lint-ignore-file no-explicit-any prefer-const
+// deno-lint-ignore-file no-explicit-any prefer-const no-explicit-any
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import {
@@ -16,6 +20,7 @@ import {
   calculateVendorTransferAmount,
   getVendorCommissionPercentage,
 } from "../_shared/pricing.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const IS_PRODUCTION = Deno.env.get("ENV") === "production";
 const rawDebug = Deno.env.get("DEBUG_PRICING") === "true";
@@ -84,11 +89,11 @@ function modeFromKey(keyId: string | undefined): "test" | "live" {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
+  if (req.method !== "POST") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...corsHeaders, "Content-Type": "application/json" });
 
   // ---- Auth ----
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
+  if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
 
   const anon = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -96,17 +101,17 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user }, error: userErr } = await anon.auth.getUser();
-  if (userErr || !user) return json({ error: "Unauthorized" }, 401, req);
+  if (userErr || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
 
   // ---- Validate body ----
   let parsed;
   try {
     parsed = BodySchema.safeParse(await req.json());
   } catch {
-    return json({ error: "Invalid JSON" }, 400, req);
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
   if (!parsed.success) {
-    return json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors }, 400, req);
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid input", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
   const { items, payment_method, client_quoted_total, idempotency_key, shipping } = parsed.data;
 
@@ -188,7 +193,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "rate_limited" },
     });
-    return json({ error: "Too many checkout attempts. Please wait a minute." }, 429, req);
+    return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Too many checkout attempts. Please wait a minute.", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   // Log every attempt for audit + rate-limit accounting.
@@ -205,9 +210,9 @@ Deno.serve(async (req) => {
     .select("id, title, price, discount_price, dynamic_price, stock, reserved_stock, status, vendor_id, images")
     .in("id", productIds);
 
-  if (prodErr) return json({ error: "Failed to load products" }, 500, req);
+  if (prodErr) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to load products", false), { ...corsHeaders, "Content-Type": "application/json" });
   if (!products || products.length !== productIds.length) {
-    return json({ error: "One or more products not found" }, 404, req);
+    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "One or more products not found", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   const byId = new Map(products.map((p: any) => [p.id, p]));
@@ -223,16 +228,16 @@ Deno.serve(async (req) => {
 
   for (const it of items) {
     const p: any = byId.get(it.product_id);
-    if (!p) return json({ error: `Product ${it.product_id} not available` }, 404, req);
-    if (p.status !== "active") return json({ error: `Product "${p.title}" is no longer available` }, 410, req);
+    if (!p) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, `Product ${it.product_id} not available`, false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (p.status !== "active") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, `Product "${p.title}" is no longer available`, false), { ...corsHeaders, "Content-Type": "application/json" });
     const available = (p.stock ?? 0) - (p.reserved_stock ?? 0);
     if (available < it.quantity) {
-      return json({ error: `Only ${available} of "${p.title}" in stock` }, 409, req);
+      return respondWithError(new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.INTERNAL_ERROR, `Only ${available} of "${p.title}" in stock`, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     // Server-chosen price: discount > dynamic > base. Never client.
     const unitPrice = Number(p.discount_price ?? p.dynamic_price ?? p.price);
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-      return json({ error: `Invalid price for "${p.title}"` }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Invalid price for "${p.title}"`, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     lines.push({
       product_id: p.id,
@@ -261,7 +266,8 @@ Deno.serve(async (req) => {
     });
     if (error) {
       await releaseReserved();
-      return json({ error: error.message || "Failed to reserve stock" }, 409, req);
+      const mappedErr = normalizeRpcError(error);
+      return respondWithError(mappedErr, { ...corsHeaders, "Content-Type": "application/json" });
     }
     reserved.push({ product_id: ln.product_id, quantity: ln.quantity });
   }
@@ -289,11 +295,7 @@ Deno.serve(async (req) => {
         payment_method,
       },
     });
-    return json(
-      { error: "Amount mismatch detected. Order not created.", code: "AMOUNT_MISMATCH" },
-      422,
-      req,
-    );
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Amount mismatch detected. Order not created.", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   if (total < 1) {
@@ -303,7 +305,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "min_amount", total },
     });
-    return json({ error: "Order total must be at least ₹1" }, 400, req);
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Order total must be at least ₹1", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
   if (total > 1_000_000) {
     await releaseReserved();
@@ -312,7 +314,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "max_amount", total },
     });
-    return json({ error: "Order total exceeds maximum allowed" }, 400, req);
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Order total exceeds maximum allowed", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   // Drift / tampering audit — log if client's quoted total disagrees with server.
@@ -362,7 +364,6 @@ Deno.serve(async (req) => {
   // Race: another concurrent request with the same idempotency_key won.
   // Re-fetch and return that order's payload.
   if (orderErr && (orderErr as { code?: string }).code === "23505" && idempotency_key) {
-    await releaseReserved();
     const { data: dup } = await service
       .from("orders")
       .select("id, total_amount")
@@ -375,6 +376,8 @@ Deno.serve(async (req) => {
         .select("id, payment_method, razorpay_order_id, qr_code_url, upi_id")
         .eq("order_id", dup.id)
         .maybeSingle();
+      
+      await releaseReserved();
       return json({
         orderId: dup.id,
         paymentId: dupPay?.id ?? null,
@@ -387,13 +390,15 @@ Deno.serve(async (req) => {
         ...(dupPay?.qr_code_url ? { qrCodeUrl: dupPay.qr_code_url, merchantUpiId: dupPay.upi_id } : {}),
       }, 200, req);
     }
-    return json({ error: "Duplicate request" }, 409, req);
+    
+    await releaseReserved();
+    return respondWithError(new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.INTERNAL_ERROR, "Duplicate request", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   if (orderErr || !order) {
     await releaseReserved();
     console.error("order insert failed", orderErr);
-    return json({ error: "Failed to create order" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to create order", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
   const orderId = order.id;
 
@@ -411,7 +416,7 @@ Deno.serve(async (req) => {
   if (itemsErr) {
     await releaseReserved();
     console.error("order_items insert failed", itemsErr);
-    return json({ error: "Failed to create order items" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to create order items", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   // ---- 6. Commission settings ----
@@ -518,7 +523,7 @@ Deno.serve(async (req) => {
       .single();
     if (error || !data) {
       console.error("payment insert failed", error);
-      return json({ error: "Failed to create payment record" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to create payment record", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     payment = data;
   }
@@ -566,7 +571,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       metadata: { reason: "razorpay_not_configured", order_id: orderId },
     });
-    return json({ error: "Razorpay not configured" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay not configured", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   const receipt = `ord_${orderId.replace(/-/g, "").slice(0, 32)}`;
@@ -621,30 +626,48 @@ Deno.serve(async (req) => {
   const rpBody: Record<string, unknown> = { amount: amountPaise, currency: "INR", receipt };
   if (transfers.length > 0) rpBody.transfers = transfers;
 
-  const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Basic " + btoa(`${keyId}:${keySecret}`),
-    },
-    body: JSON.stringify(rpBody),
-  });
-  if (!rpRes.ok) {
-    const errBody = await rpRes.text();
-    let errorCode = "UNKNOWN";
-    try {
-      const parsed = JSON.parse(errBody);
-      errorCode = parsed?.error?.code || errorCode;
-    } catch { /* keep default */ }
-    console.error("razorpay order create failed", rpRes.status, errorCode);
+  let rpOrder;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Basic " + btoa(`${keyId}:${keySecret}`),
+      },
+      body: JSON.stringify(rpBody),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!rpRes.ok) {
+      const errBody = await rpRes.text();
+      let errorCode = "UNKNOWN";
+      try {
+        const parsed = JSON.parse(errBody);
+        errorCode = parsed?.error?.code || errorCode;
+      } catch { /* keep default */ }
+      throw new Error(`Razorpay API error: ${rpRes.status} ${errorCode} ${errBody}`);
+    }
+    rpOrder = await rpRes.json();
+  } catch (err) {
+    const msg = (err as Error).message.toLowerCase();
+    const isAbort = (err as Error).name === "AbortError";
+    console.error("razorpay order create failed", (err as Error).message);
     await service.from("analytics_events").insert({
       event_type: "checkout_failed",
       user_id: user.id,
-      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId, error_code: errorCode },
+      metadata: { reason: isAbort ? "timeout" : "gateway_error", order_id: orderId },
     });
-    return json({ error: "Failed to create Razorpay order" }, 502, req);
+    if (isAbort) {
+      return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.BAD_GATEWAY, "Payment gateway timed out. Please try again.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
+    if (msg.includes("rate") || msg.includes("throttle") || msg.includes("429")) {
+      return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Gateway rate limited. Please try again later.", true), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
+    return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Payment gateway unavailable", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
-  const rpOrder = await rpRes.json();
+
   await service
     .from("payments")
     .update({ razorpay_order_id: rpOrder.id })
