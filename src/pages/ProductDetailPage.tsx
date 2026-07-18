@@ -12,8 +12,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { formatCategoryLabel } from "@/config/categories";
 import { adService } from "@/services/adService";
-import { recommendationService } from "@/services/recommendationService";
-import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Product } from "@/types";
 import { useCart } from "@/contexts/CartContext";
@@ -155,13 +153,21 @@ const ProductDetailPage = () => {
 
   const { data: similarProducts = [] } = useQuery({
     queryKey: ['products', 'ai-similar', product?.id],
-    queryFn: () => aiRecommendationService.getScoredSimilarProducts(product!.id, 4),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getScoredSimilarProducts(product!.id, 4);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!product?.id,
   });
 
   const { data: boughtTogether = [] } = useQuery({
     queryKey: ['products', 'bought-together', product?.id],
-    queryFn: () => recommendationService.getFrequentlyBoughtTogether(product!.id, 4),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getFrequentlyBoughtTogether(product!.id, 4);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!product?.id,
   });
 

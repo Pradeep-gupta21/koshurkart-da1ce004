@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { recommendationService } from '@/services/recommendationService';
+import { ServiceFactory } from '@/services/commerce/di/ServiceFactory';
 import { recentlyViewedStore } from '@/lib/recentlyViewedStore';
 import type { Product } from '@/types';
 
@@ -32,14 +32,22 @@ export function useRecentlyViewed(limit = 10): UseRecentlyViewedResult {
 
   const authedQuery = useQuery({
     queryKey: ['recently-viewed', 'authed', user?.id, limit],
-    queryFn: () => recommendationService.getRecentlyViewed(user!.id, limit),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getRecentlyViewed(user!.id, limit);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!user?.id,
     staleTime: 60_000,
   });
 
   const guestQuery = useQuery({
     queryKey: ['recently-viewed', 'guest', guestIds.slice(0, limit).join(','), limit],
-    queryFn: () => recommendationService.getProductsPreservingOrder(guestIds.slice(0, limit)),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getProductsPreservingOrder(guestIds.slice(0, limit));
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !user?.id && guestIds.length > 0,
     staleTime: 60_000,
   });

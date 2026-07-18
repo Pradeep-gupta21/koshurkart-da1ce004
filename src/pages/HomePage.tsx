@@ -7,7 +7,6 @@ import ProductGrid from "@/components/product/ProductGrid";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { adService } from "@/services/adService";
-import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation as useUserLocation } from "@/contexts/LocationContext";
 import hero640 from "@/assets/hero/hero-banner-640.jpg";
@@ -59,13 +58,21 @@ const HomePage = () => {
 
   const { data: recommendedProducts = [], isLoading: loadingRecommended } = useQuery({
     queryKey: ['products', 'ai-recommended', user?.id],
-    queryFn: () => aiRecommendationService.getSmartRecommendations(user!.id, 8),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getSmartRecommendations(user!.id, 8);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!user?.id,
   });
 
   const { data: becauseYouViewed } = useQuery({
     queryKey: ['products', 'because-viewed', user?.id],
-    queryFn: () => aiRecommendationService.getBecauseYouViewed(user!.id, 4),
+    queryFn: async () => {
+      const result = await ServiceFactory.getRecommendationService().getBecauseYouViewed(user!.id, 4);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!user?.id,
   });
 
