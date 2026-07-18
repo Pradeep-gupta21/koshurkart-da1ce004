@@ -11,6 +11,7 @@ import { SupabaseRecommendationService } from './SupabaseRecommendationService';
 import { SupabasePaymentService } from './SupabasePaymentService';
 import { SupabaseShippingService } from './SupabaseShippingService';
 import { SupabaseNotificationService } from './SupabaseNotificationService';
+import { SupabaseAnalyticsService } from './SupabaseAnalyticsService';
 
 export class SupabaseCommerceProvider implements ICommerceProvider {
   get name(): string {
@@ -68,5 +69,9 @@ export class SupabaseCommerceProvider implements ICommerceProvider {
 
   getNotificationService(): SupabaseNotificationService {
     return new SupabaseNotificationService();
+  }
+
+  getAnalyticsService(): SupabaseAnalyticsService {
+    return new SupabaseAnalyticsService();
   }
 }

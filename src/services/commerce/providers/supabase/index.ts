@@ -10,5 +10,6 @@ export * from './SupabaseRecommendationService';
 export * from './SupabasePaymentService';
 export * from './SupabaseShippingService';
 export * from './SupabaseNotificationService';
+export * from './SupabaseAnalyticsService';
 export * from './SupabaseCommerceProvider';
 export * from './bootstrap';

@@ -11,6 +11,7 @@ import { IRecommendationService } from '../interfaces/IRecommendationService';
 import { IPaymentService } from '../interfaces/IPaymentService';
 import { IShippingService } from '../interfaces/IShippingService';
 import { INotificationService } from '../interfaces/INotificationService';
+import { IAnalyticsService } from '../interfaces/IAnalyticsService';
 
 export class ServiceFactory {
   static getProductService(): IProductService {
@@ -59,5 +60,9 @@ export class ServiceFactory {
 
   static getNotificationService(): INotificationService {
     return Container.resolve<INotificationService>('NotificationService');
+  }
+
+  static getAnalyticsService(): IAnalyticsService {
+    return Container.resolve<IAnalyticsService>('AnalyticsService');
   }
 }
