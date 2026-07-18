@@ -95,7 +95,7 @@ async function requireAdmin(req: Request): Promise<
 > {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return { ok: false, res: json({ error: "Unauthorized" }, 401) };
+    return { ok: false, res: json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401) };
   }
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -104,11 +104,11 @@ async function requireAdmin(req: Request): Promise<
   );
   const { data: userData, error } = await supabase.auth.getUser();
   if (error || !userData?.user?.id) {
-    return { ok: false, res: json({ error: "Unauthorized" }, 401) };
+    return { ok: false, res: json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401) };
   }
   const userId = userData.user.id;
   const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
-  if (!isAdmin) return { ok: false, res: json({ error: "Forbidden" }, 403) };
+  if (!isAdmin) return { ok: false, res: json({ error: "Forbidden", errorCode: "FORBIDDEN" }, 403) };
   return { ok: true, userId, supabase };
 }
 
@@ -167,7 +167,7 @@ async function handleGet(req: Request): Promise<Response> {
   const section = url.searchParams.get("section") ?? "shop";
   const pincode = (url.searchParams.get("pincode") ?? "").trim() || null;
   if (!SECTIONS.includes(section as typeof SECTIONS[number])) {
-    return json({ error: "Invalid section" }, 400);
+    return json({ error: "Invalid section", errorCode: "BAD_REQUEST" }, 400);
   }
 
   const supabase = createClient(
@@ -265,7 +265,7 @@ async function handlePost(req: Request): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  try { body = await req.json(); } catch { return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400); }
   const parsed = CreateSchema.safeParse(body);
   if (!parsed.success) return json({ error: parsed.error.flatten().fieldErrors }, 400);
 
@@ -285,13 +285,13 @@ async function handlePut(req: Request, id: string): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  try { body = await req.json(); } catch { return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400); }
   const parsed = UpdateSchema.safeParse(body);
   if (!parsed.success) return json({ error: parsed.error.flatten().fieldErrors }, 400);
 
   if (parsed.data.parent_id) {
     if (await wouldCreateCycle(auth.supabase, id, parsed.data.parent_id)) {
-      return json({ error: "Cannot set parent: would create a cycle" }, 400);
+      return json({ error: "Cannot set parent: would create a cycle", errorCode: "BAD_REQUEST" }, 400);
     }
   }
 
@@ -348,14 +348,14 @@ Deno.serve(async (req) => {
     if (req.method === "GET") return await handleGet(req);
     if (req.method === "POST") return await handlePost(req);
     if (req.method === "PUT") {
-      if (!idParam) return json({ error: "Missing id" }, 400);
+      if (!idParam) return json({ error: "Missing id", errorCode: "BAD_REQUEST" }, 400);
       return await handlePut(req, idParam);
     }
     if (req.method === "DELETE") {
-      if (!idParam) return json({ error: "Missing id" }, 400);
+      if (!idParam) return json({ error: "Missing id", errorCode: "BAD_REQUEST" }, 400);
       return await handleDelete(req, idParam);
     }
-    return json({ error: "Method not allowed" }, 405);
+    return json({ error: "Method not allowed", errorCode: "METHOD_NOT_ALLOWED" }, 405);
   } catch (e) {
     console.error("menu function error:", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
