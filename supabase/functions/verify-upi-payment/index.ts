@@ -38,11 +38,11 @@ interface Body {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
+  if (req.method !== "POST") return json({ error: "Method not allowed", errorCode: "METHOD_NOT_ALLOWED" }, 405, req);
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user?.id) return json({ error: "Unauthorized" }, 401, req);
+    if (userErr || !userData?.user?.id) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
     const userId = userData.user.id;
 
     // Service-role client for admin check + writes
@@ -65,15 +65,15 @@ Deno.serve(async (req) => {
     });
     if (roleErr) {
       const mappedErr = handleRpcError(roleErr, "Failed to verify admin role");
-      return json({ error: mappedErr.error }, mappedErr.status, req);
+      return json({ error: mappedErr.error, errorCode: mappedErr.errorCode }, mappedErr.status, req);
     }
-    if (!isAdmin) return json({ error: "Forbidden: admin only" }, 403, req);
+    if (!isAdmin) return json({ error: "Forbidden: admin only", errorCode: "FORBIDDEN" }, 403, req);
 
     let body: Body;
     try {
       body = await req.json();
     } catch {
-      return json({ error: "Invalid JSON" }, 400, req);
+      return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400, req);
     }
 
     const valErr = validateActionRequest(body, true);
@@ -91,10 +91,10 @@ Deno.serve(async (req) => {
 
     if (payErr) {
       console.error("[verify-upi-payment] payment DB lookup error", payErr.code, payErr.message);
-      return json({ error: "Internal server error" }, 500, req);
+      return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
     }
-    if (!payment) return json({ error: "Payment not found" }, 404, req);
-    if (payment.payment_method !== "upi") return json({ error: "Not a UPI payment" }, 400, req);
+    if (!payment) return json({ error: "Payment not found", errorCode: "NOT_FOUND" }, 404, req);
+    if (payment.payment_method !== "upi") return json({ error: "Not a UPI payment", errorCode: "BAD_REQUEST" }, 400, req);
 
     // Call secure, atomic database transaction for payment verification
     const { data: result, error: rpcErr } = await admin.rpc("admin_process_payment", {
@@ -110,12 +110,12 @@ Deno.serve(async (req) => {
       if (mappedErr.status === 500) {
         console.error("[verify-upi-payment] admin_process_payment RPC error:", rpcErr.code, rpcErr.message);
       }
-      return json({ error: mappedErr.error }, mappedErr.status, req);
+      return json({ error: mappedErr.error, errorCode: mappedErr.errorCode }, mappedErr.status, req);
     }
 
     return json({ success: true, ...result }, 200, req);
   } catch (err) {
     console.error("[verify-upi-payment] unexpected error:", (err as Error).message);
-    return json({ error: "Internal server error" }, 500, req);
+    return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
   }
 });

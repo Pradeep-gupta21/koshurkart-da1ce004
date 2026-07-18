@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
   try {
     /* ── Auth ─────────────────────────────────────────────────────────── */
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
+    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -45,10 +45,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
-    if (userError || !user) return json({ error: "Unauthorized" }, 401, req);
+    if (userError || !user) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
 
     const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
-    if (!isAdmin) return json({ error: "Forbidden" }, 403, req);
+    if (!isAdmin) return json({ error: "Forbidden", errorCode: "FORBIDDEN" }, 403, req);
 
     /* ── Service client (bypasses RLS) ────────────────────────────────── */
     const svc = createClient(
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 
     if (vendorErr) {
       console.error("vendors query failed:", vendorErr.message);
-      return json({ error: "Failed to query vendors" }, 500, req);
+      return json({ error: "Failed to query vendors", errorCode: "INTERNAL_ERROR" }, 500, req);
     }
 
     const vendorIds = (vendors ?? []).map((v: any) => v.id);
@@ -326,6 +326,6 @@ Deno.serve(async (req) => {
     return json(response, 200, req);
   } catch (err) {
     console.error("audit-payment-reconciliation error:", (err as Error).message);
-    return json({ error: "Internal server error" }, 500, req);
+    return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
   }
 });
