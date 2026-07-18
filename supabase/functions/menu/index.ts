@@ -6,6 +6,9 @@
 //   DELETE /menu/:id                      -> admin only, soft delete (cascades to descendants)
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

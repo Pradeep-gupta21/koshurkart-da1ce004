@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,9 +120,7 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     console.error("get-sidebar-menu error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    return new Response(JSON.stringify(createErrorResponse(e instanceof Error ? e.message : "Unknown error", ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
