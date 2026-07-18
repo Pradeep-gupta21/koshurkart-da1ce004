@@ -1,27 +1,29 @@
 import { ERROR_CODES } from "./errorCodes.ts";
-import { ErrorResponse, createErrorResponse } from "./errorResponse.ts";
+import { PaymentError } from "./errorResponse.ts";
+import { ErrorCategory } from "./statusCodeMap.ts";
 
-export function normalizeRpcError(rpcErr: any): ErrorResponse {
+export function normalizeRpcError(rpcErr: any): PaymentError {
   if (!rpcErr) {
-    return createErrorResponse("Internal server error occurred.", ERROR_CODES.INTERNAL_ERROR, 500);
+    return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false);
   }
 
   // Common PostgreSQL SQLSTATE codes
   switch (rpcErr.code) {
     case "23505": // unique_violation
-      return createErrorResponse(rpcErr.message || "A conflict occurred (unique violation).", ERROR_CODES.CONFLICT, 409);
+      return new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.CONFLICT, "A conflict occurred (unique violation).", false);
     case "23503": // foreign_key_violation
-      return createErrorResponse(rpcErr.message || "Invalid reference to a related record.", ERROR_CODES.BAD_REQUEST, 400);
+      return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid reference to a related record.", false);
     case "40001": // serialization_failure
-      return createErrorResponse(rpcErr.message || "Transaction serialization failed. Please retry.", ERROR_CODES.CONFLICT, 409, true);
+      return new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.CONFLICT, "Transaction serialization failed. Please retry.", true);
     case "42P01": // undefined_table
-      return createErrorResponse("Internal server error (database table missing).", ERROR_CODES.INTERNAL_ERROR, 500);
+      return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error (database table missing).", false);
     case "42501": // insufficient_privilege
-      return createErrorResponse(rpcErr.message || "Insufficient database privileges.", ERROR_CODES.FORBIDDEN, 403);
+      return new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Insufficient database privileges.", false);
     default:
-      if (rpcErr.code && typeof rpcErr.code === "string" && rpcErr.code.startsWith("P")) { // Application specific raised errors in PL/pgSQL
-         return createErrorResponse(rpcErr.message || "An application error occurred.", ERROR_CODES.BAD_REQUEST, 400);
+      if (rpcErr.code && typeof rpcErr.code === "string" && rpcErr.code.startsWith("P")) { 
+        // Application specific raised errors in PL/pgSQL
+         return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "A database validation error occurred.", false);
       }
-      return createErrorResponse(rpcErr.message || "Internal server error occurred.", ERROR_CODES.INTERNAL_ERROR, 500);
+      return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false);
   }
 }

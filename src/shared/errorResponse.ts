@@ -1,6 +1,6 @@
-import { ERROR_CODES } from './errorCodes';
-import { ErrorCategory, statusCodeMap } from './statusCodeMap';
-import { ValidationError } from './validation';
+import { ERROR_CODES } from './errorCodes.ts';
+import { ErrorCategory, statusCodeMap } from './statusCodeMap.ts';
+import { ValidationError } from './validation.ts';
 
 export class PaymentError extends Error {
   public readonly category: ErrorCategory;

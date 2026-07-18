@@ -1,4 +1,4 @@
-import { ERROR_CODES } from './errorCodes';
+import { ERROR_CODES } from './errorCodes.ts';
 
 export interface ValidationError {
   field: string;
