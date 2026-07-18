@@ -8,6 +8,7 @@ import { SupabaseInventoryService } from './SupabaseInventoryService';
 import { SupabaseReviewService } from './SupabaseReviewService';
 import { SupabaseSearchService } from './SupabaseSearchService';
 import { SupabaseRecommendationService } from './SupabaseRecommendationService';
+import { SupabasePaymentService } from './SupabasePaymentService';
 
 export class SupabaseCommerceProvider implements ICommerceProvider {
   get name(): string {
@@ -53,5 +54,9 @@ export class SupabaseCommerceProvider implements ICommerceProvider {
 
   getRecommendationService(): SupabaseRecommendationService {
     return new SupabaseRecommendationService();
+  }
+
+  getPaymentService(): SupabasePaymentService {
+    return new SupabasePaymentService();
   }
 }

@@ -8,6 +8,7 @@ import { IInventoryService } from '../interfaces/IInventoryService';
 import { IReviewService } from '../interfaces/IReviewService';
 import { ISearchService } from '../interfaces/ISearchService';
 import { IRecommendationService } from '../interfaces/IRecommendationService';
+import { IPaymentService } from '../interfaces/IPaymentService';
 
 export class ServiceFactory {
   static getProductService(): IProductService {
@@ -44,5 +45,9 @@ export class ServiceFactory {
 
   static getRecommendationService(): IRecommendationService {
     return Container.resolve<IRecommendationService>('RecommendationService');
+  }
+
+  static getPaymentService(): IPaymentService {
+    return Container.resolve<IPaymentService>('PaymentService');
   }
 }
