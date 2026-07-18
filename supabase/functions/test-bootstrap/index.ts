@@ -3,6 +3,9 @@
 // DO NOT call from production code.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -71,8 +74,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   if (req.headers.get("x-test-secret") !== TEST_SECRET) {
-    return new Response(JSON.stringify({ error: "forbidden" }), {
-      status: 403,
+    return new Response(JSON.stringify(createErrorResponse("forbidden", ERROR_CODES.FORBIDDEN, 403)), { status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -136,8 +138,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e?.message ?? e) }), {
-      status: 500,
+    return new Response(JSON.stringify(createErrorResponse(String((e as any)?.message ?? e), ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

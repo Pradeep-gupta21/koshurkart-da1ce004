@@ -4,6 +4,9 @@
 //   refund.processed, refund.failed
 // Set the webhook secret as RAZORPAY_WEBHOOK_SECRET.
 import { createClient } from "@supabase/supabase-js";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -30,8 +33,7 @@ Deno.serve(async (req) => {
     const signature = req.headers.get("x-razorpay-signature");
     const secret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
     if (!signature || !secret) {
-      return new Response(JSON.stringify({ error: "Missing signature or secret" }), {
-        status: 401,
+      return new Response(JSON.stringify(createErrorResponse("Missing signature or secret", ERROR_CODES.INTERNAL_ERROR, 401)), { status: 401,
         headers: jsonHeaders,
       });
     }
@@ -39,8 +41,7 @@ Deno.serve(async (req) => {
     const rawBody = await req.text();
     const valid = await verifyWebhookSignature(rawBody, signature, secret);
     if (!valid) {
-      return new Response(JSON.stringify({ error: "Invalid signature" }), {
-        status: 401,
+      return new Response(JSON.stringify(createErrorResponse("Invalid signature", ERROR_CODES.BAD_REQUEST, 401)), { status: 401,
         headers: jsonHeaders,
       });
     }
@@ -229,8 +230,7 @@ Deno.serve(async (req) => {
         });
       } catch (refundErr) {
         console.error("Webhook: refund handling error", (refundErr as Error).message);
-        return new Response(JSON.stringify({ error: "transient_failure" }), {
-          status: 500,
+        return new Response(JSON.stringify(createErrorResponse("transient_failure", ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
           headers: jsonHeaders,
         });
       }
@@ -385,8 +385,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("Webhook error:", (err as Error).message);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
+    return new Response(JSON.stringify(createErrorResponse("Internal error", ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
       headers: jsonHeaders,
     });
   }
