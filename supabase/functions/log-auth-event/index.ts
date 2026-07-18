@@ -57,7 +57,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    await service.rpc("log_auth_event", {
+    // supabase-js reports DB failures via the returned error rather than
+    // throwing — rethrow so the catch block logs it and the caller gets a
+    // 500 instead of a false { ok: true }.
+    const { error } = await service.rpc("log_auth_event", {
       _user_id: userId,
       _email: email ?? null,
       _event_type: event_type,
@@ -66,6 +69,7 @@ Deno.serve(async (req) => {
       _user_agent: user_agent ?? req.headers.get("user-agent") ?? null,
       _metadata: metadata ?? {},
     });
+    if (error) throw error;
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,

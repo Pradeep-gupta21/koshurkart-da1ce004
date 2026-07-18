@@ -1,6 +1,10 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { z } from "npm:zod@3.23.8";
+import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 const BodySchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{9,14}$/),
@@ -148,7 +152,7 @@ Deno.serve(async (req) => {
     const msg = e instanceof Error ? e.message : "Unknown error";
     const stack = e instanceof Error ? e.stack : undefined;
     console.error("otp-verify error:", msg, stack);
-    return new Response(JSON.stringify({ error: msg }), {
+    return new Response(JSON.stringify({ error: "Verification failed. Please try again." }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
