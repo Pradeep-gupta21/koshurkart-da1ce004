@@ -52,7 +52,14 @@ Deno.serve(async (req) => {
       .eq("id", orderId)
       .maybeSingle();
 
-    if (orderErr || !order) {
+    if (orderErr) {
+      console.error("[create-razorpay-order] order DB lookup error", orderErr.code, orderErr.message);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!order) {
       return new Response(JSON.stringify({ error: "Order not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -108,12 +115,14 @@ Deno.serve(async (req) => {
 
     if (!razorpayRes.ok) {
       const errorBody = await razorpayRes.text();
-      console.error("Razorpay API error:", razorpayRes.status, errorBody);
       let parsedError = "Failed to create Razorpay order";
+      let errorCode = "UNKNOWN";
       try {
         const parsed = JSON.parse(errorBody);
         parsedError = parsed?.error?.description || parsedError;
+        errorCode = parsed?.error?.code || errorCode;
       } catch { /* keep default */ }
+      console.error("Razorpay API error:", razorpayRes.status, errorCode);
       return new Response(
         JSON.stringify({ error: parsedError, status: razorpayRes.status }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },

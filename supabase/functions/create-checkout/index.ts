@@ -6,8 +6,9 @@
 // Idempotency: clients SHOULD send a stable `idempotency_key` (UUID) per
 // checkout attempt. Retries with the same key (e.g. due to network drops)
 // return the same order/payment instead of creating duplicates.
-import { createClient } from "npm:@supabase/supabase-js@2.45.0";
-import { z } from "npm:zod@3.23.8";
+// deno-lint-ignore-file no-explicit-any prefer-const
+import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import {
   calculateOrderAmount,
   assertAmountConsistency,
@@ -630,11 +631,16 @@ Deno.serve(async (req) => {
   });
   if (!rpRes.ok) {
     const errBody = await rpRes.text();
-    console.error("razorpay order create failed", rpRes.status, errBody);
+    let errorCode = "UNKNOWN";
+    try {
+      const parsed = JSON.parse(errBody);
+      errorCode = parsed?.error?.code || errorCode;
+    } catch { /* keep default */ }
+    console.error("razorpay order create failed", rpRes.status, errorCode);
     await service.from("analytics_events").insert({
       event_type: "checkout_failed",
       user_id: user.id,
-      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId, body: errBody.slice(0, 500) },
+      metadata: { reason: "gateway_error", status: rpRes.status, order_id: orderId, error_code: errorCode },
     });
     return json({ error: "Failed to create Razorpay order" }, 502, req);
   }

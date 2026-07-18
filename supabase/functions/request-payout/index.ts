@@ -61,6 +61,9 @@ Deno.serve(async (req) => {
     // ---- Parse body ----
     let payload: unknown;
     try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      return json({ error: "Invalid JSON payload structure" }, 400, req);
+    }
 
     const { amount, methodId, idempotencyKey } = payload as {
       amount?: unknown;
@@ -96,21 +99,38 @@ Deno.serve(async (req) => {
     const vendorId: string = vendor.id;
 
     // ---- Atomic balance check + insert via RPC ----
-    // process_vendor_payout locks the vendor row (FOR UPDATE), validates the
+    // request_payout locks the vendor row (FOR UPDATE), validates the
     // amount against withdrawable_balance, and inserts the payout record —
     // all inside a single transaction. This eliminates the TOCTOU window
     // that existed when balance-read and insert were separate round-trips.
     const methodIdValue = (methodId && typeof methodId === "string") ? methodId : null;
 
-    // Use the client-supplied idempotency key, or generate a server-side
-    // fallback so retries are always safe even if the client omits the key.
-    const idempotencyKeyValue: string =
-      (idempotencyKey && typeof idempotencyKey === "string")
-        ? idempotencyKey
-        : crypto.randomUUID();
+    // idempotencyKey is mandatory at the API boundary. The RPC's terminal-state
+    // rejection logic ('IDEMPOTENCY_TERMINAL') and the atomic INSERT … ON CONFLICT
+    // gate both depend on a stable, caller-supplied key to be meaningful. A
+    // server-generated fallback UUID is silently discarded on the next request,
+    // so it provides zero replay protection and masks missing client integration.
+    if (idempotencyKey === undefined || idempotencyKey === null) {
+      return json({ error: "idempotencyKey is required in the request body" }, 400, req);
+    }
+
+    if (typeof idempotencyKey !== "string") {
+      return json({ error: "idempotencyKey must be a string" }, 400, req);
+    }
+
+    if (idempotencyKey.trim() === "") {
+      return json({ error: "idempotencyKey cannot be empty" }, 400, req);
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(idempotencyKey)) {
+      return json({ error: "idempotencyKey must be a valid UUIDv4" }, 400, req);
+    }
+
+    const idempotencyKeyValue: string = idempotencyKey;
 
     const { data: payoutRows, error: rpcErr } = await service
-      .rpc("process_vendor_payout", {
+      .rpc("request_payout", {
         p_vendor_id: vendorId,
         p_amount: amount,
         p_method_id: methodIdValue,
@@ -132,7 +152,10 @@ Deno.serve(async (req) => {
       if (msg.includes("Idempotency key collision with mismatched parameters")) {
         return json({ error: msg }, 409, req);
       }
-      console.error("[request-payout] process_vendor_payout RPC error", rpcErr.code, msg);
+      if (msg.includes("IDEMPOTENCY_TERMINAL")) {
+        return json({ error: msg }, 409, req);
+      }
+      console.error("[request-payout] request_payout RPC error", rpcErr.code, msg);
       return json({ error: "Failed to create payout request" }, 500, req);
     }
 
@@ -156,15 +179,20 @@ Deno.serve(async (req) => {
       console.error("[request-payout] gateway error after reservation, rolling back payout", payout?.id, errMsg);
 
       // Release the reserved funds back to the vendor.
-      const { error: rollbackErr } = await service.rpc("rollback_vendor_payout", {
+      const { error: rollbackError } = await service.rpc("rollback_vendor_payout", {
         p_payout_id: payout?.id,
       });
-      if (rollbackErr) {
-        // Rollback itself failed — log loudly for manual remediation.
+      if (rollbackError) {
+        // Rollback itself failed — throw so the outer catch fires a true 500.
+        // DO NOT return a clean response here: funds were NOT released and
+        // the client must not be told otherwise. Let DevOps be alerted.
         console.error(
           "[request-payout] CRITICAL: rollback_vendor_payout failed for payout",
           payout?.id,
-          rollbackErr,
+          rollbackError,
+        );
+        throw new Error(
+          "CRITICAL: Gateway failed and database rollback failed. Manual reconciliation required.",
         );
       }
 

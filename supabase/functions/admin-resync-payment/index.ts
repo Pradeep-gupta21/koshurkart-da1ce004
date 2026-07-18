@@ -64,7 +64,13 @@ Deno.serve(async (req) => {
       .eq("id", paymentId)
       .maybeSingle();
 
-    if (payErr || !payment) {
+    if (payErr) {
+      console.error("[admin-resync-payment] payment DB lookup error", payErr.code, payErr.message);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!payment) {
       return new Response(JSON.stringify({ error: "Payment not found" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -85,7 +91,12 @@ Deno.serve(async (req) => {
     );
     if (!rpRes.ok) {
       const t = await rpRes.text();
-      console.error("Razorpay fetch failed", rpRes.status, t);
+      let errorCode = "UNKNOWN";
+      try {
+        const parsed = JSON.parse(t);
+        errorCode = parsed?.error?.code || errorCode;
+      } catch { /* keep default */ }
+      console.error("Razorpay fetch failed", rpRes.status, errorCode);
       return new Response(JSON.stringify({ error: "Razorpay fetch failed" }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

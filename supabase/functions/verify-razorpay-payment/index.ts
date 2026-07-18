@@ -106,7 +106,14 @@ Deno.serve(async (req) => {
       .eq("id", paymentId)
       .maybeSingle();
 
-    if (payFetchErr || !paymentRow) {
+    if (payFetchErr) {
+      console.error("[verify-razorpay-payment] payment DB lookup error", payFetchErr.code, payFetchErr.message);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!paymentRow) {
       return new Response(JSON.stringify({ error: "Payment not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
