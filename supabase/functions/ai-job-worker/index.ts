@@ -1,4 +1,7 @@
 // @ts-ignore: Deno npm import
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 declare const Deno: any;
@@ -71,7 +74,7 @@ class AgentTaskExecutor implements JobExecutor<AgentTaskPayload, any> {
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), {});
   }
 
   // --- 1. Service Auth ---
@@ -80,7 +83,7 @@ Deno.serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization");
   const expectedSecret = Deno.env.get("CRON_SECRET");
   if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
-    return new Response(JSON.stringify({ error: "Unauthorized worker invocation" }), { status: 401 });
+    return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized worker invocation", false), {});
   }
 
   // --- 2. Composition Root ---
@@ -147,6 +150,6 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ success: true, message: "Queue processed" }), { status: 200 });
   } catch (err: any) {
     console.error("Worker process error", err);
-    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500 });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, err.message, false), {});
   }
 });
