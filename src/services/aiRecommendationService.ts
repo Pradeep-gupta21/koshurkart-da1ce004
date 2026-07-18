@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { mapDbProduct } from './productService';
-import { productService } from './productService';
+import { mapDbProduct } from '@/services/commerce/providers/supabase/SupabaseProductService';
+import { ServiceFactory } from '@/services/commerce/di/ServiceFactory';
 import { cacheService } from './cacheService';
 import type { Product } from '@/types';
 
@@ -161,7 +161,8 @@ export const aiRecommendationService = {
 
     // If no behavior data, fallback to trending
     if (Object.keys(profile.categoryWeights).length === 0) {
-      return productService.getTrending(limit);
+      const result = await ServiceFactory.getProductService().getTrending(limit);
+      return result.success ? result.data : [];
     }
 
     // Fetch candidate products (active, not already viewed)

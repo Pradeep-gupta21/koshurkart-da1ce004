@@ -11,7 +11,7 @@ import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
 import { CATEGORY_SLUGS, formatCategoryLabel } from "@/config/categories";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { searchService, type SearchSortOption, type SearchFilters } from "@/services/searchService";
 import { adService } from "@/services/adService";
 import { useServiceability } from "@/hooks/useServiceability";
@@ -78,7 +78,11 @@ const SearchPage = () => {
 
   const { data: dbCategories = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: () => productService.getCategories(),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getCategories();
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
   });
 
   const categories = ["All", ...(dbCategories.length > 0 ? dbCategories : defaultCategories)];

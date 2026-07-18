@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { useLocation } from "@/contexts/LocationContext";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { useServiceability } from "@/hooks/useServiceability";
 import ProductCard from "@/components/product/ProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
@@ -18,7 +18,11 @@ const RegionRecommendations = () => {
 
   const { data: ranked = [], isLoading } = useQuery({
     queryKey: ["products", "region-ranked", 12, userState ?? ""],
-    queryFn: () => productService.getRanked({ limit: 12, userState }),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getRanked({ limit: 12, userState });
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     staleTime: 5 * 60_000,
   });
 

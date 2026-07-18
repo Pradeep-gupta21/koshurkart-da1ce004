@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { Plus, Pencil, Trash2, Package, Upload, X, Image as ImageIcon, AlertTriangle, Banknote, AlertCircle, CheckCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -61,12 +61,20 @@ const VendorProducts = () => {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['vendor-products', vendorId],
-    queryFn: () => productService.getByVendor(vendorId),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getByVendor(vendorId);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!vendorId,
   });
 
   const createMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof productService.create>[0]) => productService.create(payload),
+    mutationFn: async (payload: any) => {
+      const result = await ServiceFactory.getProductService().create(payload);
+      if (!result.success) throw result.error;
+      return result.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendor-products', vendorId] });
       toast({ title: "Product created" });
@@ -103,7 +111,11 @@ const VendorProducts = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Record<string, unknown> }) => productService.update(id, updates),
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const result = await ServiceFactory.getProductService().update(id, updates);
+      if (!result.success) throw result.error;
+      return result.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendor-products', vendorId] });
       toast({ title: "Product updated" });
@@ -140,7 +152,11 @@ const VendorProducts = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: productService.remove,
+    mutationFn: async (id: string) => {
+      const result = await ServiceFactory.getProductService().remove(id);
+      if (!result.success) throw result.error;
+      return result.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendor-products', vendorId] });
       toast({ title: "Product deleted" });
@@ -178,8 +194,9 @@ const VendorProducts = () => {
     try {
       const urls: string[] = [];
       for (const file of Array.from(files)) {
-        const url = await productService.uploadImage(file, user.id);
-        urls.push(url);
+        const result = await ServiceFactory.getProductService().uploadImage(file, user.id);
+        if (!result.success) throw new Error(result.error.message);
+        urls.push(result.data);
       }
       setImageUrls(prev => [...prev, ...urls]);
     } catch (err: any) {
@@ -226,7 +243,7 @@ const VendorProducts = () => {
         images: imageUrls,
         status: form.status,
         allow_cod: form.allowCod,
-      } as Parameters<typeof productService.create>[0]);
+      });
     }
   };
 

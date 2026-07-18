@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Package, IndianRupee, Eye, MousePointerClick, Target, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { analyticsService } from "@/services/analyticsService";
 import { TimeRangeSelector, type TimeRange } from "@/components/analytics/TimeRangeSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -28,7 +28,11 @@ const VendorAnalytics = () => {
 
   const { data: products = [] } = useQuery({
     queryKey: ['vendor-products', vendorId],
-    queryFn: () => productService.getByVendor(vendorId),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getByVendor(vendorId);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!vendorId,
   });
 

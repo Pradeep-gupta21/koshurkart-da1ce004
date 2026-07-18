@@ -14,7 +14,7 @@ const setDocumentMeta = (title: string, description: string) => {
 };
 import { supabase } from "@/integrations/supabase/client";
 import { VENDOR_PUBLIC_COLUMNS } from "@/services/vendorService";
-import { mapDbProduct } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import type { Product } from "@/types";
 import ProductCard from "@/components/product/ProductCard";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,15 +61,15 @@ const VendorStorePage = () => {
       }
       setVendor(vendorRow);
 
-      const { data: prodRows } = await supabase
-        .from("products")
-        .select("*, vendors(store_name, pickup_state)")
-        .eq("vendor_id", (vendorRow as any).id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
-
+      const result = await ServiceFactory.getProductService().getByVendor((vendorRow as any).id);
       if (cancelled) return;
-      setProducts((prodRows ?? []).map((r: any) => mapDbProduct(r)));
+      
+      if (result.success) {
+        const activeProducts = result.data.filter(p => p.status === 'active');
+        setProducts(activeProducts);
+      } else {
+        setProducts([]);
+      }
       setLoading(false);
     })();
 

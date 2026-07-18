@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useLocation } from "@/contexts/LocationContext";
 import { locationService } from "@/services/locationService";
-import { mapDbProduct } from "@/services/productService";
+import { mapDbProduct } from "@/services/commerce/providers/supabase/SupabaseProductService";
 import ProductCard from "@/components/product/ProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 

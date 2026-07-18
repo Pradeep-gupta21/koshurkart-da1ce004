@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useWishlist } from "@/contexts/WishlistContext";
 import { useAuth } from "@/hooks/useAuth";
-import { mapDbProduct } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { analyticsService } from "@/services/analyticsService";
 import ProductCard from "@/components/product/ProductCard";
 import EmptyState from "@/components/ui/EmptyState";
@@ -27,12 +27,9 @@ const WishlistPage = () => {
     queryKey: ["wishlist-products", idList.sort().join(",")],
     queryFn: async () => {
       if (idList.length === 0) return [];
-      const { data } = await supabase
-        .from("products")
-        .select("*, vendors(store_name, pickup_state)")
-        .in("id", idList)
-        .eq("status", "active");
-      return (data ?? []).map(mapDbProduct);
+      const result = await ServiceFactory.getProductService().getProductsByIds(idList);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
     },
     enabled: idList.length > 0,
   });

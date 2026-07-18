@@ -69,15 +69,22 @@ export class ProductSearchTool extends BaseCommerceTool<ProductSearchInput, Prod
     }
 
     try {
-      const results = await productService.searchProducts(input.query, {
+      const result = await productService.searchProducts(input.query, {
         category: input.category,
         maxPrice: input.maxPrice,
         limit: input.limit,
       });
 
+      if (!result.success) {
+        return err({
+          code: "execution_error",
+          message: result.error.message,
+        });
+      }
+
       return ok({
-        results,
-        total: results.length,
+        results: result.data,
+        total: result.data.length,
       });
     } catch (e) {
       return err({

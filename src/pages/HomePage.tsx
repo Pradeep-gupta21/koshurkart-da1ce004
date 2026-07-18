@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import ProductCard from "@/components/product/ProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { adService } from "@/services/adService";
 import { aiRecommendationService } from "@/services/aiRecommendationService";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,17 +71,29 @@ const HomePage = () => {
 
   const { data: trendingProducts = [], isLoading: loadingTrending } = useQuery({
     queryKey: ['products', 'trending'],
-    queryFn: () => productService.getTrending(8),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getTrending(8);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
   });
 
   const { data: allProducts = [], isLoading: loadingAll } = useQuery({
     queryKey: ['products', 'ranked', userState ?? ''],
-    queryFn: () => productService.getRanked({ limit: 16, userState }),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getRanked({ limit: 16, userState });
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
   });
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors', 'featured'],
-    queryFn: () => productService.getVendors(),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getVendors();
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
   });
 
   const sponsoredProducts = sponsoredCampaigns.map(mapAuctionWinnerToProduct);

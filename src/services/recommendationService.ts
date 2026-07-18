@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { mapDbProduct } from './productService';
-import { productService } from './productService';
+import { mapDbProduct } from '@/services/commerce/providers/supabase/SupabaseProductService';
+import { ServiceFactory } from '@/services/commerce/di/ServiceFactory';
 import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 
@@ -83,7 +83,8 @@ export const recommendationService = {
 
     const seedIds = [...new Set([...viewedIds, ...purchasedIds])];
     if (seedIds.length === 0) {
-      return productService.getTrending(limit);
+      const result = await ServiceFactory.getProductService().getTrending(limit);
+      return result.success ? result.data : [];
     }
 
     const { data: seedProducts } = await supabase
@@ -110,7 +111,8 @@ export const recommendationService = {
     const results = (data ?? []).map(mapDbProduct);
 
     if (results.length < limit) {
-      const trending = await productService.getTrending(limit - results.length);
+      const trendingResult = await ServiceFactory.getProductService().getTrending(limit - results.length);
+      const trending = trendingResult.success ? trendingResult.data : [];
       const existingIds = new Set(results.map(r => r.id));
       for (const t of trending) {
         if (!existingIds.has(t.id) && results.length < limit) {

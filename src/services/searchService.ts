@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { mapDbProduct } from './productService';
+import { mapDbProduct } from '@/services/commerce/providers/supabase/SupabaseProductService';
 import { cacheService, CACHE_TTL } from './cacheService';
 import type { Product } from '@/types';
 

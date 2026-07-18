@@ -9,7 +9,7 @@ import WishlistButton from "@/components/product/WishlistButton";
 import SponsoredProductCard from "@/components/product/SponsoredProductCard";
 import ProductGrid from "@/components/product/ProductGrid";
 import EmptyState from "@/components/ui/EmptyState";
-import { productService } from "@/services/productService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { formatCategoryLabel } from "@/config/categories";
 import { adService } from "@/services/adService";
 import { recommendationService } from "@/services/recommendationService";
@@ -106,7 +106,11 @@ const ProductDetailPage = () => {
 
   const { data: product, isLoading, error } = useQuery({
     queryKey: ['product', slug],
-    queryFn: () => productService.getBySlug(slug!),
+    queryFn: async () => {
+      const result = await ServiceFactory.getProductService().getBySlug(slug!);
+      if (!result.success) throw new Error(result.error.message);
+      return result.data;
+    },
     enabled: !!slug,
   });
 
