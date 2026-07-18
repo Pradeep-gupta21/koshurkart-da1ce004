@@ -9,6 +9,7 @@ import { ISearchService } from '../interfaces/ISearchService';
 import { IRecommendationService } from '../interfaces/IRecommendationService';
 import { IPaymentService } from '../interfaces/IPaymentService';
 import { IShippingService } from '../interfaces/IShippingService';
+import { INotificationService } from '../interfaces/INotificationService';
 
 export interface ICommerceProvider {
   get name(): string;
@@ -24,4 +25,5 @@ export interface ICommerceProvider {
   getRecommendationService(): IRecommendationService;
   getPaymentService(): IPaymentService;
   getShippingService(): IShippingService;
+  getNotificationService(): INotificationService;
 }

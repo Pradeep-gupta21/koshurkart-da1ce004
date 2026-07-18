@@ -10,6 +10,7 @@ import { SupabaseSearchService } from './SupabaseSearchService';
 import { SupabaseRecommendationService } from './SupabaseRecommendationService';
 import { SupabasePaymentService } from './SupabasePaymentService';
 import { SupabaseShippingService } from './SupabaseShippingService';
+import { SupabaseNotificationService } from './SupabaseNotificationService';
 
 export class SupabaseCommerceProvider implements ICommerceProvider {
   get name(): string {
@@ -63,5 +64,9 @@ export class SupabaseCommerceProvider implements ICommerceProvider {
 
   getShippingService(): SupabaseShippingService {
     return new SupabaseShippingService();
+  }
+
+  getNotificationService(): SupabaseNotificationService {
+    return new SupabaseNotificationService();
   }
 }

@@ -9,5 +9,6 @@ export * from './SupabaseSearchService';
 export * from './SupabaseRecommendationService';
 export * from './SupabasePaymentService';
 export * from './SupabaseShippingService';
+export * from './SupabaseNotificationService';
 export * from './SupabaseCommerceProvider';
 export * from './bootstrap';

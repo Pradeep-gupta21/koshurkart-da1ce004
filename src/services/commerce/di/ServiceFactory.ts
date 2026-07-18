@@ -10,6 +10,7 @@ import { ISearchService } from '../interfaces/ISearchService';
 import { IRecommendationService } from '../interfaces/IRecommendationService';
 import { IPaymentService } from '../interfaces/IPaymentService';
 import { IShippingService } from '../interfaces/IShippingService';
+import { INotificationService } from '../interfaces/INotificationService';
 
 export class ServiceFactory {
   static getProductService(): IProductService {
@@ -54,5 +55,9 @@ export class ServiceFactory {
 
   static getShippingService(): IShippingService {
     return Container.resolve<IShippingService>('ShippingService');
+  }
+
+  static getNotificationService(): INotificationService {
+    return Container.resolve<INotificationService>('NotificationService');
   }
 }
