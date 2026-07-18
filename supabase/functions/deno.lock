@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@supabase/supabase-js@2": "2.45.0",
     "npm:@supabase/supabase-js@2.45.0": "2.45.0",
     "npm:zod@3.23.8": "3.23.8"
   },
@@ -153,6 +154,7 @@
           "npm:sonner@^1.7.4",
           "npm:tailwind-merge@^2.6.0",
           "npm:tailwindcss-animate@^1.0.7",
+          "npm:ts-morph@28",
           "npm:vaul@~0.9.9",
           "npm:zod@^4.3.6"
         ]
