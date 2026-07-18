@@ -17,6 +17,10 @@ DROP POLICY IF EXISTS "vendors_insert_own_payouts" ON public.payouts;
 DROP POLICY IF EXISTS "vendor_insert_payout" ON public.payouts;
 DROP POLICY IF EXISTS "vendors_insert_payouts" ON public.payouts;
 
+-- debited_at: added here so it can be used for refund checks.
+ALTER TABLE public.payouts
+  ADD COLUMN IF NOT EXISTS debited_at TIMESTAMPTZ;
+
 -- Admin direct-UPDATE policy from 20260315132744 migration.
 -- Admins approve/reject payouts via the admin dashboard; this should also
 -- be routed through an edge function eventually, but for now we preserve
@@ -70,3 +74,117 @@ CREATE POLICY "deny_client_update_payouts"
 
 -- Verify the SELECT policy still exists (informational; not executable DDL):
 -- SELECT policyname, cmd FROM pg_policies WHERE tablename = 'payouts' AND cmd = 'SELECT';
+
+-- -----------------------------------------------------------------------
+-- 5. Admin Payout Mutation
+-- -----------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.admin_update_payout_status(
+  p_payout_id UUID,
+  p_new_status TEXT
+)
+RETURNS public.payouts
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_payout public.payouts;
+  v_old_status text;
+BEGIN
+  -- ── Authorization ────────────────────────────────────────────────────────
+  -- Two valid caller identities:
+  --   1. service_role  — Edge Functions calling on behalf of an admin action.
+  --      auth.uid() is NULL for service_role, so has_role(NULL,...) would always
+  --      return false. The role() check must come first and short-circuit.
+  --   2. authenticated admin — browser session with a JWT that is mapped to an
+  --      admin row in public.user_roles. Uses the canonical has_role helper that
+  --      every other function and RLS policy in this schema uses, NOT raw JWT
+  --      claim extraction (which is non-standard and bypasses the roles table).
+  IF auth.role() = 'service_role' THEN
+    -- Service role is unconditionally trusted; no further check needed.
+    NULL;
+  ELSIF NOT public.has_role(auth.uid(), 'admin'::app_role) THEN
+    RAISE EXCEPTION 'Unauthorized: Only admins or service_role can update payout status';
+  END IF;
+
+  -- ── Row lock (payout first, vendor second — deadlock-safe ordering) ──────
+  -- Matches the lock order in request_payout and rollback_vendor_payout.
+  SELECT * INTO v_payout
+    FROM public.payouts
+   WHERE id = p_payout_id
+     FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Payout not found';
+  END IF;
+
+  v_old_status := v_payout.status;
+
+  -- ── Terminal-state immutability guard ────────────────────────────────────
+  -- Terminal states (completed, rejected, failed, cancelled) are one-way
+  -- streets. A payout that has already settled, been rejected, or been
+  -- cancelled must never be mutated again — not even by an admin or
+  -- service_role. Allowing re-transitions out of a terminal state could:
+  --   • Re-debit a vendor whose balance was already refunded (double-spend).
+  --   • Flip a completed payout back to pending, hiding the disbursement.
+  --   • Circumvent the shadow ledger which assumes each payout transitions
+  --     through states exactly once.
+  IF v_old_status IN ('completed', 'rejected', 'failed', 'cancelled') THEN
+    RAISE EXCEPTION 'Cannot mutate a payout in a terminal state (current: %)', v_old_status;
+  END IF;
+
+  -- ── Explicit Transition Matrix ────────────────────────────────────────────
+  IF p_new_status = 'processing' THEN
+    IF v_old_status <> 'pending' THEN
+      RAISE EXCEPTION 'Invalid payout state transition';
+    END IF;
+  ELSIF p_new_status = 'completed' THEN
+    IF v_old_status <> 'processing' THEN
+      RAISE EXCEPTION 'Invalid payout state transition';
+    END IF;
+  ELSIF p_new_status IN ('rejected', 'cancelled', 'failed') THEN
+    IF v_old_status NOT IN ('pending', 'processing') THEN
+      RAISE EXCEPTION 'Invalid payout state transition';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Invalid payout state transition';
+  END IF;
+
+  -- ── Apply the status transition ──────────────────────────────────────────
+  UPDATE public.payouts
+     SET status = p_new_status,
+         updated_at = now()
+   WHERE id = p_payout_id
+  RETURNING * INTO v_payout;
+
+  -- ── Terminal-state refund ────────────────────────────────────────────────
+  -- request_payout debits withdrawable_balance the moment a payout is created
+  -- ('pending'). If an admin moves a reserved payout to a failure terminal
+  -- state, the debited funds must be credited back or they are orphaned.
+  -- The old-status guard above already prevents re-entry from a terminal
+  -- state, so this block will execute at most once per payout.
+  IF p_new_status IN ('rejected', 'cancelled', 'failed')
+     AND v_payout.debited_at IS NOT NULL THEN
+    UPDATE public.vendors
+       SET withdrawable_balance = COALESCE(withdrawable_balance, 0) + COALESCE(v_payout.amount, 0)
+     WHERE id = v_payout.vendor_id;
+
+    -- Shadow ledger: every balance mutation must be mirrored in the same
+    -- transaction (see 20260713120000) or reconcile_vendor_ledger drifts.
+    INSERT INTO public.vendor_wallet_ledger (vendor_id, type, amount, description)
+    VALUES (
+      v_payout.vendor_id,
+      'payout_refund',
+      COALESCE(v_payout.amount, 0),
+      'Reserved funds returned: payout ' || p_payout_id::text
+        || ' moved from ' || v_old_status || ' to ' || p_new_status || ' by admin'
+    );
+  END IF;
+
+  RETURN v_payout;
+END;
+$$;
+
+-- Grant execution to authenticated and service_role
+REVOKE EXECUTE ON FUNCTION public.admin_update_payout_status(UUID, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_update_payout_status(UUID, TEXT) TO authenticated, service_role;

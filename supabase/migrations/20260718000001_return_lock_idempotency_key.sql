@@ -1,0 +1,23 @@
+-- Migration: 20260718000001_return_lock_idempotency_key.sql
+--
+-- Idempotent retry support for vendor-approve-return's processing lock.
+--
+-- The edge function acquires an atomic lock via
+--   UPDATE order_items SET return_status='processing' WHERE id=? AND return_status='requested'
+-- and previously answered EVERY 0-row outcome with 409, so a legitimate retry
+-- (network drop, timeout) of an in-flight approval could never resume its own
+-- operation and the item stayed stuck until manual intervention.
+--
+-- return_lock_key records the idempotency key of the request that owns the
+-- active 'processing' lock (written atomically in the same UPDATE that acquires
+-- it). A later request for an already-processing item compares its incoming key:
+--   * match  -> same logical operation retrying -> resume (money steps are
+--               individually idempotent via razorpay_reversal_id/refund_id)
+--   * differ -> genuinely concurrent/conflicting request -> 409
+-- The key is cleared whenever the lock is released back to 'requested'.
+--
+-- Only service_role writes this column (return_status transitions are already
+-- restricted to service_role by prevent_direct_return_status_update; client RLS
+-- has no UPDATE grant on these columns).
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS return_lock_key TEXT;
