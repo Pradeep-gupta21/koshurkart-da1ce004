@@ -1,7 +1,8 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@supabase/supabase-js@2.45.0": "2.45.0"
+    "npm:@supabase/supabase-js@2.45.0": "2.45.0",
+    "npm:zod@3.23.8": "3.23.8"
   },
   "npm": {
     "@supabase/auth-js@2.64.4": {
@@ -87,10 +88,14 @@
     },
     "ws@8.21.0": {
       "integrity": "sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g=="
+    },
+    "zod@3.23.8": {
+      "integrity": "sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g=="
     }
   },
   "workspace": {
     "dependencies": [
+      "npm:@supabase/supabase-js@2.45.0",
       "npm:zod@3.23.8"
     ],
     "links": {
@@ -139,6 +144,7 @@
           "npm:react-dom@^18.3.1",
           "npm:react-hook-form@^7.61.1",
           "npm:react-markdown@^10.1.0",
+          "npm:react-qr-code@^2.2.0",
           "npm:react-resizable-panels@^2.1.9",
           "npm:react-router-dom@^6.30.1",
           "npm:react@^18.3.1",
