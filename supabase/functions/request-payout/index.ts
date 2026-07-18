@@ -65,15 +65,60 @@ Deno.serve(async (req) => {
       return json({ error: "Invalid JSON payload structure" }, 400, req);
     }
 
-    const { amount, methodId, idempotencyKey } = payload as {
+    const body = payload as {
       amount?: unknown;
       methodId?: unknown;
       idempotencyKey?: unknown;
+      // Deprecated alias — some older clients send the RPC param name directly.
+      // We detect and reject conflicts between the two to avoid silent misrouting.
+      p_idempotency_key?: unknown;
     };
 
+    const { amount, methodId } = body;
+    const idempotencyKey = body.idempotencyKey;
+    const legacyKey = body.p_idempotency_key;
+
     if (typeof amount !== "number" || !Number.isFinite(amount)) {
-      return json({ error: "amount must be a finite number" }, 400, req);
+      return json({ error: "amount must be a finite number", errorCode: "INVALID_AMOUNT" }, 400, req);
     }
+
+    // ---- Idempotency key validation ----
+    // Reject if the deprecated p_idempotency_key alias is present with a
+    // different value — two conflicting keys in the same request are ambiguous
+    // and indicate a client integration bug.
+    if (
+      legacyKey !== undefined &&
+      legacyKey !== null &&
+      legacyKey !== idempotencyKey
+    ) {
+      return json({
+        error: 'Use "idempotencyKey" (not "p_idempotency_key"). Both are present but have different values.',
+        errorCode: "CONFLICTING_IDEMPOTENCY_KEY_FORMATS",
+      }, 400, req);
+    }
+
+    // Canonical key: prefer idempotencyKey; fall back to legacy alias if only
+    // that one is present (graceful transition window for old clients).
+    const resolvedKey = idempotencyKey ?? legacyKey;
+
+    if (resolvedKey === undefined || resolvedKey === null) {
+      return json({ error: "idempotencyKey is required in the request body", errorCode: "MISSING_IDEMPOTENCY_KEY" }, 400, req);
+    }
+
+    if (typeof resolvedKey !== "string") {
+      return json({ error: "idempotencyKey must be a string", errorCode: "INVALID_IDEMPOTENCY_KEY" }, 400, req);
+    }
+
+    if (resolvedKey.trim() === "") {
+      return json({ error: "idempotencyKey cannot be empty", errorCode: "MISSING_IDEMPOTENCY_KEY" }, 400, req);
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(resolvedKey)) {
+      return json({ error: "idempotencyKey must be a valid UUIDv4", errorCode: "INVALID_IDEMPOTENCY_KEY_FORMAT" }, 400, req);
+    }
+
+    const idempotencyKeyValue: string = resolvedKey;
 
     // ---- Service-role client (bypasses RLS for authoritative reads + writes) ----
     const service = createClient(
@@ -104,30 +149,6 @@ Deno.serve(async (req) => {
     // all inside a single transaction. This eliminates the TOCTOU window
     // that existed when balance-read and insert were separate round-trips.
     const methodIdValue = (methodId && typeof methodId === "string") ? methodId : null;
-
-    // idempotencyKey is mandatory at the API boundary. The RPC's terminal-state
-    // rejection logic ('IDEMPOTENCY_TERMINAL') and the atomic INSERT … ON CONFLICT
-    // gate both depend on a stable, caller-supplied key to be meaningful. A
-    // server-generated fallback UUID is silently discarded on the next request,
-    // so it provides zero replay protection and masks missing client integration.
-    if (idempotencyKey === undefined || idempotencyKey === null) {
-      return json({ error: "idempotencyKey is required in the request body" }, 400, req);
-    }
-
-    if (typeof idempotencyKey !== "string") {
-      return json({ error: "idempotencyKey must be a string" }, 400, req);
-    }
-
-    if (idempotencyKey.trim() === "") {
-      return json({ error: "idempotencyKey cannot be empty" }, 400, req);
-    }
-    
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(idempotencyKey)) {
-      return json({ error: "idempotencyKey must be a valid UUIDv4" }, 400, req);
-    }
-
-    const idempotencyKeyValue: string = idempotencyKey;
 
     const { data: payoutRows, error: rpcErr } = await service
       .rpc("request_payout", {

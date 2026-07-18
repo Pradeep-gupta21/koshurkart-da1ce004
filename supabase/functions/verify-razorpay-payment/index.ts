@@ -1,5 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
+// Simple RFC-4122 UUID v4 regex for request-level validation.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -76,6 +79,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Fix 3: Validate orderId and paymentId as UUIDs before any DB query.
+    // A non-UUID value causes Postgres to throw a cast error instead of returning
+    // an empty row, which would surface as an opaque 500 rather than a clear 400.
+    if (!UUID_REGEX.test(orderId)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid order ID format. Expected UUID, got: "${orderId}"`, errorCode: "INVALID_ORDER_ID_FORMAT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!UUID_REGEX.test(paymentId)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid payment ID format. Expected UUID, got: "${paymentId}"`, errorCode: "INVALID_PAYMENT_ID_FORMAT" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!keyId || !keySecret) {
@@ -147,11 +166,24 @@ Deno.serve(async (req) => {
       headers: { Authorization: "Basic " + btoa(`${keyId}:${keySecret}`) },
     });
     if (!rpRes.ok) {
-      console.error("Razorpay order fetch failed", rpRes.status);
-      return new Response(JSON.stringify({ error: "Could not verify gateway order" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Fix 4: Differentiate 4xx (definitive client error) from 5xx (ambiguous).
+      // On 5xx we do NOT update any local state — the webhook will reconcile.
+      // On 4xx the request is definitively invalid and we can return a clear error.
+      const gwStatus = rpRes.status;
+      if (gwStatus >= 400 && gwStatus < 500) {
+        console.error("[verify-razorpay-payment] Razorpay order fetch 4xx (client error)", gwStatus);
+        return new Response(
+          JSON.stringify({ error: "Invalid Razorpay order reference", errorCode: "RAZORPAY_CLIENT_ERROR", retryable: false }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      // 5xx: Razorpay may have processed but returned an error. Do NOT touch local
+      // state. Let the webhook reconcile. Return a retryable 502.
+      console.error("[verify-razorpay-payment] Razorpay order fetch 5xx (ambiguous)", gwStatus);
+      return new Response(
+        JSON.stringify({ error: "Payment gateway error. Status pending verification.", errorCode: "RAZORPAY_SERVER_ERROR", retryable: true }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
     const rpOrder = await rpRes.json();
 

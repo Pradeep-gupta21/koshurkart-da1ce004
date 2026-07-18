@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { paymentService } from "@/services/paymentService";
+import { useAdminPayments, ADMIN_PAYMENTS_QUERY_KEY } from "@/hooks/useAdminPayments";
+import type { AdminPayment } from "@/hooks/useAdminPayments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -13,24 +16,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import { CheckCircle, XCircle, Image as ImageIcon, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
-
-type Payment = {
-  id: string;
-  user_id: string;
-  order_id: string;
-  amount: number;
-  payment_method: string;
-  payment_provider: string | null;
-  payment_status: string;
-  transaction_id: string | null;
-  payment_proof: string | null;
-  upi_id: string | null;
-  qr_code_url: string | null;
-  razorpay_order_id: string | null;
-  razorpay_payment_id: string | null;
-  webhook_confirmed_at?: string | null;
-  created_at: string;
-};
 
 type PaymentLog = {
   id: string;
@@ -50,27 +35,17 @@ const statusVariant = (s: string): "default" | "secondary" | "destructive" | "ou
 };
 
 const AdminPayments = () => {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Fix 9: Replace manual useState + fetchPayments with React Query hook.
+  // The hook manages caching (30s stale time), retries (3x), and exposes
+  // `refetch()` for the Refresh button — no manual loading state needed.
+  const { data: payments = [], isLoading, refetch } = useAdminPayments();
+  const queryClient = useQueryClient();
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Payment | null>(null);
+  const [selected, setSelected] = useState<AdminPayment | null>(null);
   const [logs, setLogs] = useState<PaymentLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-
-  const fetchPayments = async (silent = false) => {
-    if (!silent) setLoading(true);
-    const { data, error } = await supabase
-      .from("payments")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (!error) setPayments((data as Payment[]) ?? []);
-    if (!silent) setLoading(false);
-  };
-
-  useEffect(() => { fetchPayments(); }, []);
 
   // Load logs + subscribe to realtime when a payment is selected
   useEffect(() => {
@@ -112,7 +87,7 @@ const AdminPayments = () => {
    * via log_payment_event, and releases reserved stock on reject.
    */
   const adminPaymentAction = useCallback(
-    async (p: Payment, action: "approve" | "reject") => {
+    async (p: AdminPayment, action: "approve" | "reject") => {
       setProcessingId(p.id);
       try {
         await paymentService.adminVerifyPayment(p.id, p.order_id, action);
@@ -122,7 +97,8 @@ const AdminPayments = () => {
           title: `Payment ${label}`,
           description: `Order ${p.order_id.slice(0, 8)} payment marked as ${statusLabel}.`,
         });
-        await fetchPayments(true);
+        // Fix 9: Use React Query cache invalidation instead of manual re-fetch.
+        queryClient.invalidateQueries({ queryKey: ADMIN_PAYMENTS_QUERY_KEY });
       } catch (err) {
         const msg = err instanceof Error ? err.message : `Failed to ${action} payment.`;
         toast({ title: "Error", description: msg, variant: "destructive" });
@@ -130,13 +106,13 @@ const AdminPayments = () => {
         setProcessingId(null);
       }
     },
-    [fetchPayments]
+    [queryClient]
   );
 
-  const handleApprove = (p: Payment) => adminPaymentAction(p, "approve");
-  const handleReject  = (p: Payment) => adminPaymentAction(p, "reject");
+  const handleApprove = (p: AdminPayment) => adminPaymentAction(p, "approve");
+  const handleReject  = (p: AdminPayment) => adminPaymentAction(p, "reject");
 
-  const handleResync = async (p: Payment) => {
+  const handleResync = async (p: AdminPayment) => {
     if (!p.razorpay_order_id && !p.razorpay_payment_id) {
       toast({ title: "Cannot re-sync", description: "No Razorpay reference on this payment.", variant: "destructive" });
       return;
@@ -153,10 +129,11 @@ const AdminPayments = () => {
           ? `Status from Razorpay: ${(data as { status: string }).status}`
           : "Payment refreshed from Razorpay.",
       });
-      await fetchPayments(true);
-      // refresh selected payment reference
+      // Fix 9: Invalidate React Query cache to trigger a fresh fetch.
+      queryClient.invalidateQueries({ queryKey: ADMIN_PAYMENTS_QUERY_KEY });
+      // Refresh selected payment reference from freshly fetched cache.
       const { data: fresh } = await supabase.from("payments").select("*").eq("id", p.id).maybeSingle();
-      if (fresh) setSelected(fresh as Payment);
+      if (fresh) setSelected(fresh as AdminPayment);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Re-sync failed.";
       toast({ title: "Re-sync failed", description: msg, variant: "destructive" });
@@ -176,14 +153,14 @@ const AdminPayments = () => {
     );
   }, [payments, search]);
 
-  const isStuckPending = (p: Payment) =>
+  const isStuckPending = (p: AdminPayment) =>
     p.payment_method === "razorpay"
     && (p.payment_status === "pending" || p.payment_status === "pending_verification")
     && !!p.razorpay_order_id
     && !p.razorpay_payment_id
     && (Date.now() - new Date(p.created_at).getTime()) > 30 * 60 * 1000;
 
-  const isUnreconciled = (p: Payment) =>
+  const isUnreconciled = (p: AdminPayment) =>
     p.payment_method === "razorpay"
     && p.payment_status === "success"
     && !p.webhook_confirmed_at
@@ -199,8 +176,8 @@ const AdminPayments = () => {
     stuck: filtered.filter(isStuckPending),
   }), [filtered]);
 
-  const renderTable = (list: Payment[]) => {
-    if (loading) {
+  const renderTable = (list: AdminPayment[]) => {
+    if (isLoading) {
       return (
         <div className="space-y-2 py-2">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -282,8 +259,8 @@ const AdminPayments = () => {
             onChange={(e) => setSearch(e.target.value)}
             className="w-72"
           />
-          <Button variant="outline" onClick={fetchPayments} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
+          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
       </div>
