@@ -9,6 +9,9 @@ import { MagicLinkEmail } from '../_shared/email-templates/magic-link.tsx'
 import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
 import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
 import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,8 +135,7 @@ async function handlePreview(req: Request): Promise<Response> {
   const authHeader = req.headers.get('Authorization')
 
   if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
+    return new Response(JSON.stringify(createErrorResponse('Unauthorized', ERROR_CODES.UNAUTHORIZED, 401)), { status: 401,
       headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -143,8 +145,7 @@ async function handlePreview(req: Request): Promise<Response> {
     const body = await req.json()
     type = body.type
   } catch (error) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
-      status: 400,
+    return new Response(JSON.stringify(createErrorResponse('Invalid JSON in request body', ERROR_CODES.BAD_REQUEST, 400)), { status: 400,
       headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
     })
   }
@@ -173,9 +174,7 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   if (!apiKey) {
     console.error('LOVABLE_API_KEY not configured')
-    return new Response(
-      JSON.stringify({ error: 'Server configuration error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return new Response(JSON.stringify(createErrorResponse('Server configuration error', ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -198,33 +197,25 @@ async function handleWebhook(req: Request): Promise<Response> {
         case 'invalid_timestamp':
         case 'stale_timestamp':
           console.error('Invalid webhook signature', { error: error.message })
-          return new Response(JSON.stringify({ error: 'Invalid signature' }), {
-            status: 401,
+          return new Response(JSON.stringify(createErrorResponse('Invalid signature', ERROR_CODES.BAD_REQUEST, 401)), { status: 401,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           })
         case 'invalid_payload':
         case 'invalid_json':
           console.error('Invalid webhook payload', { error: error.message })
-          return new Response(
-            JSON.stringify({ error: 'Invalid webhook payload' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
       }
     }
 
     console.error('Webhook verification failed', { error })
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
   if (!run_id) {
     console.error('Webhook payload missing run_id')
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      {
-        status: 400,
+    return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
@@ -428,8 +419,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Webhook handler error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+    return new Response(JSON.stringify(createErrorResponse(message, ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }

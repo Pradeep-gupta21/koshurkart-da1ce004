@@ -1,5 +1,8 @@
 import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -8,7 +11,7 @@ const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
 
 // Check if an error is a rate-limit (429) response.
-// Uses EmailAPIError.status when available (email-js >=0.x with structured errors),
+// Uses EmailAPIError.httpStatus when available (email-js >=0.x with structured errors),
 // falls back to parsing the error message for older versions.
 function isRateLimited(error: unknown): boolean {
   if (error && typeof error === 'object' && 'status' in error) {
@@ -85,17 +88,13 @@ Deno.serve(async (req) => {
 
   if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
-    return new Response(
-      JSON.stringify({ error: 'Server configuration error' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return new Response(JSON.stringify(createErrorResponse('Server configuration error', ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    return new Response(JSON.stringify(createErrorResponse('Unauthorized', ERROR_CODES.UNAUTHORIZED, 401)), { status: 401, headers: { 'Content-Type': 'application/json' } }
     )
   }
 
@@ -105,9 +104,7 @@ Deno.serve(async (req) => {
   const token = authHeader.slice('Bearer '.length).trim()
   const claims = parseJwtClaims(token)
   if (claims?.role !== 'service_role') {
-    return new Response(
-      JSON.stringify({ error: 'Forbidden' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    return new Response(JSON.stringify(createErrorResponse('Forbidden', ERROR_CODES.FORBIDDEN, 403)), { status: 403, headers: { 'Content-Type': 'application/json' } }
     )
   }
 
