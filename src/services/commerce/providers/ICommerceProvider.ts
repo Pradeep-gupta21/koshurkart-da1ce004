@@ -6,6 +6,7 @@ import { ICustomerService } from '../interfaces/ICustomerService';
 import { IInventoryService } from '../interfaces/IInventoryService';
 import { IReviewService } from '../interfaces/IReviewService';
 import { ISearchService } from '../interfaces/ISearchService';
+import { IRecommendationService } from '../interfaces/IRecommendationService';
 
 export interface ICommerceProvider {
   get name(): string;
@@ -18,4 +19,5 @@ export interface ICommerceProvider {
   getInventoryService(): IInventoryService;
   getReviewService(): IReviewService;
   getSearchService(): ISearchService;
+  getRecommendationService(): IRecommendationService;
 }
