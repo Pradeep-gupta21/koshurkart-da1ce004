@@ -13,10 +13,11 @@ export interface IProductService {
 
 export interface ICartService {
   // Placeholder for future cart operations
-  getCart(): Promise<any>;
-  addItem(productId: string, quantity?: number): Promise<any>;
-  removeItem(productId: string): Promise<any>;
-  updateQuantity(productId: string, quantity: number): Promise<any>;
+  getCart(customerId: string): Promise<any>;
+  addToCart(customerId: string, productId: string, quantity: number): Promise<any>;
+  removeFromCart(customerId: string, productId: string): Promise<any>;
+  updateQuantity(customerId: string, productId: string, quantity: number): Promise<any>;
+  clearCart(customerId: string): Promise<void>;
 }
 
 export interface IWishlistService {

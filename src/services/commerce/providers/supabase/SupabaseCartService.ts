@@ -123,6 +123,49 @@ export class SupabaseCartService implements ICartService {
     }
   }
 
+  async updateQuantity(customerId: string, productId: string, quantity: number): Promise<Result<any, CommerceError>> {
+    try {
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('user_id', customerId)
+        .eq('order_status', 'draft')
+        .maybeSingle();
+
+      if (orderError) return { success: false, error: { code: 'database_error', message: orderError.message } };
+      if (!order) return { success: false, error: { code: 'not_found', message: 'Cart not found' } };
+
+      const { data: existingItem } = await supabase
+        .from('order_items')
+        .select('id')
+        .eq('order_id', order.id)
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (!existingItem) {
+        return { success: false, error: { code: 'not_found', message: 'Item not found in cart' } };
+      }
+
+      if (quantity <= 0) {
+        const { error: deleteError } = await supabase
+          .from('order_items')
+          .delete()
+          .eq('id', existingItem.id);
+        if (deleteError) return { success: false, error: { code: 'database_error', message: deleteError.message } };
+      } else {
+        const { error: updateError } = await supabase
+          .from('order_items')
+          .update({ quantity })
+          .eq('id', existingItem.id);
+        if (updateError) return { success: false, error: { code: 'database_error', message: updateError.message } };
+      }
+
+      return { success: true, data: null };
+    } catch (err: any) {
+      return { success: false, error: { code: 'unknown_error', message: err.message || 'An unknown error occurred' } };
+    }
+  }
+
   async clearCart(customerId: string): Promise<Result<void, CommerceError>> {
     try {
       const { data: order, error: orderError } = await supabase
