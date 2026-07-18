@@ -149,7 +149,7 @@ BEGIN
       END IF;
 
       -- Terminal state check: if the prior request failed/cancelled, the key is burned.
-      IF v_payout.status IN ('failed', 'cancelled') THEN
+      IF v_payout.status IN ('failed', 'cancelled', 'rejected') THEN
         RAISE EXCEPTION 'IDEMPOTENCY_TERMINAL: This key is bound to a failed payout. Generate a fresh idempotency key to try again.';
       END IF;
 
@@ -224,7 +224,7 @@ BEGIN
   -- NEW.debited_at IS NULL and skips the balance UPDATE when debited_at is
   -- already set, preventing double-deduction.
   UPDATE public.vendors
-     SET withdrawable_balance = withdrawable_balance - p_amount
+     SET withdrawable_balance = COALESCE(withdrawable_balance, 0) - COALESCE(p_amount, 0)
    WHERE id = p_vendor_id;
 
   -- Shadow ledger: record the reservation (negative = debit).
@@ -232,7 +232,7 @@ BEGIN
   VALUES (
     p_vendor_id,
     'payout_reserved',
-    -p_amount,
+    -COALESCE(p_amount, 0),
     'Payout funds reserved (pending payout ' || v_payout_id::text || ')'
   );
 
@@ -318,7 +318,7 @@ BEGIN
 
   -- Credit the reserved amount back to the vendor's withdrawable balance.
   UPDATE public.vendors
-     SET withdrawable_balance = withdrawable_balance + v_payout.amount
+     SET withdrawable_balance = COALESCE(withdrawable_balance, 0) + COALESCE(v_payout.amount, 0)
    WHERE id = v_payout.vendor_id;
 
   -- Ledger entry for audit trail (positive = credit).
