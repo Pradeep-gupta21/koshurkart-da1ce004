@@ -9,6 +9,7 @@ import { IReviewService } from '../interfaces/IReviewService';
 import { ISearchService } from '../interfaces/ISearchService';
 import { IRecommendationService } from '../interfaces/IRecommendationService';
 import { IPaymentService } from '../interfaces/IPaymentService';
+import { IShippingService } from '../interfaces/IShippingService';
 
 export class ServiceFactory {
   static getProductService(): IProductService {
@@ -49,5 +50,9 @@ export class ServiceFactory {
 
   static getPaymentService(): IPaymentService {
     return Container.resolve<IPaymentService>('PaymentService');
+  }
+
+  static getShippingService(): IShippingService {
+    return Container.resolve<IShippingService>('ShippingService');
   }
 }

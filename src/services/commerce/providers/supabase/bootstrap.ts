@@ -19,4 +19,5 @@ export function bootstrapSupabaseProvider(): void {
   Container.register('SearchService', provider.getSearchService());
   Container.register('RecommendationService', provider.getRecommendationService());
   Container.register('PaymentService', provider.getPaymentService());
+  Container.register('ShippingService', provider.getShippingService());
 }
