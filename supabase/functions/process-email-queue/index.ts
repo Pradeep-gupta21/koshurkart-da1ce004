@@ -1,7 +1,8 @@
 import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
-import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const MAX_RETRIES = 5
@@ -88,14 +89,12 @@ Deno.serve(async (req) => {
 
   if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
-    return new Response(JSON.stringify(createErrorResponse('Server configuration error', ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500, headers: { 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, 'Server configuration error', false), { 'Content-Type': 'application/json' })
   }
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(JSON.stringify(createErrorResponse('Unauthorized', ERROR_CODES.UNAUTHORIZED, 401)), { status: 401, headers: { 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, 'Unauthorized', false), { 'Content-Type': 'application/json' })
   }
 
   // Defense in depth: verify_jwt=true already requires a valid JWT at the
@@ -104,8 +103,7 @@ Deno.serve(async (req) => {
   const token = authHeader.slice('Bearer '.length).trim()
   const claims = parseJwtClaims(token)
   if (claims?.role !== 'service_role') {
-    return new Response(JSON.stringify(createErrorResponse('Forbidden', ERROR_CODES.FORBIDDEN, 403)), { status: 403, headers: { 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, 'Forbidden', false), { 'Content-Type': 'application/json' })
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)

@@ -1,4 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { z } from "zod";
 
 const corsHeaders = {
@@ -49,9 +52,16 @@ Deno.serve(async (req) => {
     const json = await req.json().catch(() => ({}));
     const parsed = BodySchema.safeParse(json);
     if (!parsed.success) {
-      return new Response(
-        JSON.stringify({ error: parsed.error.flatten().fieldErrors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.VALIDATION,
+          ERROR_CODES.VALIDATION_ERROR,
+          "Validation failed: " + Object.entries(parsed.error.flatten().fieldErrors)
+            .map(([field, errors]) => `${field}: ${errors.join(", ")}`)
+            .join("; "),
+          false
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
       );
     }
     const { phone } = parsed.data;
@@ -59,14 +69,26 @@ Deno.serve(async (req) => {
 
     // In-memory per-cold-start guard
     if (!hit(`send:ip:${ip}`, 20, 60_000)) {
-      return new Response(JSON.stringify({ error: "Too many requests." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.RATE_LIMIT,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          "Too many requests.",
+          false
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
+      );
     }
     if (!hit(`send:phone:${phone}`, 3, 30_000)) {
-      return new Response(JSON.stringify({ error: "Please wait before requesting another code." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.RATE_LIMIT,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          "Please wait before requesting another code.",
+          false
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
+      );
     }
 
     // Persistent server-side rate limit (sliding window via Postgres)
@@ -82,9 +104,15 @@ Deno.serve(async (req) => {
     if (ipRateLimitErr) throw new Error("Rate limiter unavailable");
     if (typeof allowedIp !== "boolean") throw new Error("Rate limiter unavailable");
     if (allowedIp === false) {
-      return new Response(JSON.stringify({ error: "Too many OTP requests from this network." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.RATE_LIMIT,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          "Too many OTP requests from this network.",
+          false
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
+      );
     }
 
     const { data: allowedPhone, error: phoneRateLimitErr } = await serviceSupabase.rpc("check_auth_rate_limit", {
@@ -93,9 +121,15 @@ Deno.serve(async (req) => {
     if (phoneRateLimitErr) throw new Error("Rate limiter unavailable");
     if (typeof allowedPhone !== "boolean") throw new Error("Rate limiter unavailable");
     if (allowedPhone === false) {
-      return new Response(JSON.stringify({ error: "Too many OTP requests for this number. Try again in 10 minutes." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.RATE_LIMIT,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          "Too many OTP requests for this number. Try again in 10 minutes.",
+          false
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
+      );
     }
 
 
@@ -191,10 +225,27 @@ Deno.serve(async (req) => {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
+    const msg = e instanceof Error ? e.message.toLowerCase() : "unknown error";
     console.error("otp-send error:", msg);
-    return new Response(JSON.stringify({ error: "Failed to send verification code. Please try again." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    if (msg.includes("rate") || msg.includes("throttle") || msg.includes("429")) {
+      return respondWithError(
+        new PaymentError(
+          ErrorCategory.RATE_LIMIT,
+          ERROR_CODES.RATE_LIMIT_EXCEEDED,
+          "Gateway rate limited. Please try again later.",
+          true
+        ),
+        { ...corsHeaders, "Content-Type": "application/json" }
+      );
+    }
+    return respondWithError(
+      new PaymentError(
+        ErrorCategory.GATEWAY_ERROR,
+        ERROR_CODES.INTERNAL_ERROR,
+        "Failed to send verification code. Please try again.",
+        false
+      ),
+      { ...corsHeaders, "Content-Type": "application/json" }
+    );
   }
 });

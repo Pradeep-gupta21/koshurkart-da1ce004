@@ -10,7 +10,8 @@ import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
 import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
 import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
-import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const corsHeaders = {
@@ -135,9 +136,7 @@ async function handlePreview(req: Request): Promise<Response> {
   const authHeader = req.headers.get('Authorization')
 
   if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-    return new Response(JSON.stringify(createErrorResponse('Unauthorized', ERROR_CODES.UNAUTHORIZED, 401)), { status: 401,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
+    return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, 'Unauthorized', false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
   }
 
   let type: string
@@ -145,18 +144,13 @@ async function handlePreview(req: Request): Promise<Response> {
     const body = await req.json()
     type = body.type
   } catch (error) {
-    return new Response(JSON.stringify(createErrorResponse('Invalid JSON in request body', ERROR_CODES.BAD_REQUEST, 400)), { status: 400,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid JSON in request body', false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
   }
 
   const EmailTemplate = EMAIL_TEMPLATES[type]
 
   if (!EmailTemplate) {
-    return new Response(JSON.stringify({ error: `Unknown email type: ${type}` }), {
-      status: 400,
-      headers: { ...previewCorsHeaders, 'Content-Type': 'application/json' },
-    })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${type}`, false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
   }
 
   const sampleData = SAMPLE_DATA[type] || {}
@@ -174,8 +168,7 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   if (!apiKey) {
     console.error('LOVABLE_API_KEY not configured')
-    return new Response(JSON.stringify(createErrorResponse('Server configuration error', ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, 'Server configuration error', false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 
   // Verify signature + timestamp, then parse payload.
@@ -197,39 +190,26 @@ async function handleWebhook(req: Request): Promise<Response> {
         case 'invalid_timestamp':
         case 'stale_timestamp':
           console.error('Invalid webhook signature', { error: error.message })
-          return new Response(JSON.stringify(createErrorResponse('Invalid signature', ERROR_CODES.BAD_REQUEST, 401)), { status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          })
+          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid signature', false), { ...corsHeaders, 'Content-Type': 'application/json' })
         case 'invalid_payload':
         case 'invalid_json':
           console.error('Invalid webhook payload', { error: error.message })
-          return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
       }
     }
 
     console.error('Webhook verification failed', { error })
-    return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 
   if (!run_id) {
     console.error('Webhook payload missing run_id')
-    return new Response(JSON.stringify(createErrorResponse('Invalid webhook payload', ERROR_CODES.BAD_REQUEST, 400)), { status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 
   if (payload.version !== '1') {
     console.error('Unsupported payload version', { version: payload.version, run_id })
-    return new Response(
-      JSON.stringify({ error: `Unsupported payload version: ${payload.version}` }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unsupported payload version: ${payload.version}`, false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 
   // The email action type is in payload.data.action_type (e.g., "signup", "recovery")
@@ -240,10 +220,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   const EmailTemplate = EMAIL_TEMPLATES[emailType]
   if (!EmailTemplate) {
     console.error('Unknown email type', { emailType, run_id })
-    return new Response(
-      JSON.stringify({ error: `Unknown email type: ${emailType}` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${emailType}`, false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 
   // Build template props from payload.data (HookData structure)
@@ -389,14 +366,7 @@ async function handleWebhook(req: Request): Promise<Response> {
       status: 'failed',
       error_message: `Fallback enqueue failed: ${fallbackError.slice(0, 400)}`,
     })
-    return new Response(
-      JSON.stringify({
-        error: 'All email providers failed',
-        resend_error: resendError,
-        fallback_error: fallbackError,
-      }),
-      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, 'All email providers failed', false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 }
 
@@ -419,8 +389,6 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Webhook handler error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(JSON.stringify(createErrorResponse(message, ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, message, false), { ...corsHeaders, 'Content-Type': 'application/json' })
   }
 })

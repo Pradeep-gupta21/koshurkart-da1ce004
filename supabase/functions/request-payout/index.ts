@@ -1,4 +1,7 @@
 // request-payout: server-side payout request with balance validation.
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 //
 // Security contract
 // -----------------
@@ -13,7 +16,7 @@
 // 4. Only service_role can invoke the RPC; client writes to payouts are blocked by RLS.
 import { createClient } from "@supabase/supabase-js";
 import { validatePayoutRequest } from "../_shared/validation.ts";
-import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const ALLOWED_ORIGINS = [
   "https://koshurkart.com",
@@ -44,12 +47,12 @@ const json = (body: unknown, status = 200, req: Request) =>
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
+  if (req.method !== "POST") return new Response(JSON.stringify({ error: "Method Not Allowed" }), { status: 405, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
 
   try {
     // ---- Auth ----
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
+    if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     // Verify the JWT using the anon client (passes the token through to Supabase Auth).
     const anon = createClient(
@@ -58,15 +61,15 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userErr } = await anon.auth.getUser();
-    if (userErr || !user) return json({ error: "Unauthorized" }, 401, req);
+    if (userErr || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     // ---- Parse body ----
     let payload: unknown;
-    try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
+    try { payload = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }); }
     
     const valErr = validatePayoutRequest(payload);
     if (valErr) {
-      return json(valErr, 400, req);
+      return respondWithError(valErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const body = payload as Record<string, any>;
@@ -91,9 +94,9 @@ Deno.serve(async (req) => {
 
     if (vendorErr) {
       console.error("[request-payout] vendor lookup error", vendorErr.code);
-      return json({ error: "Internal server error" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-    if (!vendor) return json({ error: "Vendor profile not found" }, 404, req);
+    if (!vendor) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Vendor profile not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     const vendorId: string = vendor.id;
 
@@ -113,14 +116,31 @@ Deno.serve(async (req) => {
       });
 
     if (rpcErr) {
-      const mappedErr = handleRpcError(rpcErr);
-      if (mappedErr.status === 500) {
-        console.error("[request-payout] request_payout RPC error", rpcErr.code, rpcErr.message);
-      }
-      return json({ error: mappedErr.error }, mappedErr.status, req);
+      const mappedErr = normalizeRpcError(rpcErr);
+      console.error("[request-payout] request_payout RPC error", rpcErr.code, rpcErr.message);
+      return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
-    const payout = Array.isArray(payoutRows) ? payoutRows[0] : payoutRows;
+    const rpcResult = Array.isArray(payoutRows) ? payoutRows[0] : payoutRows;
+
+    if (rpcResult && rpcResult.success === false) {
+      throw new PaymentError(
+        ErrorCategory.INTERNAL_ERROR,
+        rpcResult.code || ERROR_CODES.INTERNAL_ERROR,
+        rpcResult.error || "RPC Failed",
+        false
+      );
+    }
+
+    const payout = rpcResult?.payout || rpcResult;
+
+    if (rpcResult?.isIdempotentReplay || payout?.status === "processing" || payout?.status === "pending") {
+      return json({
+        success: true,
+        payoutId: rpcResult?.payoutId || payout?.id,
+        isIdempotentReplay: Boolean(rpcResult?.isIdempotentReplay)
+      }, 200, req);
+    }
 
     // ---- Post-reservation gateway / downstream logic ----
     // Funds are now reserved (balance debited, payout row is 'pending').
@@ -157,12 +177,20 @@ Deno.serve(async (req) => {
         );
       }
 
-      return json({ error: "Payout gateway failure; funds have been released" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Payout gateway failure; funds have been released", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     return json({ ok: true, payout }, 200, req);
   } catch (err) {
-    console.error("[request-payout] unexpected error", (err as Error).message);
-    return json({ error: "Internal server error" }, 500, req);
+    console.error("[request-payout] unexpected error", err instanceof Error ? err.message : String(err));
+    if (err instanceof PaymentError) {
+      return respondWithError(err, { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
+    
+    const errCode = typeof err === "object" && err !== null && "code" in err 
+      ? (String((err as any).code) as ERROR_CODES) 
+      : ERROR_CODES.INTERNAL_ERROR;
+      
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, errCode, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

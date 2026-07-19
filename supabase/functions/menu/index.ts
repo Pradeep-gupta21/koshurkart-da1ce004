@@ -7,7 +7,8 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.45.0";
 import { z } from "npm:zod@3.23.8";
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
-import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const corsHeaders = {
@@ -98,7 +99,7 @@ async function requireAdmin(req: Request): Promise<
 > {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return { ok: false, res: json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401) };
+    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" }) };
   }
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -107,11 +108,11 @@ async function requireAdmin(req: Request): Promise<
   );
   const { data: userData, error } = await supabase.auth.getUser();
   if (error || !userData?.user?.id) {
-    return { ok: false, res: json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401) };
+    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" }) };
   }
   const userId = userData.user.id;
   const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
-  if (!isAdmin) return { ok: false, res: json({ error: "Forbidden", errorCode: "FORBIDDEN" }, 403) };
+  if (!isAdmin) return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" }) };
   return { ok: true, userId, supabase };
 }
 
@@ -170,7 +171,7 @@ async function handleGet(req: Request): Promise<Response> {
   const section = url.searchParams.get("section") ?? "shop";
   const pincode = (url.searchParams.get("pincode") ?? "").trim() || null;
   if (!SECTIONS.includes(section as typeof SECTIONS[number])) {
-    return json({ error: "Invalid section", errorCode: "BAD_REQUEST" }, 400);
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid section", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   const supabase = createClient(
@@ -205,7 +206,7 @@ async function handleGet(req: Request): Promise<Response> {
     .eq("is_active", true)
     .order("order_index", { ascending: true });
 
-  if (error) return json({ error: error.message }, 500);
+  if (error) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   // ---- Location-aware shaping ----
   const meta: MenuMeta = { pincode };
@@ -268,16 +269,16 @@ async function handlePost(req: Request): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400); }
+  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" }); }
   const parsed = CreateSchema.safeParse(body);
-  if (!parsed.success) return json({ error: parsed.error.flatten().fieldErrors }, 400);
+  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   const { data, error } = await auth.supabase
     .from("menu_items")
     .insert(parsed.data)
     .select()
     .single();
-  if (error) return json({ error: error.message }, 400);
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   invalidateCache();
   return json({ item: data }, 201);
@@ -288,13 +289,13 @@ async function handlePut(req: Request, id: string): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400); }
+  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" }); }
   const parsed = UpdateSchema.safeParse(body);
-  if (!parsed.success) return json({ error: parsed.error.flatten().fieldErrors }, 400);
+  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   if (parsed.data.parent_id) {
     if (await wouldCreateCycle(auth.supabase, id, parsed.data.parent_id)) {
-      return json({ error: "Cannot set parent: would create a cycle", errorCode: "BAD_REQUEST" }, 400);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Cannot set parent: would create a cycle", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
   }
 
@@ -304,7 +305,7 @@ async function handlePut(req: Request, id: string): Promise<Response> {
     .eq("id", id)
     .select()
     .single();
-  if (error) return json({ error: error.message }, 400);
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   invalidateCache();
   return json({ item: data });
@@ -331,7 +332,7 @@ async function handleDelete(req: Request, id: string): Promise<Response> {
     .from("menu_items")
     .update({ is_active: false })
     .in("id", Array.from(toDeactivate));
-  if (error) return json({ error: error.message }, 400);
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
 
   invalidateCache();
   return json({ deactivated: toDeactivate.size });
@@ -351,16 +352,16 @@ Deno.serve(async (req) => {
     if (req.method === "GET") return await handleGet(req);
     if (req.method === "POST") return await handlePost(req);
     if (req.method === "PUT") {
-      if (!idParam) return json({ error: "Missing id", errorCode: "BAD_REQUEST" }, 400);
+      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...corsHeaders, "Content-Type": "application/json" });
       return await handlePut(req, idParam);
     }
     if (req.method === "DELETE") {
-      if (!idParam) return json({ error: "Missing id", errorCode: "BAD_REQUEST" }, 400);
+      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...corsHeaders, "Content-Type": "application/json" });
       return await handleDelete(req, idParam);
     }
-    return json({ error: "Method not allowed", errorCode: "METHOD_NOT_ALLOWED" }, 405);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.METHOD_NOT_ALLOWED, "Method not allowed", false), { ...corsHeaders, "Content-Type": "application/json" });
   } catch (e) {
     console.error("menu function error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, e instanceof Error ? e.message : "Unknown error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

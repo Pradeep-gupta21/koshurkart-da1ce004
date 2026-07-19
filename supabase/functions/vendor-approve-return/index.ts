@@ -1,4 +1,7 @@
 // vendor-approve-return: concurrency-safe wrapper around vendor_approve_return RPC.
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 //
 // Concurrency contract
 // --------------------
@@ -27,7 +30,7 @@
 //   3. vendor_approve_return    (DB balance deduction + ledger row)
 import { createClient } from "@supabase/supabase-js";
 import { validateVendorApproveReturnRequest } from "../_shared/validation.ts";
-import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 import {
   calculateVendorTransferAmount,
   getVendorCommissionPercentage,
@@ -114,12 +117,12 @@ async function releaseLock(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, req);
+  if (req.method !== "POST") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   try {
     // ---- Auth ----
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401, req);
+    if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -127,11 +130,11 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userErr } = await anon.auth.getUser();
-    if (userErr || !user) return json({ error: "Unauthorized" }, 401, req);
+    if (userErr || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     // ---- Input ----
     let payload: unknown;
-    try { payload = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400, req); }
+    try { payload = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }); }
 
     const valErr = validateVendorApproveReturnRequest(payload);
     if (valErr) {
@@ -147,7 +150,7 @@ Deno.serve(async (req) => {
     // ---- Razorpay creds ----
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
-    if (!keyId || !keySecret) return json({ error: "Razorpay credentials not configured" }, 500, req);
+    if (!keyId || !keySecret) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay credentials not configured", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     const rzpAuth = "Basic " + btoa(`${keyId}:${keySecret}`);
 
     const service = createClient(
@@ -178,7 +181,7 @@ Deno.serve(async (req) => {
         code: lockErr.code,
         message: lockErr.message,
       });
-      return json({ error: "Internal server error" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     let item = locked;
@@ -199,7 +202,7 @@ Deno.serve(async (req) => {
           code: existingErr.code,
           message: existingErr.message,
         });
-        return json({ error: "Internal server error" }, 500, req);
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       const isProcessing = existing?.return_status === "processing";
@@ -223,11 +226,8 @@ Deno.serve(async (req) => {
         // genuine lock conflict (another request owns the row) from other 409s
         // and decide whether to retry or refresh the return list.
         const isStaleState = existing?.return_status !== "processing";
-        return json({
-          error: "Return is not in requested state or is already being processed",
-          errorCode: isStaleState ? "RETURN_NOT_PENDING" : "ROW_LOCKED_BY_ANOTHER_REQUEST",
-          retryable: !isStaleState,
-        }, 409, req);
+        const errorCode = isStaleState ? ERROR_CODES.CONFLICT : ERROR_CODES.CONFLICT;
+        return respondWithError(new PaymentError(ErrorCategory.CONFLICT, errorCode, "Return is not in requested state or is already being processed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
     }
 
@@ -241,24 +241,24 @@ Deno.serve(async (req) => {
       console.error("[vendor-approve-return] vendor DB lookup error", vendorErr.code, vendorErr.message);
       // Roll back the lock so a retry can re-enter.
       await releaseLock(service, item.id, idempotencyKey, "vendor-db-lookup-error");
-      return json({ error: "Internal server error" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     if (!vendor) {
       console.error("[vendor-approve-return] vendor row not found for id", item.vendor_id);
       // Roll back the lock so a retry can re-enter.
       await releaseLock(service, item.id, idempotencyKey, "vendor-not-found");
-      return json({ error: "Vendor not found" }, 404, req);
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.NOT_FOUND, "Vendor not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     if (vendor.user_id !== user.id) {
       await releaseLock(service, item.id, idempotencyKey, "caller-not-vendor-owner");
-      return json({ error: "Forbidden" }, 403, req);
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     // ---- Amounts ----
     const linePaise = Math.round(Number(item.price) * Number(item.quantity) * 100);
     if (!Number.isFinite(linePaise) || linePaise <= 0) {
       await releaseLock(service, item.id, idempotencyKey, "invalid-line-amount");
-      return json({ error: "Invalid line amount" }, 400, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid line amount", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     // ---- Commission — MUST be resolved BEFORE any DB writes or gateway calls ----
@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
         message: settingsErr.message,
       });
       await releaseLock(service, item.id, idempotencyKey, "commission-db-lookup-error");
-      return json({ error: "Internal server error" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     if (!settingsRows || settingsRows.length === 0) {
       // Query succeeded but the commission setting row is absent — configuration
@@ -286,7 +286,7 @@ Deno.serve(async (req) => {
         order_item_id: item.id,
       });
       await releaseLock(service, item.id, idempotencyKey, "commission-config-missing");
-      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     let commissionEnabled = false, commissionPct = 0;
     for (const row of settingsRows as { value: { enabled?: boolean; percentage?: number | string } }[]) {
@@ -304,12 +304,12 @@ Deno.serve(async (req) => {
     } catch (commErr) {
       console.error("[vendor-approve-return] getVendorCommissionPercentage threw", commErr);
       await releaseLock(service, item.id, idempotencyKey, "commission-computation-threw");
-      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     if (pct == null || !Number.isFinite(pct) || pct < 0 || pct > 100) {
       console.error("[vendor-approve-return] commission out of range", { pct, vendor_id: item.vendor_id });
       await releaseLock(service, item.id, idempotencyKey, "commission-out-of-range");
-      return json({ error: "Commission configuration unavailable or invalid. Aborting." }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const vendorSharePaise = calculateVendorTransferAmount(linePaise, pct, false);
@@ -340,15 +340,14 @@ Deno.serve(async (req) => {
       );
       if (!revRes.ok) {
         const errText = await revRes.text();
+        const errMessage = (errText ?? "").toLowerCase();
         console.error(
           "[vendor-approve-return] TRANSFER REVERSAL FAILED — aborting before refund",
           { order_item_id: item.id, transfer_id: item.razorpay_transfer_id, status: revRes.status, body: errText.slice(0, 500) },
         );
-        return json({
-          success: false,
-          error: "Return processing failed. Please try again or contact support.",
-          retryable: true,
-        }, 502, req);
+        const code = errMessage.includes("rate") || errMessage.includes("throttle") ? ERROR_CODES.RATE_LIMIT : ERROR_CODES.INTERNAL_ERROR;
+        const category = errMessage.includes("rate") || errMessage.includes("throttle") ? ErrorCategory.RATE_LIMIT : ErrorCategory.GATEWAY_ERROR;
+        return respondWithError(new PaymentError(category, code, "Return processing failed. Please try again or contact support.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       reversalId = (await revRes.json())?.id ?? null;
 
@@ -361,11 +360,7 @@ Deno.serve(async (req) => {
           "[vendor-approve-return] reversal succeeded but id persist FAILED — reconcile manually",
           { order_item_id: item.id, reversal_id: reversalId, code: revPersistErr.code },
         );
-        return json({
-          success: false,
-          error: "Return processing failed. Please try again or contact support.",
-          retryable: true,
-        }, 500, req);
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
     } else if (!transferProcessed) {
       console.log("[vendor-approve-return] no processed transfer; skipping reversal", {
@@ -400,11 +395,7 @@ Deno.serve(async (req) => {
           message: paymentErr.message,
         });
         await releaseLock(service, item.id, idempotencyKey, "payment-db-lookup-error");
-        return json({
-          success: false,
-          error: "Return processing failed. Please try again or contact support.",
-          retryable: true,
-        }, 500, req);
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       if (!payment?.razorpay_payment_id) {
@@ -430,6 +421,7 @@ Deno.serve(async (req) => {
         );
         if (!refRes.ok) {
           const errText = await refRes.text();
+          const errMessage = (errText ?? "").toLowerCase();
           console.error(
             "[vendor-approve-return] REFUND FAILED after successful reversal — PARTIAL FAILURE",
             {
@@ -441,11 +433,9 @@ Deno.serve(async (req) => {
               body: errText.slice(0, 500),
             },
           );
-          return json({
-            success: false,
-            error: "Return processing failed. Please try again or contact support.",
-            retryable: true,
-          }, 502, req);
+          const code = errMessage.includes("rate") || errMessage.includes("throttle") ? ERROR_CODES.RATE_LIMIT : ERROR_CODES.INTERNAL_ERROR;
+          const category = errMessage.includes("rate") || errMessage.includes("throttle") ? ErrorCategory.RATE_LIMIT : ErrorCategory.GATEWAY_ERROR;
+          return respondWithError(new PaymentError(category, code, "Return processing failed. Please try again or contact support.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
         }
         refundId = (await refRes.json())?.id ?? null;
 
@@ -458,11 +448,7 @@ Deno.serve(async (req) => {
             "[vendor-approve-return] refund succeeded but id persist FAILED — reconcile manually",
             { order_item_id: item.id, refund_id: refundId, code: refPersistErr.code },
           );
-          return json({
-            success: false,
-            error: "Return processing failed. Please try again or contact support.",
-            retryable: true,
-          }, 500, req);
+          return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
         }
       }
     }
@@ -470,11 +456,11 @@ Deno.serve(async (req) => {
     // ============================================================
     // STEP 3 — DB reversal via RPC (transitions processing → approved)
     // ============================================================
-    const { error: rpcErr } = await service.rpc("vendor_approve_return", { _order_item_id: item.id, _caller_vendor_id: item.vendor_id });
-    if (rpcErr) {
-      const mappedErr = handleRpcError(rpcErr, "Failed to commit return state");
-      console.error("[vendor-approve-return] Final state commit failed", rpcErr);
-      return json({ error: mappedErr.error }, mappedErr.status, req);
+    const { data: rpcData, error: rpcErr } = await service.rpc("vendor_approve_return", { _order_item_id: item.id, _caller_vendor_id: item.vendor_id });
+    if (rpcErr || (rpcData && rpcData.success === false)) {
+      const mappedErr = normalizeRpcError(rpcErr || rpcData);
+      console.error("[vendor-approve-return] Final state commit failed", rpcErr || rpcData);
+      return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     return json({
@@ -487,6 +473,6 @@ Deno.serve(async (req) => {
     }, 200, req);
   } catch (err) {
     console.error("[vendor-approve-return] unexpected error", (err as Error).message);
-    return json({ error: "Internal server error" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

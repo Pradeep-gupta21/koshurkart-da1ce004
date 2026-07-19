@@ -1,10 +1,13 @@
 // Vendor payment setup – handles GET (fetch current), POST/PUT (upsert).
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 // Authenticated vendor-only via ownership check.
 // Fixes: #6 (LIMIT 1), #7 (enum constants), #8/#11 (error vs null),
 //        #9 (CORS PUT), #10 (atomic RPC)
 // deno-lint-ignore-file no-explicit-any no-import-prefix
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
-import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 /* ─────────────────── CORS ────────────────────────────────────────── */
 
@@ -144,7 +147,7 @@ Deno.serve(async (req) => {
     /* ── Auth ─────────────────────────────────────────────────────── */
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Unauthorized" }, 401, req);
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const anon = createClient(
@@ -154,7 +157,7 @@ Deno.serve(async (req) => {
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
     if (userError || !user) {
-      return json({ error: "Unauthorized" }, 401, req);
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     /* ── Get vendor ID for this user ─────────────────────────────── */
@@ -174,10 +177,10 @@ Deno.serve(async (req) => {
     // #8/#11: Distinguish query error from null result
     if (vendorErr) {
       console.error("Vendor query failed:", vendorErr.message);
-      return json({ error: "Failed to look up vendor record", details: vendorErr.message }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to look up vendor record", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     if (!vendorRow) {
-      return json({ error: "Vendor not found" }, 404, req);
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Vendor not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const vendorId = vendorRow.id;
@@ -194,7 +197,7 @@ Deno.serve(async (req) => {
 
       if (setupErr) {
         console.error("Payment setup query failed:", setupErr.message);
-        return json({ error: "Failed to load payment setup", details: setupErr.message }, 500, req);
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to load payment setup", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       // setup === null means no setup exists yet — that's a valid state, return null
@@ -259,7 +262,7 @@ Deno.serve(async (req) => {
         for (const e of errors) {
           fieldErrors[e.field] = e.message;
         }
-        return json({ error: "Validation failed", errors, fieldErrors }, 400, req);
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Validation failed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       // #10: Use atomic RPC instead of two separate queries
@@ -276,21 +279,19 @@ Deno.serve(async (req) => {
       );
 
       if (rpcError) {
-        const mappedErr = handleRpcError(rpcError, "Failed to save payment setup");
-        if (mappedErr.status === 500) {
-          console.error("Atomic upsert RPC failed:", rpcError.code, rpcError.message);
-        }
-        return json({ error: mappedErr.error, details: rpcError.message }, mappedErr.status, req);
+        const mappedErr = normalizeRpcError(rpcError);
+        console.error("Atomic upsert RPC failed:", rpcError.code, rpcError.message);
+        return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       // The RPC returns jsonb — guard against null/undefined/invalid responses
       if (!rpcResult || typeof rpcResult !== "object") {
         console.error("RPC returned invalid response:", JSON.stringify(rpcResult));
-        return json({ error: "RPC returned invalid response", code: "INVALID_RPC_RESPONSE" }, 500, req);
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "RPC returned invalid response", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       if (!(rpcResult as any).success) {
         console.error("RPC returned failure:", JSON.stringify(rpcResult));
-        return json({ error: (rpcResult as any).error ?? "Payment setup failed", code: "PAYMENT_SETUP_FAILED" }, 400, req);
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, (rpcResult as any).error ?? "Payment setup failed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
 
       console.log(`Payment setup saved for vendor ${vendorId}:`, JSON.stringify({
@@ -305,9 +306,9 @@ Deno.serve(async (req) => {
       }, 200, req);
     }
 
-    return json({ error: "Method not allowed" }, 405, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   } catch (err) {
     console.error("vendor-setup-payment error:", (err as Error).message);
-    return json({ error: "Internal server error" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
@@ -91,9 +94,7 @@ Deno.serve(async (req) => {
       const parsed = PincodeSchema.safeParse(body);
       if (!parsed.success) {
         log(400, { reason: "invalid_pincode" });
-        return new Response(JSON.stringify({ error: "Invalid pincode" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid pincode", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
       const { data, error } = await supabase
         .from("serviceable_pincodes")
@@ -162,9 +163,7 @@ Deno.serve(async (req) => {
       const lat = Number(body?.lat);
       const lng = Number(body?.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return new Response(JSON.stringify({ error: "Invalid coordinates" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid coordinates", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
       try {
         const r = await fetch(
@@ -194,9 +193,7 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error(JSON.stringify({ fn: "location", action: "reverse-geocode", err: (e as Error).message }));
         log(502, { error: (e as Error).message });
-        return new Response(JSON.stringify({ error: "Reverse geocoding failed" }), {
-          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Reverse geocoding failed", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
     }
 
@@ -228,14 +225,10 @@ Deno.serve(async (req) => {
     }
 
     log(404);
-    return new Response(JSON.stringify({ error: "Not found" }), {
-      status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Not found", false), { ...corsHeaders, "Content-Type": "application/json" });
   } catch (e) {
     console.error(JSON.stringify({ fn: "location", action: path, err: (e as Error).message }));
     log(500, { error: "Internal server error" });
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

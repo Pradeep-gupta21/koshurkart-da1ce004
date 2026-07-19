@@ -1,4 +1,7 @@
 // User-authenticated UPI confirmation. Replaces the client-side update that
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 // failed silently due to RLS (no user UPDATE policy on payments).
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
@@ -14,10 +17,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const anon = createClient(
@@ -28,10 +28,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: uerr } = await anon.auth.getUser();
     if (uerr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -42,10 +39,7 @@ Deno.serve(async (req) => {
     };
 
     if (!paymentId || !orderId) {
-      return new Response(JSON.stringify({ error: "paymentId and orderId required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "paymentId and orderId required", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     // Validate proofUrl: must be a Supabase Storage URL for the payment-proofs bucket.
@@ -63,10 +57,7 @@ Deno.serve(async (req) => {
         ok = false;
       }
       if (!ok) {
-        return new Response(JSON.stringify({ error: "Invalid proofUrl" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid proofUrl", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
     }
 
@@ -83,28 +74,16 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (fErr || !payment) {
-      return new Response(JSON.stringify({ error: "Payment not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Payment not found", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (payment.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (payment.order_id !== orderId) {
-      return new Response(JSON.stringify({ error: "Order mismatch" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Order mismatch", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (payment.payment_method !== "upi") {
-      return new Response(JSON.stringify({ error: "Not a UPI payment" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Not a UPI payment", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (payment.payment_status === "success") {
       return new Response(JSON.stringify({ ok: true, idempotent: true }), {
@@ -119,10 +98,7 @@ Deno.serve(async (req) => {
     const { error: upErr } = await service.from("payments").update(updates).eq("id", paymentId);
     if (upErr) {
       console.error("UPI update failed", upErr.code);
-      return new Response(JSON.stringify({ error: "Failed to update payment" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to update payment", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     await service.from("orders")
@@ -135,9 +111,6 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("confirm-upi-payment error:", (err as Error).message);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

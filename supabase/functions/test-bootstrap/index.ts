@@ -4,7 +4,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
-import { createErrorResponse } from "../../../src/shared/errorResponse.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -74,9 +75,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   if (req.headers.get("x-test-secret") !== TEST_SECRET) {
-    return new Response(JSON.stringify(createErrorResponse("forbidden", ERROR_CODES.FORBIDDEN, 403)), { status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 
   try {
@@ -138,8 +137,6 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    return new Response(JSON.stringify(createErrorResponse(String((e as any)?.message ?? e), ERROR_CODES.INTERNAL_ERROR, 500)), { status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, String((e as any)?.message ?? e), false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

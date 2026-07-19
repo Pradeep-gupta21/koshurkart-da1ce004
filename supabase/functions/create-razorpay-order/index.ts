@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,10 +15,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const supabase = createClient(
@@ -26,18 +26,12 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { orderId } = await req.json();
     if (!orderId) {
-      return new Response(JSON.stringify({ error: "orderId is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "orderId is required", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     // SERVER-SIDE source of truth: re-fetch the order total. Never trust client `amount`.
@@ -54,47 +48,29 @@ Deno.serve(async (req) => {
 
     if (orderErr) {
       console.error("[create-razorpay-order] order DB lookup error", orderErr.code, orderErr.message);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (!order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Order not found", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (order.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const amount = Number(order.total_amount);
     if (!amount || amount <= 0) {
-      return new Response(JSON.stringify({ error: "Invalid order amount" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid order amount", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!keyId || !keySecret) {
-      return new Response(JSON.stringify({ error: "Razorpay credentials not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay credentials not configured", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const amountPaise = Math.round(amount * 100);
     if (amountPaise < 100) {
-      return new Response(JSON.stringify({ error: "Amount must be at least ₹1" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Amount must be at least ₹1", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     // Razorpay receipt: max 40 chars. UUID is 36 — safe, but truncate defensively.
@@ -123,10 +99,7 @@ Deno.serve(async (req) => {
         errorCode = parsed?.error?.code || errorCode;
       } catch { /* keep default */ }
       console.error("Razorpay API error:", razorpayRes.status, errorCode);
-      return new Response(
-        JSON.stringify({ error: parsedError, status: razorpayRes.status }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, parsedError, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const razorpayOrder = await razorpayRes.json();
@@ -142,9 +115,6 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("create-razorpay-order error:", (err as Error).message);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

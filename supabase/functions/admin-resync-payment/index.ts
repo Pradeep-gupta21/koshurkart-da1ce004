@@ -1,4 +1,7 @@
 // Admin tool: re-fetches a payment from Razorpay and reconciles status server-side.
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 // Admin-only via has_role check.
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
@@ -14,9 +17,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const anon = createClient(
@@ -26,9 +27,7 @@ Deno.serve(async (req) => {
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const service = createClient(
@@ -38,24 +37,18 @@ Deno.serve(async (req) => {
 
     const { data: isAdmin } = await service.rpc("has_role", { _user_id: user.id, _role: "admin" });
     if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { paymentId } = await req.json();
     if (!paymentId) {
-      return new Response(JSON.stringify({ error: "paymentId is required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "paymentId is required", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!keyId || !keySecret) {
-      return new Response(JSON.stringify({ error: "Razorpay credentials not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay credentials not configured", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { data: payment, error: payErr } = await service
@@ -66,40 +59,40 @@ Deno.serve(async (req) => {
 
     if (payErr) {
       console.error("[admin-resync-payment] payment DB lookup error", payErr.code, payErr.message);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (!payment) {
-      return new Response(JSON.stringify({ error: "Payment not found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Payment not found", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     if (!payment.razorpay_order_id) {
-      return new Response(JSON.stringify({ error: "Payment has no Razorpay order id" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Payment has no Razorpay order id", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const auth = "Basic " + btoa(`${keyId}:${keySecret}`);
 
-    // Fetch all payments for the Razorpay order
-    const rpRes = await fetch(
-      `https://api.razorpay.com/v1/orders/${payment.razorpay_order_id}/payments`,
-      { headers: { Authorization: auth } },
-    );
-    if (!rpRes.ok) {
-      const t = await rpRes.text();
-      let errorCode = "UNKNOWN";
-      try {
-        const parsed = JSON.parse(t);
-        errorCode = parsed?.error?.code || errorCode;
-      } catch { /* keep default */ }
-      console.error("Razorpay fetch failed", rpRes.status, errorCode);
-      return new Response(JSON.stringify({ error: "Razorpay fetch failed" }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let rpRes;
+    try {
+      rpRes = await fetch(
+        `https://api.razorpay.com/v1/orders/${payment.razorpay_order_id}/payments`,
+        { headers: { Authorization: auth } },
+      );
+      if (!rpRes.ok) {
+        const t = await rpRes.text();
+        let errorCode = "UNKNOWN";
+        try {
+          const parsed = JSON.parse(t);
+          errorCode = parsed?.error?.code || errorCode;
+        } catch { /* keep default */ }
+        throw new Error(`Razorpay API error: ${rpRes.status} ${errorCode} ${t}`);
+      }
+    } catch (err) {
+      const msg = (err as Error).message.toLowerCase();
+      console.error("Razorpay fetch failed:", msg);
+      if (msg.includes("rate") || msg.includes("throttle") || msg.includes("429")) {
+        return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Gateway rate limited. Please try again later.", true), { ...corsHeaders, "Content-Type": "application/json" });
+      }
+      return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay fetch failed", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     const rpBody = await rpRes.json();
     const rpPayments: any[] = rpBody?.items ?? [];
@@ -146,9 +139,7 @@ Deno.serve(async (req) => {
       const { error: upErr } = await service.from("payments").update(updateFields).eq("id", payment.id);
       if (upErr) {
         console.error("Update failed", upErr);
-        return new Response(JSON.stringify({ error: "Update failed" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Update failed", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
       if (newStatus === "success") {
         await service.from("orders").update({
@@ -172,8 +163,6 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("admin-resync-payment error:", (err as Error).message);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

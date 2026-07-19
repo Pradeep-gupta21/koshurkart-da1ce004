@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 
 // Simple RFC-4122 UUID v4 regex for request-level validation.
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -49,10 +52,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const anonClient = createClient(
@@ -63,54 +63,33 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: userError } = await anonClient.auth.getUser();
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentId, orderId } =
       await req.json();
 
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !paymentId || !orderId) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Missing required fields", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    // Fix 3: Validate orderId and paymentId as UUIDs before any DB query.
-    // A non-UUID value causes Postgres to throw a cast error instead of returning
-    // an empty row, which would surface as an opaque 500 rather than a clear 400.
     if (!UUID_REGEX.test(orderId)) {
-      return new Response(
-        JSON.stringify({ error: `Invalid order ID format. Expected UUID, got: "${orderId}"`, errorCode: "INVALID_ORDER_ID_FORMAT" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_ORDER_ID_FORMAT, `Invalid order ID format. Expected UUID, got: "${orderId}"`, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (!UUID_REGEX.test(paymentId)) {
-      return new Response(
-        JSON.stringify({ error: `Invalid payment ID format. Expected UUID, got: "${paymentId}"`, errorCode: "INVALID_PAYMENT_ID_FORMAT" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_PAYMENT_ID_FORMAT, `Invalid payment ID format. Expected UUID, got: "${paymentId}"`, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
     const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!keyId || !keySecret) {
-      return new Response(JSON.stringify({ error: "Razorpay credentials not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Razorpay credentials not configured", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const isValid = await verifySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature, keySecret);
     if (!isValid) {
       console.error("Signature verification failed for order", redact(razorpayOrderId));
-      return new Response(
-        JSON.stringify({ error: "Payment verification failed: invalid signature" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Payment verification failed: invalid signature", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const service = createClient(
@@ -118,7 +97,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Fetch local payment + order; never trust client-supplied amounts
     const { data: paymentRow, error: payFetchErr } = await service
       .from("payments")
       .select("id, order_id, user_id, amount, payment_status, razorpay_payment_id")
@@ -127,33 +105,20 @@ Deno.serve(async (req) => {
 
     if (payFetchErr) {
       console.error("[verify-razorpay-payment] payment DB lookup error", payFetchErr.code, payFetchErr.message);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     if (!paymentRow) {
-      return new Response(JSON.stringify({ error: "Payment not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Payment not found", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     if (paymentRow.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     if (paymentRow.order_id !== orderId) {
-      return new Response(JSON.stringify({ error: "Order mismatch" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Order mismatch", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    // Idempotency: already success
     if (paymentRow.payment_status === "success") {
       return new Response(
         JSON.stringify({ success: true, message: "Already verified", idempotent: true }),
@@ -161,40 +126,35 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch the Razorpay order to verify the captured amount + currency
-    const rpRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpayOrderId}`, {
-      headers: { Authorization: "Basic " + btoa(`${keyId}:${keySecret}`) },
-    });
-    if (!rpRes.ok) {
-      // Fix 4: Differentiate 4xx (definitive client error) from 5xx (ambiguous).
-      // On 5xx we do NOT update any local state — the webhook will reconcile.
-      // On 4xx the request is definitively invalid and we can return a clear error.
-      const gwStatus = rpRes.status;
-      if (gwStatus >= 400 && gwStatus < 500) {
-        console.error("[verify-razorpay-payment] Razorpay order fetch 4xx (client error)", gwStatus);
-        return new Response(
-          JSON.stringify({ error: "Invalid Razorpay order reference", errorCode: "RAZORPAY_CLIENT_ERROR", retryable: false }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+    let rpRes;
+    try {
+      rpRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpayOrderId}`, {
+        headers: { Authorization: "Basic " + btoa(`${keyId}:${keySecret}`) },
+      });
+      if (!rpRes.ok) {
+        const errBody = await rpRes.text();
+        throw new Error(`Razorpay API error: ${rpRes.status} ${errBody}`);
       }
-      // 5xx: Razorpay may have processed but returned an error. Do NOT touch local
-      // state. Let the webhook reconcile. Return a retryable 502.
-      console.error("[verify-razorpay-payment] Razorpay order fetch 5xx (ambiguous)", gwStatus);
-      return new Response(
-        JSON.stringify({ error: "Payment gateway error. Status pending verification.", errorCode: "RAZORPAY_SERVER_ERROR", retryable: true }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    } catch (err) {
+      const msg = (err as Error).message.toLowerCase();
+      console.error("Razorpay order fetch failed:", msg);
+      if (msg.includes("rate") || msg.includes("throttle") || msg.includes("429")) {
+        return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Gateway rate limited. Please try again later.", true), { ...corsHeaders, "Content-Type": "application/json" });
+      }
+      
+      const match = msg.match(/razorpay api error: (\d+)/);
+      const gwStatus = match ? parseInt(match[1], 10) : 500;
+
+      if (gwStatus >= 400 && gwStatus < 500) {
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.RAZORPAY_CLIENT_ERROR, "Invalid Razorpay order reference", false), { ...corsHeaders, "Content-Type": "application/json" });
+      }
+      return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.RAZORPAY_SERVER_ERROR, "Payment gateway error. Status pending verification.", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     const rpOrder = await rpRes.json();
 
-    // Razorpay order status must be 'paid' once the user finishes the modal flow.
-    // 'attempted' or 'created' means the user closed it before capture.
     if (rpOrder.status !== "paid") {
       console.error("Razorpay order not paid", { rpOrderId: razorpayOrderId, status: rpOrder.status });
-      return new Response(JSON.stringify({ error: "Payment not captured by gateway" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Payment not captured by gateway", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const expectedPaise = Math.round(Number(paymentRow.amount) * 100);
@@ -210,14 +170,9 @@ Deno.serve(async (req) => {
           currency: rpOrder.currency,
         },
       });
-      return new Response(JSON.stringify({ error: "Payment amount mismatch" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Payment amount mismatch", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    // Update payment — unique index on razorpay_payment_id + one_success_per_order
-    // protects against races. 23505 means another writer (e.g. webhook) won.
     const { error: payErr } = await service
       .from("payments")
       .update({
@@ -230,7 +185,6 @@ Deno.serve(async (req) => {
       .eq("id", paymentId);
 
     if (payErr) {
-      // Duplicate (already credited via webhook) → treat as success
       if ((payErr as { code?: string }).code === "23505") {
         return new Response(
           JSON.stringify({ success: true, idempotent: true, message: "Already settled" }),
@@ -238,10 +192,7 @@ Deno.serve(async (req) => {
         );
       }
       console.error("Payment update failed", payErr.code);
-      return new Response(JSON.stringify({ error: "Failed to update payment" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to update payment", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { error: ordErr } = await service
@@ -257,25 +208,12 @@ Deno.serve(async (req) => {
       p_metadata: { razorpay_payment_id: razorpayPaymentId, razorpay_order_id: razorpayOrderId },
     });
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Route splits are now attached UPFRONT at order creation time
-    // (see create-checkout `transfers` block on the Razorpay order).
-    // Razorpay executes the split automatically on capture, so we do NOT
-    // create payment-level transfers here — doing so would double-pay.
-    // ─────────────────────────────────────────────────────────────────────
-
-
-
-
     return new Response(
       JSON.stringify({ success: true, message: "Payment verified and confirmed" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("verify-razorpay-payment error:", (err as Error).message);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

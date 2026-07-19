@@ -1,4 +1,7 @@
 // Payment reconciliation audit – admin-only edge function.
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 // Returns structured audit data across vendors, orders, transfers, payouts, and ledger.
 // deno-lint-ignore-file no-explicit-any ban-unused-ignore
 // deno-lint-ignore no-import-prefix
@@ -37,7 +40,7 @@ Deno.serve(async (req) => {
   try {
     /* ── Auth ─────────────────────────────────────────────────────────── */
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
+    if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
 
     const anon = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -45,10 +48,10 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
     const { data: { user }, error: userError } = await anon.auth.getUser();
-    if (userError || !user) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
+    if (userError || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
 
     const { data: isAdmin } = await anon.rpc("has_role", { _user_id: user.id, _role: "admin" });
-    if (!isAdmin) return json({ error: "Forbidden", errorCode: "FORBIDDEN" }, 403, req);
+    if (!isAdmin) return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
 
     /* ── Service client (bypasses RLS) ────────────────────────────────── */
     const svc = createClient(
@@ -69,7 +72,7 @@ Deno.serve(async (req) => {
 
     if (vendorErr) {
       console.error("vendors query failed:", vendorErr.message);
-      return json({ error: "Failed to query vendors", errorCode: "INTERNAL_ERROR" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to query vendors", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const vendorIds = (vendors ?? []).map((v: any) => v.id);
@@ -326,6 +329,6 @@ Deno.serve(async (req) => {
     return json(response, 200, req);
   } catch (err) {
     console.error("audit-payment-reconciliation error:", (err as Error).message);
-    return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

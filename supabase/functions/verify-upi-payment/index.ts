@@ -1,62 +1,65 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { validateActionRequest } from "../_shared/validation.ts";
-import { handleRpcError } from "../_shared/rpcErrorMapper.ts";
+import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 const ALLOWED_ORIGINS = [
   "https://koshurkart.com",
   "https://www.koshurkart.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
 ];
-const PRIMARY_ORIGIN = "https://koshurkart.com";
-const CORS_ALLOW_HEADERS =
-  "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") ?? "";
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : PRIMARY_ORIGIN;
-  return {
-    "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": CORS_ALLOW_HEADERS,
-    "Vary": "Origin",
-  };
-}
-
-const json = (body: unknown, status = 200, req: Request) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-  });
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface Body {
   paymentId: string;
   orderId: string;
-  action: "approve" | "reject";
-  transactionId?: string;
-  note?: string;
+  action: "verify" | "reject";
+  transactionId?: string; // required if verify
+  note?: string; // required if reject
+}
+
+function json(data: any, status = 200, req: Request) {
+  const origin = req.headers.get("origin") || "";
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Access-Control-Allow-Origin": allowOrigin, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
-  if (req.method !== "POST") return json({ error: "Method not allowed", errorCode: "METHOD_NOT_ALLOWED" }, 405, req);
+  if (req.method === "OPTIONS") {
+    const origin = req.headers.get("origin") || "";
+    const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+    return new Response("ok", {
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": allowOrigin },
+    });
+  }
 
   try {
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE) {
+      console.error("[verify-upi-payment] Missing environment variables");
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
+    }
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
-
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Validate JWT and extract user
-    const userClient = createClient(SUPABASE_URL, ANON, {
+    if (!authHeader?.startsWith("Bearer ")) {
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+    }
+    const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user?.id) return json({ error: "Unauthorized", errorCode: "UNAUTHORIZED" }, 401, req);
-    const userId = userData.user.id;
+    const { data: { user }, error: userError } = await anon.auth.getUser();
+    if (userError || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+    const userId = user.id;
 
-    // Service-role client for admin check + writes
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
     const { data: isAdmin, error: roleErr } = await admin.rpc("has_role", {
@@ -64,16 +67,16 @@ Deno.serve(async (req) => {
       _role: "admin",
     });
     if (roleErr) {
-      const mappedErr = handleRpcError(roleErr, "Failed to verify admin role");
-      return json({ error: mappedErr.error, errorCode: mappedErr.errorCode }, mappedErr.status, req);
+      const mappedErr = normalizeRpcError(roleErr);
+      return respondWithError(mappedErr, { ...corsHeaders, "Content-Type": "application/json" });
     }
-    if (!isAdmin) return json({ error: "Forbidden: admin only", errorCode: "FORBIDDEN" }, 403, req);
+    if (!isAdmin) return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden: admin only", false), { ...corsHeaders, "Content-Type": "application/json" });
 
     let body: Body;
     try {
       body = await req.json();
     } catch {
-      return json({ error: "Invalid JSON", errorCode: "BAD_REQUEST" }, 400, req);
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const valErr = validateActionRequest(body, true);
@@ -81,7 +84,6 @@ Deno.serve(async (req) => {
       return json(valErr, 400, req);
     }
 
-    // Verify payment exists and is UPI before executing transition (defense in depth)
     const { data: payment, error: payErr } = await admin
       .from("payments")
       .select("id, order_id, payment_method, payment_status")
@@ -91,12 +93,11 @@ Deno.serve(async (req) => {
 
     if (payErr) {
       console.error("[verify-upi-payment] payment DB lookup error", payErr.code, payErr.message);
-      return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
-    if (!payment) return json({ error: "Payment not found", errorCode: "NOT_FOUND" }, 404, req);
-    if (payment.payment_method !== "upi") return json({ error: "Not a UPI payment", errorCode: "BAD_REQUEST" }, 400, req);
+    if (!payment) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.NOT_FOUND, "Payment not found", false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (payment.payment_method !== "upi") return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Not a UPI payment", false), { ...corsHeaders, "Content-Type": "application/json" });
 
-    // Call secure, atomic database transaction for payment verification
     const { data: result, error: rpcErr } = await admin.rpc("admin_process_payment", {
       p_payment_id: body.paymentId,
       p_admin_id: userId,
@@ -106,16 +107,14 @@ Deno.serve(async (req) => {
     });
 
     if (rpcErr) {
-      const mappedErr = handleRpcError(rpcErr);
-      if (mappedErr.status === 500) {
-        console.error("[verify-upi-payment] admin_process_payment RPC error:", rpcErr.code, rpcErr.message);
-      }
-      return json({ error: mappedErr.error, errorCode: mappedErr.errorCode }, mappedErr.status, req);
+      const mappedErr = normalizeRpcError(rpcErr);
+      console.error("[verify-upi-payment] admin_process_payment RPC error:", rpcErr.code, rpcErr.message);
+      return respondWithError(mappedErr, { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     return json({ success: true, ...result }, 200, req);
   } catch (err) {
     console.error("[verify-upi-payment] unexpected error:", (err as Error).message);
-    return json({ error: "Internal server error occurred.", errorCode: "INTERNAL_ERROR" }, 500, req);
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

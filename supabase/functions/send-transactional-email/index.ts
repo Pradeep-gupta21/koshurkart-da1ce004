@@ -1,4 +1,7 @@
 // Brevo transactional email sender (via Lovable connector gateway)
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 // Supports two template types:
 //   - order_confirmation : sent after a successful purchase
 //   - return_requested   : sent when a customer submits a return request
@@ -152,10 +155,7 @@ Deno.serve(async (req) => {
 
     const args = (await req.json()) as SendArgs;
     if (!args?.type) {
-      return new Response(JSON.stringify({ error: "type required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "type required", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const admin = createClient(supabaseUrl, serviceKey);
@@ -207,10 +207,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
     const userId = userData.user.id;
 
@@ -254,10 +251,7 @@ Deno.serve(async (req) => {
         .single();
       if (error || !order) throw new Error(error?.message ?? "Order not found");
       if (order.user_id !== userId) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
@@ -316,10 +310,7 @@ Deno.serve(async (req) => {
       if (error || !item) throw new Error(error?.message ?? "Item not found");
       const order = item.orders as any;
       if (order.user_id !== userId) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
       }
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
@@ -331,16 +322,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown type" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Unknown type", false), { ...corsHeaders, "Content-Type": "application/json" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("send-transactional-email.error", msg);
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, msg, false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });

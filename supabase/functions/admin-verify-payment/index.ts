@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { validateActionRequest } from '../_shared/validation.ts';
-import { handleRpcError } from '../_shared/rpcErrorMapper.ts';
+import { normalizeRpcError } from '../../../src/shared/rpcErrorNormalizer.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -22,10 +25,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, 'Unauthorized', false), { ...corsHeaders, 'Content-Type': 'application/json' });
     }
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -38,10 +38,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user?.id) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, 'Unauthorized', false), { ...corsHeaders, 'Content-Type': 'application/json' });
     }
     const userId = userData.user.id;
 
@@ -53,27 +50,18 @@ Deno.serve(async (req) => {
       _role: 'admin',
     });
     if (roleErr) {
-      const mappedErr = handleRpcError(roleErr, "Failed to verify admin role");
-      return new Response(JSON.stringify({ error: mappedErr.error }), {
-        status: mappedErr.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      const mappedErr = normalizeRpcError(roleErr);
+      return respondWithError(mappedErr, { ...corsHeaders, 'Content-Type': 'application/json' });
     }
     if (!isAdmin) {
-      return new Response(JSON.stringify({ error: 'Forbidden: admin only' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, 'Forbidden: admin only', false), { ...corsHeaders, 'Content-Type': 'application/json' });
     }
 
     let body: Body;
     try {
       body = (await req.json()) as Body;
     } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, 'Invalid JSON', false), { ...corsHeaders, 'Content-Type': 'application/json' });
     }
 
     const valErr = validateActionRequest(body, true);
@@ -94,11 +82,8 @@ Deno.serve(async (req) => {
     });
 
     if (rpcErr) {
-      const mappedErr = handleRpcError(rpcErr);
-      return new Response(JSON.stringify({ error: mappedErr.error }), {
-        status: mappedErr.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      const mappedErr = normalizeRpcError(rpcErr);
+      return respondWithError(mappedErr, { ...corsHeaders, 'Content-Type': 'application/json' });
     }
 
     return new Response(JSON.stringify(result), {
@@ -108,9 +93,6 @@ Deno.serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal error';
     console.error('admin-verify-payment error:', message);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, 'Internal server error', false), { ...corsHeaders, 'Content-Type': 'application/json' });
   }
 });

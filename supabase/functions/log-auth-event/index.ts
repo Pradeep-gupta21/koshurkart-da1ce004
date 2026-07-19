@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
+import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
+import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { z } from "npm:zod@3.23.8";
 
@@ -17,10 +20,7 @@ Deno.serve(async (req) => {
     const json = await req.json().catch(() => ({}));
     const parsed = BodySchema.safeParse(json);
     if (!parsed.success) {
-      return new Response(
-        JSON.stringify({ error: parsed.error.flatten().fieldErrors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
     const { event_type, email, success, metadata, user_agent } = parsed.data;
@@ -78,9 +78,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("log-auth-event error:", msg);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
   }
 });
