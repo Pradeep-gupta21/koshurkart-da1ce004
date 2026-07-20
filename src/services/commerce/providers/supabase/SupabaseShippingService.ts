@@ -1,6 +1,6 @@
 import { IShippingService } from '../../interfaces/IShippingService';
 import { Result, CommerceError } from '../../types/Result';
-import { ShipmentEvent, ShippingStatus } from '@/types';
+import { ShipmentEvent, ShippingStatus } from '@/types/order';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseShippingService implements IShippingService {

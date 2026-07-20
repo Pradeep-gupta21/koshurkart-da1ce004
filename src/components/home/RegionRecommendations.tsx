@@ -20,7 +20,7 @@ const RegionRecommendations = () => {
     queryKey: ["products", "region-ranked", 12, userState ?? ""],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getRanked({ limit: 12, userState });
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     staleTime: 5 * 60_000,

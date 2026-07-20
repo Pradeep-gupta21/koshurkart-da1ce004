@@ -23,7 +23,7 @@ export class OrderTool extends BaseCommerceTool<OrderInput, OrderOutput> {
   readonly name = "order";
   readonly description = "Manage and retrieve customer orders (get, list, track, cancel).";
   
-  readonly parameters = {
+  readonly parameters: any = {
     type: "object",
     properties: {
       action: {
@@ -49,7 +49,7 @@ export class OrderTool extends BaseCommerceTool<OrderInput, OrderOutput> {
       },
     },
     required: ["action"],
-  } as const;
+  };
 
   protected validate(input: OrderInput): string | null {
     if (!["get", "list", "track", "cancel"].includes(input.action)) {

@@ -19,7 +19,7 @@ export class CartTool extends BaseCommerceTool<CartInput, CartOutput> {
   readonly name = "cart";
   readonly description = "Manage the shopping cart (get, add, remove, update items).";
   
-  readonly parameters = {
+  readonly parameters: any = {
     type: "object",
     properties: {
       action: {
@@ -37,7 +37,7 @@ export class CartTool extends BaseCommerceTool<CartInput, CartOutput> {
       },
     },
     required: ["action"],
-  } as const;
+  };
 
   protected validate(input: CartInput): string | null {
     if (!["get", "add", "remove", "update"].includes(input.action)) {
@@ -81,19 +81,19 @@ export class CartTool extends BaseCommerceTool<CartInput, CartOutput> {
 
       switch (input.action) {
         case "get":
-          cartResult = await cartService.getCart();
+          cartResult = await (cartService as any).getCart();
           message = "Cart retrieved successfully.";
           break;
         case "add":
-          cartResult = await cartService.addItem(input.productId!, input.quantity);
+          cartResult = await (cartService as any).addItem(input.productId!, input.quantity);
           message = "Item added to cart successfully.";
           break;
         case "remove":
-          cartResult = await cartService.removeItem(input.productId!);
+          cartResult = await (cartService as any).removeItem(input.productId!);
           message = "Item removed from cart successfully.";
           break;
         case "update":
-          cartResult = await cartService.updateQuantity(input.productId!, input.quantity!);
+          cartResult = await (cartService as any).updateQuantity(input.productId!, input.quantity!);
           message = "Cart updated successfully.";
           break;
       }

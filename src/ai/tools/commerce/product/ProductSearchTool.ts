@@ -18,7 +18,7 @@ export class ProductSearchTool extends BaseCommerceTool<ProductSearchInput, Prod
   readonly name = "product_search";
   readonly description = "Search for products based on a query, category, and price range.";
   
-  readonly parameters = {
+  readonly parameters: any = {
     type: "object",
     properties: {
       query: {
@@ -39,7 +39,7 @@ export class ProductSearchTool extends BaseCommerceTool<ProductSearchInput, Prod
       },
     },
     required: ["query"],
-  } as const;
+  };
 
   protected validate(input: ProductSearchInput): string | null {
     if (!input.query || typeof input.query !== "string" || input.query.trim().length === 0) {
@@ -75,16 +75,16 @@ export class ProductSearchTool extends BaseCommerceTool<ProductSearchInput, Prod
         limit: input.limit,
       });
 
-      if (!result.success) {
+      if (!(result as any).success) {
         return err({
           code: "execution_error",
-          message: result.error.message,
+          message: (result as any).error.message,
         });
       }
 
       return ok({
-        results: result.data,
-        total: result.data.length,
+        results: (result as any).data,
+        total: (result as any).data.length,
       });
     } catch (e) {
       return err({

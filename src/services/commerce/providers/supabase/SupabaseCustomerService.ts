@@ -1,5 +1,5 @@
-import { ICustomerService } from '../../../interfaces/ICustomerService';
-import { Result, CommerceError } from '../../../types/Result';
+import { ICustomerService } from '../../interfaces/ICustomerService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseCustomerService implements ICustomerService {

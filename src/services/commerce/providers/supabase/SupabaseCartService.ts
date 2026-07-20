@@ -1,5 +1,5 @@
-import { ICartService } from '../../../interfaces/ICartService';
-import { Result, CommerceError } from '../../../types/Result';
+import { ICartService } from '../../interfaces/ICartService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseCartService implements ICartService {

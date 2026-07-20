@@ -80,7 +80,7 @@ const SearchPage = () => {
     queryKey: ["categories"],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getCategories();
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
   });

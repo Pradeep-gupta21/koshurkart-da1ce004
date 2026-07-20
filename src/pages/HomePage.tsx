@@ -60,7 +60,7 @@ const HomePage = () => {
     queryKey: ['products', 'ai-recommended', user?.id],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getSmartRecommendations(user!.id, 8);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!user?.id,
@@ -70,7 +70,7 @@ const HomePage = () => {
     queryKey: ['products', 'because-viewed', user?.id],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getBecauseYouViewed(user!.id, 4);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!user?.id,
@@ -80,7 +80,7 @@ const HomePage = () => {
     queryKey: ['products', 'trending'],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getTrending(8);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
   });
@@ -89,7 +89,7 @@ const HomePage = () => {
     queryKey: ['products', 'ranked', userState ?? ''],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getRanked({ limit: 16, userState });
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
   });
@@ -98,7 +98,7 @@ const HomePage = () => {
     queryKey: ['vendors', 'featured'],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getVendors();
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
   });

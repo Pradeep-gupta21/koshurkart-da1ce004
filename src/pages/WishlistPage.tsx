@@ -28,7 +28,7 @@ const WishlistPage = () => {
     queryFn: async () => {
       if (idList.length === 0) return [];
       const result = await ServiceFactory.getProductService().getProductsByIds(idList);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: idList.length > 0,

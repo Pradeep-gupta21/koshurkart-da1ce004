@@ -106,7 +106,7 @@ const ProductDetailPage = () => {
     queryKey: ['product', slug],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getBySlug(slug!);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!slug,
@@ -155,7 +155,7 @@ const ProductDetailPage = () => {
     queryKey: ['products', 'ai-similar', product?.id],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getScoredSimilarProducts(product!.id, 4);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!product?.id,
@@ -165,7 +165,7 @@ const ProductDetailPage = () => {
     queryKey: ['products', 'bought-together', product?.id],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getFrequentlyBoughtTogether(product!.id, 4);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!product?.id,

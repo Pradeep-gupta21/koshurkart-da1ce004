@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { orderService } from "@/services/orderService";
 import { notificationService } from "@/services/notificationService";
 import { paymentService } from "@/services/paymentService";
+import { ServiceFactory } from "@/services/commerce/di/ServiceFactory";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -162,11 +163,12 @@ const ProfilePage = () => {
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [profRes, orderData, notifs] = await Promise.all([
+      const [profRes, orderResult, notifs] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
-        orderService.getUserOrders(user.id),
+        ServiceFactory.getOrderService().getCustomerOrders(user.id),
         notificationService.getUserNotifications(user.id, 10),
       ]);
+      const orderData = orderResult.success ? orderResult.data : [];
       setProfile(profRes.data);
       setOrders(orderData);
       setNotifications(notifs);
@@ -187,7 +189,8 @@ const ProfilePage = () => {
   // Real-time order status updates
   const handleOrderUpdate = useCallback(async () => {
     if (!user) return;
-    const orderData = await orderService.getUserOrders(user.id);
+    const orderResult = await ServiceFactory.getOrderService().getCustomerOrders(user.id);
+    const orderData = orderResult.success ? orderResult.data : [];
     setOrders(orderData);
     toast({ title: "📦 Order updated", description: "Your order status has changed." });
   }, [user, toast]);

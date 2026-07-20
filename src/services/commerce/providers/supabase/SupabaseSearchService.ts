@@ -26,7 +26,7 @@ export class SupabaseSearchService implements ISearchService {
           queryBuilder = queryBuilder.lte('price', options.filters.maxPrice);
         }
         if (options.filters.vendorId) {
-          queryBuilder = queryBuilder.eq('vendorId', options.filters.vendorId);
+          queryBuilder = queryBuilder.eq('vendor_id', options.filters.vendorId);
         }
       }
 

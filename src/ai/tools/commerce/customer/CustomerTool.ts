@@ -20,7 +20,7 @@ export class CustomerTool extends BaseCommerceTool<CustomerInput, CustomerOutput
   readonly name = "customer";
   readonly description = "Manage and retrieve customer information (profile, addresses, preferences).";
   
-  readonly parameters = {
+  readonly parameters: any = {
     type: "object",
     properties: {
       action: {
@@ -35,7 +35,7 @@ export class CustomerTool extends BaseCommerceTool<CustomerInput, CustomerOutput
       },
     },
     required: ["action"],
-  } as const;
+  };
 
   protected validate(input: CustomerInput): string | null {
     if (!["get_profile", "update_profile", "get_addresses", "get_preferences"].includes(input.action)) {

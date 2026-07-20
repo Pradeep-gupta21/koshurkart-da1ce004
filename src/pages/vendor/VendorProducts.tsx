@@ -63,7 +63,7 @@ const VendorProducts = () => {
     queryKey: ['vendor-products', vendorId],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getByVendor(vendorId);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!vendorId,
@@ -72,7 +72,7 @@ const VendorProducts = () => {
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
       const result = await ServiceFactory.getProductService().create(payload);
-      if (!result.success) throw result.error;
+      if (!result.success) throw (result as any).error;
       return result.data;
     },
     onSuccess: () => {
@@ -113,7 +113,7 @@ const VendorProducts = () => {
   const updateMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
       const result = await ServiceFactory.getProductService().update(id, updates);
-      if (!result.success) throw result.error;
+      if (!result.success) throw (result as any).error;
       return result.data;
     },
     onSuccess: () => {
@@ -154,7 +154,7 @@ const VendorProducts = () => {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const result = await ServiceFactory.getProductService().remove(id);
-      if (!result.success) throw result.error;
+      if (!result.success) throw (result as any).error;
       return result.data;
     },
     onSuccess: () => {
@@ -195,7 +195,7 @@ const VendorProducts = () => {
       const urls: string[] = [];
       for (const file of Array.from(files)) {
         const result = await ServiceFactory.getProductService().uploadImage(file, user.id);
-        if (!result.success) throw new Error(result.error.message);
+        if (!result.success) throw new Error((result as any).error?.message || "Error");
         urls.push(result.data);
       }
       setImageUrls(prev => [...prev, ...urls]);

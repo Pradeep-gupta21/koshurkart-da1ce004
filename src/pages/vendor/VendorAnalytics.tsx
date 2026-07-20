@@ -30,7 +30,7 @@ const VendorAnalytics = () => {
     queryKey: ['vendor-products', vendorId],
     queryFn: async () => {
       const result = await ServiceFactory.getProductService().getByVendor(vendorId);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!vendorId,

@@ -11,4 +11,5 @@ export { KOSHUR_AI_CONFIG } from '../identity/identity';
 
 // Prompt Engine
 export { PromptBuilder } from '../prompts/prompt-builder';
-export { generateSystemPrompt, SystemPromptOptions } from '../prompts/system-prompt';
+export { generateSystemPrompt } from '../prompts/system-prompt';
+export type { SystemPromptOptions } from '../prompts/system-prompt';

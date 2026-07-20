@@ -1,5 +1,5 @@
-import { IProductService, ProductSortOption } from '../../../interfaces/IProductService';
-import { Result, CommerceError } from '../../../types/Result';
+import { IProductService, ProductSortOption } from '../../interfaces/IProductService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 import { Product } from '@/types';
 import { cacheService } from '@/services/cacheService';
@@ -100,7 +100,7 @@ export class SupabaseProductService implements IProductService {
           queryBuilder = queryBuilder.lte('price', filters.maxPrice);
         }
         if (filters.vendorId) {
-          queryBuilder = queryBuilder.eq('vendorId', filters.vendorId);
+          queryBuilder = queryBuilder.eq('vendor_id', filters.vendorId);
         }
       }
 

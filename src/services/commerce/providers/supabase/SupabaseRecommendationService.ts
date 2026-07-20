@@ -141,9 +141,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .limit(8);
 
       if (error) throw error;
-      return Result.ok((data as any[]).map(mapDbProduct));
+      return { success: true, data: (data as any[]).map(mapDbProduct) };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -157,9 +157,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .limit(8);
 
       if (error) throw error;
-      return Result.ok((data as any[]).map(mapDbProduct));
+      return { success: true, data: (data as any[]).map(mapDbProduct) };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -193,12 +193,12 @@ export class SupabaseRecommendationService implements IRecommendationService {
       }
       return this.getProductsPreservingOrder(orderedIds);
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
   async getProductsPreservingOrder(ids: string[]): Promise<Result<Product[], CommerceError>> {
-    if (!ids.length) return Result.ok([]);
+    if (!ids.length) return { success: true, data: [] };
     try {
       const { data, error } = await supabase
         .from('products')
@@ -213,9 +213,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
         byId.set(p.id, p);
       }
       const products = ids.map((id) => byId.get(id)).filter(Boolean) as Product[];
-      return Result.ok(products);
+      return { success: true, data: products };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -223,7 +223,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
     try {
       const cacheKey = `ai-rec:${userId}`;
       const cached = cacheService.get<Product[]>(cacheKey);
-      if (cached) return Result.ok(cached);
+      if (cached) return { success: true, data: cached };
 
       const profile = await getUserBehaviorProfile(userId);
 
@@ -252,16 +252,16 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .map(s => s.product);
 
       cacheService.set(cacheKey, scored, SMART_REC_CACHE_TTL);
-      return Result.ok(scored);
+      return { success: true, data: scored };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
   async getBecauseYouViewed(userId: string, limit = 4): Promise<Result<{ contextProductTitle: string; products: Product[] } | null, CommerceError>> {
     try {
       const profile = await getUserBehaviorProfile(userId);
-      if (!profile.lastViewedProduct) return Result.ok(null);
+      if (!profile.lastViewedProduct) return { success: true, data: null };
 
       const { id, title, category, tags } = profile.lastViewedProduct;
 
@@ -290,11 +290,11 @@ export class SupabaseRecommendationService implements IRecommendationService {
       }
 
       const products = candidates.slice(0, limit);
-      if (products.length === 0) return Result.ok(null);
+      if (products.length === 0) return { success: true, data: null };
 
-      return Result.ok({ contextProductTitle: title, products });
+      return { success: true, data: { contextProductTitle: title, products } };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -302,7 +302,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
     try {
       const cacheKey = `popular-cat:${category}`;
       const cached = cacheService.get<Product[]>(cacheKey);
-      if (cached) return Result.ok(cached);
+      if (cached) return { success: true, data: cached };
 
       const { data, error } = await supabase
         .from('products')
@@ -316,9 +316,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
       if (error) throw error;
       const result = (data ?? []).map(mapDbProduct);
       cacheService.set(cacheKey, result, SMART_REC_CACHE_TTL);
-      return Result.ok(result);
+      return { success: true, data: result };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -326,7 +326,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
     try {
       const cacheKey = `ai-similar:${productId}`;
       const cached = cacheService.get<Product[]>(cacheKey);
-      if (cached) return Result.ok(cached);
+      if (cached) return { success: true, data: cached };
 
       const { data: source, error: sourceError } = await supabase
         .from('products')
@@ -334,7 +334,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .eq('id', productId)
         .single();
 
-      if (sourceError || !source) return Result.ok([]);
+      if (sourceError || !source) return { success: true, data: [] };
 
       const { data, error } = await supabase
         .from('products')
@@ -362,9 +362,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
 
       const result = scored.sort((a, b) => b.score - a.score).slice(0, limit).map(s => s.product);
       cacheService.set(cacheKey, result, CACHE_TTL.SIMILAR);
-      return Result.ok(result);
+      return { success: true, data: result };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 
@@ -372,7 +372,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
     try {
       const cacheKey = `fbt:${productId}`;
       const cached = cacheService.get<Product[]>(cacheKey);
-      if (cached) return Result.ok(cached);
+      if (cached) return { success: true, data: cached };
 
       const { data: orderItems, error: oiError } = await supabase
         .from('order_items')
@@ -380,7 +380,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .eq('product_id', productId)
         .limit(50);
 
-      if (oiError || !orderItems || orderItems.length === 0) return Result.ok([]);
+      if (oiError || !orderItems || orderItems.length === 0) return { success: true, data: [] };
 
       const orderIds = [...new Set(orderItems.map(oi => oi.order_id))];
 
@@ -390,7 +390,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .in('order_id', orderIds)
         .neq('product_id', productId);
 
-      if (coError || !coItems || coItems.length === 0) return Result.ok([]);
+      if (coError || !coItems || coItems.length === 0) return { success: true, data: [] };
 
       const freq: Record<string, number> = {};
       for (const item of coItems) {
@@ -404,7 +404,7 @@ export class SupabaseRecommendationService implements IRecommendationService {
         .slice(0, limit)
         .map(([id]) => id);
 
-      if (topIds.length === 0) return Result.ok([]);
+      if (topIds.length === 0) return { success: true, data: [] };
 
       const { data, error } = await supabase
         .from('products')
@@ -416,9 +416,9 @@ export class SupabaseRecommendationService implements IRecommendationService {
 
       const result = (data ?? []).map(mapDbProduct);
       cacheService.set(cacheKey, result, CACHE_TTL.FBT);
-      return Result.ok(result);
+      return { success: true, data: result };
     } catch (err: any) {
-      return Result.fail(CommerceError.from(err));
+      return { success: false, error: { code: "error", message: err?.message || "Unknown error" } };
     }
   }
 }

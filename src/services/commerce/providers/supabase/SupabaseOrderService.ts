@@ -1,5 +1,5 @@
-import { IOrderService } from '../../../interfaces/IOrderService';
-import { Result, CommerceError } from '../../../types/Result';
+import { IOrderService } from '../../interfaces/IOrderService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseOrderService implements IOrderService {

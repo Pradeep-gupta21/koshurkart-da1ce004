@@ -1,5 +1,5 @@
-import { IReviewService } from '../../../interfaces/IReviewService';
-import { Result, CommerceError } from '../../../types/Result';
+import { IReviewService } from '../../interfaces/IReviewService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseReviewService implements IReviewService {

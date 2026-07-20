@@ -34,7 +34,7 @@ export function useRecentlyViewed(limit = 10): UseRecentlyViewedResult {
     queryKey: ['recently-viewed', 'authed', user?.id, limit],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getRecentlyViewed(user!.id, limit);
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !!user?.id,
@@ -45,7 +45,7 @@ export function useRecentlyViewed(limit = 10): UseRecentlyViewedResult {
     queryKey: ['recently-viewed', 'guest', guestIds.slice(0, limit).join(','), limit],
     queryFn: async () => {
       const result = await ServiceFactory.getRecommendationService().getProductsPreservingOrder(guestIds.slice(0, limit));
-      if (!result.success) throw new Error(result.error.message);
+      if (!result.success) throw new Error((result as any).error?.message || "Error");
       return result.data;
     },
     enabled: !user?.id && guestIds.length > 0,

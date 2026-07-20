@@ -130,7 +130,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user && !isBuyNow) {
       const res = await ServiceFactory.getCartService().addToCart(user.id, product.id, quantity);
       if (!res.success) {
-        toast.error("Failed to sync cart", { description: res.error?.message });
+        toast.error("Failed to sync cart", { description: (res as any).error?.message });
       }
     }
   }, [user, isBuyNow]);
@@ -145,7 +145,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user && !isBuyNow) {
       const res = await ServiceFactory.getCartService().removeFromCart(user.id, productId);
       if (!res.success) {
-        toast.error("Failed to sync cart", { description: res.error?.message });
+        toast.error("Failed to sync cart", { description: (res as any).error?.message });
       }
     }
   }, [user, isBuyNow]);
@@ -168,7 +168,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user && !isBuyNow) {
       const res = await ServiceFactory.getCartService().updateQuantity(user.id, productId, quantity);
       if (!res.success) {
-        toast.error("Failed to sync cart", { description: res.error?.message });
+        toast.error("Failed to sync cart", { description: (res as any).error?.message });
       }
     }
   }, [user, isBuyNow]);
@@ -190,7 +190,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       const res = await ServiceFactory.getCartService().clearCart(user.id);
       if (!res.success) {
-        toast.error("Failed to sync cart", { description: res.error?.message });
+        toast.error("Failed to sync cart", { description: (res as any).error?.message });
       }
     }
   }, [isBuyNow, user]);

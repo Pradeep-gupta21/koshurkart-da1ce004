@@ -1,5 +1,5 @@
-import { IWishlistService } from '../../../interfaces/IWishlistService';
-import { Result, CommerceError } from '../../../types/Result';
+import { IWishlistService } from '../../interfaces/IWishlistService';
+import { Result, CommerceError } from '../../types/Result';
 import { supabase } from '../../../../integrations/supabase/client';
 
 export class SupabaseWishlistService implements IWishlistService {

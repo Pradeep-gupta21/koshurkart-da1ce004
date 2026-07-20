@@ -19,7 +19,7 @@ export class WishlistTool extends BaseCommerceTool<WishlistInput, WishlistOutput
   readonly name = "wishlist";
   readonly description = "Manage the user's wishlist (get, add, remove, check items).";
   
-  readonly parameters = {
+  readonly parameters: any = {
     type: "object",
     properties: {
       action: {
@@ -33,7 +33,7 @@ export class WishlistTool extends BaseCommerceTool<WishlistInput, WishlistOutput
       },
     },
     required: ["action"],
-  } as const;
+  };
 
   protected validate(input: WishlistInput): string | null {
     if (!["get", "add", "remove", "check"].includes(input.action)) {

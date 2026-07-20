@@ -1,5 +1,5 @@
 import { Result, CommerceError } from '../types/Result';
-import { ShipmentEvent, ShippingStatus } from '@/types';
+import { ShipmentEvent, ShippingStatus } from '@/types/order';
 
 export interface IShippingService {
   getShipmentEvents(orderId: string): Promise<Result<ShipmentEvent[], CommerceError>>;
