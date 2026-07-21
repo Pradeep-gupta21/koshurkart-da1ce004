@@ -21,20 +21,19 @@ export interface IVendorService {
 }
 
 export interface ICartService {
-  // Placeholder for future cart operations
-  getCart(customerId: string): Promise<any>;
-  addToCart(customerId: string, productId: string, quantity: number): Promise<any>;
-  removeFromCart(customerId: string, productId: string): Promise<any>;
-  updateQuantity(customerId: string, productId: string, quantity: number): Promise<any>;
-  clearCart(customerId: string): Promise<void>;
+  getCart(customerId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  addToCart(customerId: string, productId: string, quantity: number): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  removeFromCart(customerId: string, productId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  updateQuantity(customerId: string, productId: string, quantity: number): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  clearCart(customerId: string): Promise<{ success: boolean; data?: void; error?: { code: string; message: string } }>;
 }
 
 export interface IWishlistService {
-  // Placeholder for future wishlist operations
-  getWishlist(): Promise<any>;
-  addItem(productId: string): Promise<any>;
-  removeItem(productId: string): Promise<any>;
-  checkItem(productId: string): Promise<boolean>;
+  getWishlist(userId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  addToWishlist(userId: string, productId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  removeFromWishlist(userId: string, productId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  isInWishlist(userId: string, productId: string): Promise<{ success: boolean; data?: boolean; error?: { code: string; message: string } }>;
+  clearWishlist(userId: string): Promise<{ success: boolean; data?: void; error?: { code: string; message: string } }>;
 }
 
 export interface IOrderService {
