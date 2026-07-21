@@ -31,6 +31,16 @@ import type {
   Conversation,
 } from "@/ai/types/chat";
 
+import type { ToolRegistry } from "../tools/registry";
+import type { ToolExecutor } from "../tools/executor";
+import type { ToolCall } from "../types/chat";
+
+export interface ExtendedAIServiceConfig extends AIServiceConfig {
+  registry?: ToolRegistry;
+  executor?: ToolExecutor;
+  maxToolLoops?: number;
+}
+
 /**
  * Thin, reusable service around an injected `AIProvider`.
  *
@@ -49,11 +59,18 @@ export class AIService {
 
   /** Audience → system prompt map used to steer the assistant. */
   private readonly systemPrompts: Partial<Record<ChatAudience, string>>;
+  
+  private readonly registry?: ToolRegistry;
+  private readonly executor?: ToolExecutor;
+  private readonly maxToolLoops: number;
 
-  constructor(config: AIServiceConfig) {
+  constructor(config: ExtendedAIServiceConfig) {
     this.provider = config.provider;
     this.defaultOptions = config.defaultOptions ?? {};
     this.systemPrompts = config.systemPrompts ?? {};
+    this.registry = config.registry;
+    this.executor = config.executor;
+    this.maxToolLoops = config.maxToolLoops ?? 5;
   }
 
   /* -------------------------------------------------------------- *
@@ -79,11 +96,39 @@ export class AIService {
    * Normalizes any thrown provider error into an `AIError`.
    */
   async chat(request: AIChatRequest): Promise<AIChatResponse> {
-    const prepared = this.prepareRequest(request);
-    try {
-      return await this.provider.chat(prepared);
-    } catch (err) {
-      throw this.normalizeError(err);
+    let currentRequest = this.prepareRequest(request);
+    let loopCount = 0;
+    const maxLoops = this.maxToolLoops;
+
+    while (true) {
+      let response: AIChatResponse;
+      try {
+        response = await this.provider.chat(currentRequest);
+      } catch (err) {
+        throw this.normalizeError(err);
+      }
+
+      const runTools = response.finishReason === "tool_calls" && response.toolCalls && response.toolCalls.length > 0;
+      
+      if (!runTools || loopCount >= maxLoops || !this.executor) {
+        if (runTools && loopCount >= maxLoops) {
+          response.finishReason = "length";
+        }
+        return response;
+      }
+
+      loopCount++;
+      
+      currentRequest.messages = [...currentRequest.messages, response.message];
+      
+      const toolPromises = response.toolCalls!.map(async (call) => {
+        const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
+        const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+        return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
+      });
+      
+      const toolMessages = await Promise.all(toolPromises);
+      currentRequest.messages = [...currentRequest.messages, ...toolMessages];
     }
   }
 
@@ -93,22 +138,71 @@ export class AIService {
    * provider has no native streaming.
    */
   async *stream(request: AIChatRequest): AsyncIterable<AIStreamEvent> {
-    const prepared = this.prepareRequest({ ...request, options: { ...request.options, stream: true } });
+    let currentRequest = this.prepareRequest({ ...request, options: { ...request.options, stream: true } });
+    let loopCount = 0;
+    const maxLoops = this.maxToolLoops;
 
-    if (this.provider.stream) {
+    while (true) {
+      let finishReason: FinishReason = "stop";
+      let usage: TokenUsage | undefined;
+      let toolCalls: ToolCall[] = [];
+      let assistantContent = "";
+      let hasError = false;
+
+      const iterable = this.provider.stream 
+        ? this.provider.stream(currentRequest) 
+        : this.emulateStream(currentRequest);
+
       try {
-        for await (const event of this.provider.stream(prepared)) {
-          yield event;
+        for await (const event of iterable) {
+          if (event.type === "delta") {
+            assistantContent += event.content;
+            yield event;
+          } else if (event.type === "tool_call") {
+            toolCalls.push(event.toolCall);
+            yield event;
+          } else if (event.type === "error") {
+            hasError = true;
+            yield event;
+            return;
+          } else if (event.type === "done") {
+            finishReason = event.finishReason;
+            usage = event.usage;
+          }
         }
       } catch (err) {
         yield { type: "error", error: this.normalizeError(err) };
+        return;
       }
-      return;
-    }
 
-    // Graceful fallback: emulate a stream from a one-shot response.
+      if (hasError) return;
+
+      const runTools = finishReason === "tool_calls" && toolCalls.length > 0;
+      
+      if (!runTools || loopCount >= maxLoops || !this.executor) {
+        yield { type: "done", finishReason: runTools ? "length" : finishReason, usage };
+        return;
+      }
+
+      loopCount++;
+
+      const assistantMsg = AIService.createMessage("assistant", assistantContent, { toolCalls });
+      currentRequest.messages = [...currentRequest.messages, assistantMsg];
+
+      const toolPromises = toolCalls.map(async (call) => {
+        const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
+        const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+        return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
+      });
+
+      const toolMessages = await Promise.all(toolPromises);
+      currentRequest.messages = [...currentRequest.messages, ...toolMessages];
+    }
+  }
+
+  private async *emulateStream(request: AIChatRequest): AsyncIterable<AIStreamEvent> {
     try {
-      const res = await this.provider.chat(prepared);
+      const res = await this.provider.chat(request);
       if (res.message.content) {
         yield { type: "delta", content: res.message.content };
       }

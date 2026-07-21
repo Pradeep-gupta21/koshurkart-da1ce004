@@ -7,8 +7,17 @@
 import type { ToolContext } from "../types";
 
 export interface IProductService {
-  // Placeholder for future product operations
-  searchProducts(query: string, options?: { category?: string; maxPrice?: number; limit?: number }): Promise<any[]>;
+  searchProducts(query: string, options?: { category?: string; maxPrice?: number; limit?: number }): Promise<any>;
+  getProductById(id: string): Promise<any>;
+  getBySlug(slug: string): Promise<any>;
+  getTrending(limit?: number): Promise<any>;
+  getAll(options?: any): Promise<any>;
+  getCategories(): Promise<any>;
+}
+
+export interface IVendorService {
+  getById(id: string): Promise<any>;
+  // Additional vendor methods if needed
 }
 
 export interface ICartService {
@@ -50,6 +59,7 @@ export interface ICustomerService {
  */
 export interface CommerceServices extends Record<string, unknown> {
   product?: IProductService;
+  vendor?: IVendorService;
   cart?: ICartService;
   wishlist?: IWishlistService;
   order?: IOrderService;
