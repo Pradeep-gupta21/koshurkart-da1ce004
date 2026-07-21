@@ -22,7 +22,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from "recharts";
 import { format, subDays, parseISO } from "date-fns";
-
+import { getVendorCommissionPercentage } from "@/shared/commission";
 const scoreColor = (score: number) => {
   if (score >= 80) return "text-green-600 dark:text-green-400";
   if (score >= 60) return "text-accent";
@@ -42,6 +42,7 @@ const VendorOverview = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
+  const commissionPercentage = getVendorCommissionPercentage(undefined);
   const [stats, setStats] = useState({ products: 0, totalSales: 0, totalEarnings: 0, withdrawableBalance: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
@@ -186,7 +187,7 @@ const VendorOverview = () => {
       {/* Commission info banner */}
       <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
         <Info className="h-4 w-4 text-primary shrink-0" />
-        <span>Platform commission is currently <strong>0%</strong>. Vendors receive <strong>100%</strong> earnings.</span>
+        <span>Platform commission is currently <strong>{commissionPercentage}%</strong>. Vendors receive <strong>{100 - commissionPercentage}%</strong> earnings.</span>
       </div>
 
       {/* Stat Cards */}
