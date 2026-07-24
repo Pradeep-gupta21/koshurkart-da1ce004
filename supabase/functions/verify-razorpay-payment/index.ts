@@ -119,12 +119,7 @@ Deno.serve(async (req) => {
       return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Order mismatch", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    if (paymentRow.payment_status === "success") {
-      return new Response(
-        JSON.stringify({ success: true, message: "Already verified", idempotent: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+
 
     let rpRes;
     try {
@@ -173,33 +168,33 @@ Deno.serve(async (req) => {
       return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Payment amount mismatch", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    const { error: payErr } = await service
-      .from("payments")
-      .update({
-        payment_status: "success",
-        razorpay_payment_id: razorpayPaymentId,
-        razorpay_order_id: razorpayOrderId,
-        razorpay_signature: razorpaySignature,
-        transaction_id: razorpayPaymentId,
-      })
-      .eq("id", paymentId);
+    const { data: confirmResult, error: confirmError } = await service.rpc("create_payment_confirm", {
+      p_payment_id: paymentRow.id,
+      p_order_id: paymentRow.order_id,
+      p_customer_id: user.id,
+      p_razorpay_payment_id: razorpayPaymentId,
+      p_razorpay_signature: razorpaySignature
+    });
 
-    if (payErr) {
-      if ((payErr as { code?: string }).code === "23505") {
-        return new Response(
-          JSON.stringify({ success: true, idempotent: true, message: "Already settled" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      console.error("Payment update failed", payErr.code);
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to update payment", false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (confirmError) {
+      console.error("RPC transport/DB failure:", confirmError);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
     }
 
-    const { error: ordErr } = await service
-      .from("orders")
-      .update({ payment_status: "completed", order_status: "confirmed" })
-      .eq("id", orderId);
-    if (ordErr) console.error("Order update failed", ordErr.code);
+    if (!confirmResult || typeof confirmResult !== "object") {
+      console.error("RPC contract violation: Malformed payload");
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
+    }
+
+    if (confirmResult.success !== true) {
+      console.error("RPC logical failure:", confirmResult.errorCode);
+      let mappedCategory = ErrorCategory.INTERNAL_ERROR;
+      if (confirmResult.errorCode === 'FORBIDDEN') mappedCategory = ErrorCategory.AUTHORIZATION;
+      else if (confirmResult.errorCode === 'NOT_FOUND') mappedCategory = ErrorCategory.NOT_FOUND;
+      else if (confirmResult.errorCode === 'CONFLICT' || (typeof confirmResult.errorCode === 'string' && confirmResult.errorCode.startsWith('VALIDATION'))) mappedCategory = ErrorCategory.VALIDATION;
+      
+      return respondWithError(new PaymentError(mappedCategory, ERROR_CODES.INTERNAL_ERROR, "Payment confirmation failed", false), { ...corsHeaders, "Content-Type": "application/json" });
+    }
 
     await service.rpc("log_payment_event", {
       p_payment_id: paymentId,
@@ -209,7 +204,11 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, message: "Payment verified and confirmed" }),
+      JSON.stringify({ 
+        success: true, 
+        message: "Payment verified and confirmed",
+        idempotent: confirmResult.isIdempotentReplay === true
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
