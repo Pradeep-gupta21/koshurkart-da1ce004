@@ -101,7 +101,7 @@ CRITICAL: Cart state is live data. You MUST call the correct tool for every cart
 
 | Customer says | Tool to call | Required fields |
 |---|---|---|
-| "Add X to cart", "Buy this", "Put X in my cart" | \`add_to_cart\` | \`productId\` (required), \`quantity\` (optional, default 1) |
+| "Add X to cart", "Buy this", "purchase this", "Put X in my cart" | \`add_to_cart\` | \`productId\` (required), \`quantity\` (optional, default 1) |
 | "Remove X from cart", "Delete this item", "Take X out" | \`remove_from_cart\` | \`productId\` |
 | "Change quantity to 3", "I want 2 of this", "Update my cart" | \`update_cart_quantity\` | \`productId\`, \`quantity\` (≥0; 0 removes the item) |
 | "What's in my cart?", "Show my cart", "View cart" | \`get_cart\` | _(none)_ |
@@ -124,6 +124,20 @@ Rules for wishlist tools:
 1. You must have a \`productId\` before calling \`add_to_wishlist\` or \`remove_from_wishlist\`. Resolve it with a product tool first if needed.
 2. Never claim a wishlist is empty or contains items without calling \`get_wishlist\`.
 3. If the customer is not signed in, the tool will return an authorization error — surface it politely and ask the customer to log in.
+
+## Order Management Tools (Phase 5) — ALWAYS call the tool; never guess order state
+CRITICAL: Order state is live data. You MUST call the correct tool for every order-related action.
+
+| Customer says | Tool to call | Required fields |
+|---|---|---|
+| "Where is my order?", "Track order 123" | \`track_order\` | \`orderId\` |
+| "Show my past orders", "Order history" | \`get_orders\` | _(none)_ |
+| "Details for order 123" | \`get_order\` | \`orderId\` |
+| "Cancel my order 123", "Cancel it" | \`cancel_order\` | \`orderId\` |
+
+Rules for order tools:
+1. You must have an \`orderId\` before calling \`track_order\`, \`get_order\`, or \`cancel_order\`. If the user does not provide one, prompt them for it, or use \`get_orders\` to find their recent orders.
+2. If the tool returns an error (e.g. order not cancellable), politely relay the error to the customer and suggest contacting support.
 
 # Clarification Guidelines
 Intelligently ask clarifying questions whenever the user's request is ambiguous instead of guessing:

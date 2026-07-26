@@ -5,4 +5,5 @@ export interface IOrderService {
   getOrder(orderId: string): Promise<Result<any, CommerceError>>;
   getCustomerOrders(customerId: string): Promise<Result<any[], CommerceError>>;
   cancelOrder(orderId: string): Promise<Result<any, CommerceError>>;
+  trackOrder(orderId: string): Promise<Result<any[], CommerceError>>;
 }

@@ -91,4 +91,21 @@ export class SupabaseOrderService implements IOrderService {
       return { success: false, error: { code: 'unknown_error', message: err.message || 'An unknown error occurred' } };
     }
   }
+  async trackOrder(orderId: string): Promise<Result<any[], CommerceError>> {
+    try {
+      const { data, error } = await supabase
+        .from('shipment_events')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        return { success: false, error: { code: 'database_error', message: error.message } };
+      }
+
+      return { success: true, data: data || [] };
+    } catch (err: any) {
+      return { success: false, error: { code: 'unknown_error', message: err.message || 'An unknown error occurred' } };
+    }
+  }
 }

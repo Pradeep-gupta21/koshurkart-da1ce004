@@ -25,8 +25,8 @@ export class AddToCartTool extends BaseCommerceTool<AddToCartInput, AddToCartOut
   readonly description =
     "Add a product to the customer's shopping cart. Use when the customer says 'add to cart', 'buy this', 'put X in my cart', or similar purchase-intent phrases.";
 
-  /** Only customer-facing agents may call this tool. */
-  readonly audiences = ["customer"] as const;
+  /** Both customer and admin agents may call this tool for testing. */
+  readonly audiences = ["customer", "admin"] as const;
 
   readonly parameters: any = {
     type: "object",

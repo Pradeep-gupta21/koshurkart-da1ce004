@@ -37,11 +37,11 @@ export interface IWishlistService {
 }
 
 export interface IOrderService {
-  // Placeholder for future order operations
-  getOrder(orderId: string): Promise<any>;
-  listOrders(options?: { limit?: number; offset?: number }): Promise<any[]>;
-  trackOrder(orderId: string): Promise<any>;
-  cancelOrder(orderId: string, reason?: string): Promise<any>;
+  createOrder(customerId: string, cartId: string, paymentDetails: any): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  getOrder(orderId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  getCustomerOrders(customerId: string): Promise<{ success: boolean; data?: any[]; error?: { code: string; message: string } }>;
+  cancelOrder(orderId: string): Promise<{ success: boolean; data?: any; error?: { code: string; message: string } }>;
+  trackOrder(orderId: string): Promise<{ success: boolean; data?: any[]; error?: { code: string; message: string } }>;
 }
 
 export interface ICustomerService {

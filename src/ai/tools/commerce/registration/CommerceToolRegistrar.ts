@@ -40,8 +40,12 @@ import { GetCartTool } from '../cart/GetCartTool';
 import { AddToWishlistTool } from '../wishlist/AddToWishlistTool';
 import { RemoveFromWishlistTool } from '../wishlist/RemoveFromWishlistTool';
 import { GetWishlistTool } from '../wishlist/GetWishlistTool';
+// Phase 5 - Order Management
+import { GetOrdersTool } from '../order/GetOrdersTool';
+import { GetOrderTool } from '../order/GetOrderTool';
+import { TrackOrderTool } from '../order/TrackOrderTool';
+import { CancelOrderTool } from '../order/CancelOrderTool';
 // Other
-import { OrderTool } from '../order/OrderTool';
 import { CustomerTool } from '../customer/CustomerTool';
 import { AnyTool } from '../../types';
 
@@ -71,8 +75,12 @@ export class CommerceToolRegistrar {
       new AddToWishlistTool() as unknown as AnyTool,
       new RemoveFromWishlistTool() as unknown as AnyTool,
       new GetWishlistTool() as unknown as AnyTool,
+      // Order Management (Phase 5)
+      new GetOrdersTool() as unknown as AnyTool,
+      new GetOrderTool() as unknown as AnyTool,
+      new TrackOrderTool() as unknown as AnyTool,
+      new CancelOrderTool() as unknown as AnyTool,
       // Other
-      new OrderTool() as unknown as AnyTool,
       new CustomerTool() as unknown as AnyTool,
     ];
 

@@ -180,7 +180,11 @@ export class AIService {
       const runTools = finishReason === "tool_calls" && toolCalls.length > 0;
       
       if (!runTools || loopCount >= maxLoops || !this.executor) {
-        yield { type: "done", finishReason: runTools ? "length" : finishReason, usage };
+        let finalReason = finishReason;
+        if (runTools && loopCount >= maxLoops) {
+          finalReason = "length";
+        }
+        yield { type: "done", finishReason: finalReason, usage };
         return;
       }
 
@@ -281,6 +285,12 @@ export class AIService {
    */
   private prepareRequest(request: AIChatRequest): AIChatRequest {
     const options: AIRequestOptions = { ...this.defaultOptions, ...request.options };
+    
+    if (this.registry && !options.tools) {
+      const defs = this.registry.toDefinitions(request.audience);
+      if (defs.length > 0) options.tools = defs;
+    }
+
     const systemPrompt = request.systemPrompt ?? this.systemPrompts[request.audience];
 
     let messages = request.messages;
