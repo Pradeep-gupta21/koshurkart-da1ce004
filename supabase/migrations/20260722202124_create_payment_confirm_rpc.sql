@@ -196,10 +196,10 @@ BEGIN
     );
   END IF;
 
-  IF v_payment_row.status = 'pending' AND v_order_row.status = 'pending' THEN
+  IF v_payment_row.payment_status = 'pending' AND v_order_row.payment_status = 'pending' THEN
     -- Allow execution to proceed
     NULL;
-  ELSIF v_payment_row.status = 'confirmed' AND v_order_row.status = 'confirmed' THEN
+  ELSIF v_payment_row.payment_status = 'success' AND v_order_row.payment_status = 'success' THEN
     -- Fall through to Step 3 (Idempotency Guard)
     NULL;
   ELSE
@@ -229,7 +229,7 @@ BEGIN
     ORDER BY id ASC
     LIMIT 1;
 
-    v_order_status        := v_order_row.status;
+    v_order_status        := v_payment_row.payment_status;
     v_amount_paise        := v_payment_row.amount_paise;
     v_razorpay_payment_id := v_payment_row.razorpay_payment_id;
     v_credited_at         := v_payment_row.credited_at;
@@ -272,12 +272,12 @@ BEGIN
     BEGIN
       -- Mutate state sequentially, validating uniqueness via RETURNING clauses
       UPDATE public.payments 
-      SET status = 'confirmed', 
+      SET payment_status = 'success', 
           razorpay_payment_id = COALESCE(p_razorpay_payment_id, razorpay_payment_id), 
           razorpay_signature = COALESCE(p_razorpay_signature, razorpay_signature), 
           transaction_id = COALESCE(p_transaction_id, transaction_id),
           credited_at = v_now 
-      WHERE id = p_payment_id AND status = 'pending'
+      WHERE id = p_payment_id AND payment_status = 'pending'
       RETURNING 1 INTO v_payment_rows_updated;
 
       IF v_payment_rows_updated IS NULL THEN
@@ -285,8 +285,9 @@ BEGIN
       END IF;
 
       UPDATE public.orders 
-      SET status = 'confirmed' 
-      WHERE id = p_order_id AND status = 'pending'
+      SET payment_status = 'success',
+          order_status = 'confirmed' 
+      WHERE id = p_order_id AND payment_status = 'pending'
       RETURNING 1 INTO v_order_rows_updated;
 
       IF v_order_rows_updated IS NULL THEN
@@ -348,7 +349,7 @@ BEGIN
       'data', jsonb_build_object(
         'paymentId', p_payment_id,
         'orderId', p_order_id,
-        'status', 'confirmed',
+        'status', 'success',
         'amountPaise', v_amount_paise,
         'razorpayPaymentId', p_razorpay_payment_id,
         'operationKey', v_operation_key,
