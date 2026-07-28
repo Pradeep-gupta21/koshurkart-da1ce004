@@ -14,17 +14,7 @@ CREATE TABLE IF NOT EXISTS public.vendor_payment_setup (
   is_completed BOOLEAN NOT NULL DEFAULT FALSE,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  -- #13: Require account_number when payment_destination_type involves IFSC
-  CONSTRAINT check_ifsc_requires_account CHECK (
-    (payment_destination_type NOT IN ('ifsc_account', 'both')) OR account_number IS NOT NULL
-  ),
-
-  -- #13: Require upi_id when payment_destination_type involves UPI
-  CONSTRAINT check_upi_requires_upi_id CHECK (
-    (payment_destination_type NOT IN ('upi_id', 'both')) OR upi_id IS NOT NULL
-  )
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_vendor_payment_setup_vendor_id ON public.vendor_payment_setup(vendor_id);
@@ -171,7 +161,7 @@ WHERE verification_status = 'verified'
   );
 
 -- Also create vendor_payment_setup rows for backfilled vendors
-INSERT INTO public.vendor_payment_setup (vendor_id, payment_destination_type, ifsc_code, account_holder_name, upi_id, is_completed, completed_at)
+INSERT INTO public.vendor_payment_setup (vendor_id, payment_destination_type, ifsc_code, account_number, account_holder_name, upi_id, is_completed, completed_at)
 SELECT
   v.id,
   CASE
@@ -180,6 +170,7 @@ SELECT
     ELSE 'upi_id'
   END,
   v.bank_ifsc,
+  v.bank_account_number_masked,
   v.bank_account_holder,
   v.direct_upi_id,
   TRUE,
@@ -188,3 +179,14 @@ FROM public.vendors v
 WHERE v.payment_setup_completed = TRUE
   AND NOT EXISTS (SELECT 1 FROM public.vendor_payment_setup vps WHERE vps.vendor_id = v.id)
 ON CONFLICT (vendor_id) DO NOTHING;
+
+-- 5. Enforce constraints AFTER data is populated and normalized
+ALTER TABLE public.vendor_payment_setup
+  ADD CONSTRAINT check_ifsc_requires_account CHECK (
+    (payment_destination_type NOT IN ('ifsc_account', 'both')) OR account_number IS NOT NULL
+  );
+
+ALTER TABLE public.vendor_payment_setup
+  ADD CONSTRAINT check_upi_requires_upi_id CHECK (
+    (payment_destination_type NOT IN ('upi_id', 'both')) OR upi_id IS NOT NULL
+  );
