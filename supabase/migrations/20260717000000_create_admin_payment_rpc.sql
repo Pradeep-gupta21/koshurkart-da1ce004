@@ -48,7 +48,7 @@ BEGIN
     
     -- Update Order
     UPDATE public.orders 
-    SET payment_status = 'completed', order_status = 'confirmed' 
+    SET payment_status = 'success', order_status = 'confirmed' 
     WHERE id = v_order_id;
 
     -- Audit Log
