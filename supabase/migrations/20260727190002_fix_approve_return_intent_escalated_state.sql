@@ -230,10 +230,10 @@ BEGIN
     -------------------------------------------------------------------------
     -- 5. Atomic State Transition
     -------------------------------------------------------------------------
-    -- 1. Generate canonical operation key (hoisted for reuse across branches)
-    v_operation_key := 'rtn_' || gen_random_uuid()::text;
-
     IF NOT v_requires_escalation THEN
+        -- 1. Generate canonical operation key (only required for ledger mutations)
+        v_operation_key := 'rtn_' || gen_random_uuid()::text;
+
         -- 2. Transition order item
         -- Row lock was exclusively acquired in Section 2, but we defensively 
         -- verify the state hasn't been corrupted before mutation.
