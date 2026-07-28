@@ -138,7 +138,7 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT * INTO v_payment_row FROM public.payments WHERE id = p_payment_id;
+  SELECT * INTO v_payment_row FROM public.payments WHERE id = p_payment_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
       'success', false,
@@ -168,7 +168,7 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT * INTO v_order_row FROM public.orders WHERE id = p_order_id;
+  SELECT * INTO v_order_row FROM public.orders WHERE id = p_order_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
       'success', false,
@@ -365,12 +365,15 @@ BEGIN
   -- ==========================================================================
   -- 7. ERROR HANDLING
   -- ==========================================================================
-  -- Catch-all for unexpected database failures. By design, we suppress 
-  -- all PostgreSQL internals (SQLSTATE, SQLERRM) to prevent information 
-  -- leakage. No internal logging is performed at this tier; failures are 
-  -- normalized into a canonical INTERNAL_ERROR contract for the client.
+  -- Catch-all for unexpected database failures. We emit structured 
+  -- diagnostics to the PostgreSQL server logs for operational visibility, 
+  -- but suppress all internals (SQLSTATE, SQLERRM) from the client response 
+  -- to prevent information leakage, returning a canonical INTERNAL_ERROR.
 EXCEPTION
   WHEN OTHERS THEN
+    RAISE WARNING '[payment_confirmation_failure] Unhandled exception in create_payment_confirm (payment_id: %, order_id: %). SQLSTATE: %, SQLERRM: %', 
+      p_payment_id, p_order_id, SQLSTATE, SQLERRM;
+
     RETURN jsonb_build_object(
       'success', false,
       'data', null,
