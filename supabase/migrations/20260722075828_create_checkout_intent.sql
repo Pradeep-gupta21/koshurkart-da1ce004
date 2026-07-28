@@ -57,6 +57,7 @@ DECLARE
     v_item_index INTEGER := 1;
     v_inserted_operation_key TEXT;
     v_existing_operation_key TEXT;
+    v_existing_customer_id UUID;
 BEGIN
     -------------------------------------------------------------------------
     -- Phase 3 - Step 2.5: Authorization (Zero-Trust)
@@ -272,21 +273,29 @@ BEGIN
         LIMIT 1;
 
         IF v_order_id IS NULL THEN
+            RAISE WARNING 'Replay inconsistent: missing order_id in ledger_entries for operation_key %', v_existing_operation_key;
             RETURN jsonb_build_object(
                 'success', false,
                 'data', NULL,
-                'isIdempotentReplay', false,
-                'errorCode', 'INTERNAL_ERROR'
+                'isIdempotentReplay', true,
+                'errorCode', 'REPLAY_INCONSISTENT_STATE'
             );
         END IF;
 
         -- Prevent IDOR: Ensure the reconstructed order actually belongs to the authenticated caller
-        IF NOT EXISTS (
-            SELECT 1
-            FROM public.orders
-            WHERE id = v_order_id
-              AND user_id = p_customer_id
-        ) THEN
+        SELECT user_id INTO v_existing_customer_id
+        FROM public.orders
+        WHERE id = v_order_id;
+
+        IF v_existing_customer_id IS NULL THEN
+            RAISE WARNING 'Replay inconsistent: missing order % for operation_key %', v_order_id, v_existing_operation_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', NULL,
+                'isIdempotentReplay', true,
+                'errorCode', 'REPLAY_INCONSISTENT_STATE'
+            );
+        ELSIF v_existing_customer_id != p_customer_id THEN
             RETURN jsonb_build_object(
                 'success', false,
                 'data', NULL,
@@ -299,6 +308,16 @@ BEGIN
         FROM public.payments
         WHERE order_id = v_order_id
         LIMIT 1;
+
+        IF v_payment_id IS NULL THEN
+            RAISE WARNING 'Replay inconsistent: missing payment for order % (operation_key %)', v_order_id, v_existing_operation_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', NULL,
+                'isIdempotentReplay', true,
+                'errorCode', 'REPLAY_INCONSISTENT_STATE'
+            );
+        END IF;
 
         SELECT COALESCE(jsonb_agg(
             jsonb_build_object(
@@ -319,6 +338,16 @@ BEGIN
         JOIN public.ledger_entries le ON le.order_item_id = oi.id
         WHERE le.operation_key = v_existing_operation_key
           AND le.type = 'credit';
+
+        IF jsonb_array_length(v_response_order_items) = 0 THEN
+            RAISE WARNING 'Replay inconsistent: missing order_items for operation_key %', v_existing_operation_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', NULL,
+                'isIdempotentReplay', true,
+                'errorCode', 'REPLAY_INCONSISTENT_STATE'
+            );
+        END IF;
 
         RETURN jsonb_build_object(
             'success', true,
@@ -584,7 +613,7 @@ BEGIN
         FROM jsonb_array_elements(v_financial_items)
     LOOP
         UPDATE public.products
-        SET reserved_stock = reserved_stock + (v_item->>'requested_qty')::INTEGER
+        SET reserved_stock = COALESCE(reserved_stock, 0) + (v_item->>'requested_qty')::INTEGER
         WHERE id = (v_item->>'product_id')::UUID
         RETURNING reserved_stock, stock INTO v_updated_reserved_stock, v_updated_stock;
 
