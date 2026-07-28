@@ -25,8 +25,8 @@ export class UpdateCartQuantityTool extends BaseCommerceTool<UpdateCartQuantityI
   readonly description =
     "Update the quantity of a product already in the customer's cart. Use when the customer says 'change quantity to X', 'I want 3 of this', 'update my cart', etc. Setting quantity to 0 removes the item.";
 
-  /** Only customer-facing agents may call this tool. */
-  readonly audiences = ["customer"] as const;
+  /** Both customer and admin agents may call this tool. */
+  readonly audiences = ["customer", "admin"] as const;
 
   readonly parameters: any = {
     type: "object",

@@ -67,8 +67,10 @@ export abstract class BaseTool<
     input: TInput,
     context: ToolContext<TServices>,
   ): Promise<ToolResult<TOutput>> {
+    console.log(`[DEBUG] BaseTool.execute START - name: ${this.name} at ${new Date().toISOString()}`);
     // Bail immediately if the caller already cancelled.
     if (context.signal?.aborted) {
+      console.log(`[DEBUG] BaseTool.execute ABORTED - name: ${this.name} at ${new Date().toISOString()}`);
       return err<TOutput>(
         {
           code: "timeout",
@@ -82,6 +84,7 @@ export abstract class BaseTool<
     // validation failure message; `null`/`undefined` means "valid".
     const validationError = this.validate(input);
     if (validationError) {
+      console.log(`[DEBUG] BaseTool.execute VALIDATION ERROR - name: ${this.name} at ${new Date().toISOString()}`);
       return err<TOutput>(
         {
           code: "invalid_input",
@@ -92,8 +95,12 @@ export abstract class BaseTool<
     }
 
     try {
-      return await this.run(input, context);
+      console.log(`[DEBUG] BaseTool.execute calling this.run - name: ${this.name} at ${new Date().toISOString()}`);
+      const res = await this.run(input, context);
+      console.log(`[DEBUG] BaseTool.execute this.run return - name: ${this.name} at ${new Date().toISOString()}, ok: ${res.ok}`);
+      return res;
     } catch (caught) {
+      console.log(`[DEBUG] BaseTool.execute CATCH - name: ${this.name} at ${new Date().toISOString()}, error:`, caught);
       return err<TOutput>(this.normalizeThrow(caught));
     }
   }

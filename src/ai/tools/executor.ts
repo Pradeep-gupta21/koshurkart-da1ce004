@@ -110,7 +110,9 @@ export class ToolExecutor<
     call: ToolCall,
     options: ToolExecutionOptions = {},
   ): Promise<WireToolResult> {
+    console.log(`[DEBUG] ToolExecutor.run START - call.name: ${call.name} at ${new Date().toISOString()}`);
     const result = await this.executeCall(call, options);
+    console.log(`[DEBUG] ToolExecutor.run END - call.name: ${call.name} at ${new Date().toISOString()}, ok: ${result.ok}`);
     return ToolExecutor.toWireResult(call, result);
   }
 

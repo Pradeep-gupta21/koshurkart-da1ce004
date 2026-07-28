@@ -59,7 +59,9 @@ export class AddToCartTool extends BaseCommerceTool<AddToCartInput, AddToCartOut
     input: AddToCartInput,
     context: CommerceToolContext
   ): Promise<ToolResult<AddToCartOutput>> {
+    console.log(`[DEBUG] AddToCartTool.run START - productId: ${input.productId} at ${new Date().toISOString()}`);
     if (!context.userId) {
+      console.log(`[DEBUG] AddToCartTool.run unauthorized at ${new Date().toISOString()}`);
       return err({
         code: "unauthorized",
         message: "You must be signed in to add items to your cart.",
@@ -69,6 +71,7 @@ export class AddToCartTool extends BaseCommerceTool<AddToCartInput, AddToCartOut
 
     const cartService = context.services?.cart;
     if (!cartService) {
+      console.log(`[DEBUG] AddToCartTool.run unavailable at ${new Date().toISOString()}`);
       return err({
         code: "unavailable",
         message: "Cart service is not available. Please try again later.",
@@ -76,19 +79,23 @@ export class AddToCartTool extends BaseCommerceTool<AddToCartInput, AddToCartOut
       });
     }
 
+    console.log(`[DEBUG] AddToCartTool.run calling cartService.addToCart at ${new Date().toISOString()}`);
     const result = await cartService.addToCart(
       context.userId,
       input.productId,
       input.quantity ?? 1
     );
+    console.log(`[DEBUG] AddToCartTool.run cartService.addToCart return at ${new Date().toISOString()}, success: ${result.success}`);
 
     if (!result.success) {
+      console.log(`[DEBUG] AddToCartTool.run returning error at ${new Date().toISOString()}`);
       return err({
         code: "execution_error",
         message: result.error?.message ?? "Failed to add item to cart.",
       });
     }
 
+    console.log(`[DEBUG] AddToCartTool.run returning ok at ${new Date().toISOString()}`);
     return ok({
       orderId: result.data?.orderId ?? "",
       message: "Item added to your cart successfully.",

@@ -102,7 +102,7 @@ CRITICAL: Cart state is live data. You MUST call the correct tool for every cart
 | Customer says | Tool to call | Required fields |
 |---|---|---|
 | "Add X to cart", "Buy this", "purchase this", "Put X in my cart" | \`add_to_cart\` | \`productId\` (required), \`quantity\` (optional, default 1) |
-| "Remove X from cart", "Delete this item", "Take X out" | \`remove_from_cart\` | \`productId\` |
+| "Remove X from cart", "Delete this item", "Take X out", "remove this", "remove Welcome Hamper from my cart", "remove one Welcome Hamper" | \`remove_from_cart\` | \`productId\` (required), \`quantity\` (optional) |
 | "Change quantity to 3", "I want 2 of this", "Update my cart" | \`update_cart_quantity\` | \`productId\`, \`quantity\` (≥0; 0 removes the item) |
 | "What's in my cart?", "Show my cart", "View cart" | \`get_cart\` | _(none)_ |
 

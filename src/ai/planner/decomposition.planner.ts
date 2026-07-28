@@ -71,9 +71,8 @@ export class DecompositionPlanner<
       try {
         chatRes = await context.ai.chat({
           audience: goal.audience,
-          systemPrompt: prompt,
           messages: [
-            { id: "gen-1", role: "user", content: "Generate the plan JSON.", createdAt: Date.now() }
+            { id: "gen-1", role: "user", content: `${prompt}\n\nGenerate the plan JSON.`, createdAt: Date.now() }
           ],
         });
       } catch (err: any) {

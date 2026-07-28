@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const iterable = agent.stream(message, {
+        const iterable = agent.streamTurn(message, {
           userId: user.id,
           conversationId,
           sessionId,
