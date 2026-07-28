@@ -41,13 +41,15 @@ Deno.serve(async (req) => {
 
     const signature = req.headers.get("x-razorpay-signature");
     if (!signature) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing signature", false), jsonHeaders);
+      console.error("Webhook: missing signature");
+      return new Response(JSON.stringify({ ok: true, error: "Missing signature" }), { status: 200, headers: jsonHeaders });
     }
 
     const rawBody = await req.text();
     const valid = await verifyWebhookSignature(rawBody, signature, secret);
     if (!valid) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid signature", false), jsonHeaders);
+      console.error("Webhook: invalid signature");
+      return new Response(JSON.stringify({ ok: true, error: "Invalid signature" }), { status: 200, headers: jsonHeaders });
     }
 
     const event = JSON.parse(rawBody);
@@ -286,9 +288,14 @@ Deno.serve(async (req) => {
       .eq("razorpay_order_id", razorpayOrderId)
       .maybeSingle();
 
-    if (findErr || !paymentRow) {
-      console.error("Webhook: payment row not found");
-      return new Response(JSON.stringify({ ok: true, found: false }), {
+    if (findErr) {
+      console.error("Webhook: error fetching payment", findErr);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Database query failed", false), jsonHeaders);
+    }
+
+    if (!paymentRow) {
+      console.error("Webhook: payment not found for order", razorpayOrderId);
+      return new Response(JSON.stringify({ ok: true, notFound: true }), {
         status: 200,
         headers: jsonHeaders,
       });
@@ -327,7 +334,7 @@ Deno.serve(async (req) => {
         p_order_id: paymentRow.order_id,
         p_customer_id: paymentRow.customer_id,
         p_razorpay_payment_id: razorpayPaymentId,
-        p_razorpay_signature: signature,
+        p_is_webhook: true,
         p_transaction_id: razorpayPaymentId
       });
 
@@ -343,6 +350,22 @@ Deno.serve(async (req) => {
 
       if (confirmResult.success !== true) {
         console.error("Webhook: payment confirm RPC returned failure", confirmResult.errorCode);
+        
+        const DETERMINISTIC_RPC_ERRORS = new Set([
+          'VALIDATION_MISSING_ORDER_ID',
+          'VALIDATION_MISSING_CUSTOMER_ID',
+          'VALIDATION_MISSING_RAZORPAY_PAYMENT_ID',
+          'VALIDATION_MISSING_RAZORPAY_SIGNATURE',
+          'NOT_FOUND'
+        ]);
+
+        if (DETERMINISTIC_RPC_ERRORS.has(confirmResult.errorCode)) {
+          return new Response(JSON.stringify({ ok: true, rpcError: confirmResult.errorCode }), {
+            status: 200,
+            headers: jsonHeaders,
+          });
+        }
+        
         return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, confirmResult.errorCode, false), jsonHeaders);
       }
 
