@@ -28,6 +28,7 @@
 DROP FUNCTION IF EXISTS public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID);
 DROP FUNCTION IF EXISTS public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN);
 DROP FUNCTION IF EXISTS public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT, BOOLEAN);
 
 CREATE OR REPLACE FUNCTION public.create_payment_confirm(
   p_payment_id           UUID,
@@ -36,7 +37,8 @@ CREATE OR REPLACE FUNCTION public.create_payment_confirm(
   p_razorpay_signature   TEXT DEFAULT NULL,
   p_customer_id          UUID DEFAULT NULL,
   p_is_admin             BOOLEAN DEFAULT FALSE,
-  p_transaction_id       TEXT DEFAULT NULL
+  p_transaction_id       TEXT DEFAULT NULL,
+  p_is_webhook           BOOLEAN DEFAULT FALSE
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -158,7 +160,7 @@ BEGIN
       );
     END IF;
 
-    IF p_razorpay_signature IS NULL AND NOT p_is_admin THEN
+    IF p_razorpay_signature IS NULL AND NOT p_is_admin AND NOT p_is_webhook THEN
       RETURN jsonb_build_object(
         'success', false,
         'data', null,
