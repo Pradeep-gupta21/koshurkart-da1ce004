@@ -388,14 +388,14 @@ $$;
 -- ============================================================================
 -- Grants
 -- ============================================================================
-REVOKE ALL ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT, BOOLEAN) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT, BOOLEAN) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT, BOOLEAN) TO service_role;
 
 -- ============================================================================
 -- Documentation
 -- ============================================================================
-COMMENT ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT) IS
+COMMENT ON FUNCTION public.create_payment_confirm(UUID, UUID, TEXT, TEXT, UUID, BOOLEAN, TEXT, BOOLEAN) IS
 'Phase 3 confirm-step RPC. Finalizes payment/order/ledger status following
 successful Razorpay confirmation. Idempotent via credited_at + ledger_entries.status
 dual guard (first-writer-wins). Enforces atomic state transitions and sanitizes
