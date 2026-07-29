@@ -15,7 +15,7 @@ export class CancelOrderTool extends BaseCommerceTool<CancelOrderInput, CancelOr
   readonly name = "cancel_order";
   readonly description = "Cancel a specific order by its ID. Only allowed if the order is in a cancellable state.";
 
-  readonly audiences = ["customer"] as const;
+  readonly audiences = ["admin", "customer"] as const;
 
   readonly parameters: any = {
     type: "object",

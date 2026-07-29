@@ -18,7 +18,7 @@ export interface CustomerOutput {
 
 export class CustomerTool extends BaseCommerceTool<CustomerInput, CustomerOutput> {
   readonly name = "customer";
-  readonly description = "Manage and retrieve customer information (profile, addresses, preferences).";
+  readonly description = "Manage and retrieve customer information (profile, addresses, preferences). Do NOT use this tool to retrieve order history, track orders, or find order IDs.";
   
   readonly parameters: any = {
     type: "object",

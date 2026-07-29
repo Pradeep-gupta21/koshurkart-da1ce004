@@ -11,9 +11,9 @@ export interface GetOrdersOutput {
 
 export class GetOrdersTool extends BaseCommerceTool<GetOrdersInput, GetOrdersOutput> {
   readonly name = "get_orders";
-  readonly description = "Retrieve all orders placed by the current customer.";
+  readonly description = "Retrieve all orders placed by the current customer. Use this to find the customer's recent orders or order IDs if they ask to track or cancel a recent order without providing an ID. Do NOT use the customer tool to find orders.";
 
-  readonly audiences = ["customer"] as const;
+  readonly audiences = ["admin", "customer"] as const;
 
   readonly parameters: any = {
     type: "object",

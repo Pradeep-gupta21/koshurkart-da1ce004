@@ -15,7 +15,7 @@ export class GetOrderTool extends BaseCommerceTool<GetOrderInput, GetOrderOutput
   readonly name = "get_order";
   readonly description = "Retrieve a specific order by its ID.";
 
-  readonly audiences = ["customer"] as const;
+  readonly audiences = ["admin", "customer"] as const;
 
   readonly parameters: any = {
     type: "object",

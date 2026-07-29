@@ -15,7 +15,7 @@ export class TrackOrderTool extends BaseCommerceTool<TrackOrderInput, TrackOrder
   readonly name = "track_order";
   readonly description = "Retrieve tracking and shipment events for a specific order.";
 
-  readonly audiences = ["customer"] as const;
+  readonly audiences = ["admin", "customer"] as const;
 
   readonly parameters: any = {
     type: "object",
