@@ -15,7 +15,7 @@ import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 //    - Inserts the payout record idempotently (unique idempotency_key).
 // 4. Only service_role can invoke the RPC; client writes to payouts are blocked by RLS.
 import { createClient } from "@supabase/supabase-js";
-import { validatePayoutRequest } from "../_shared/validation.ts";
+import { validatePayoutRequest, parseAmountToPaise } from "../_shared/validation.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
 const ALLOWED_ORIGINS = [
@@ -106,7 +106,10 @@ Deno.serve(async (req) => {
     // all inside a single transaction. This eliminates the TOCTOU window
     // that existed when balance-read and insert were separate round-trips.
     const methodIdValue = (methodId && typeof methodId === "string") ? methodId : null;
-    const amountPaise = Math.round(amount * 100);
+    
+    // Exact parsing guarantees we have integer paise. 
+    // valErr check above ensures this won't be undefined.
+    const { paise: amountPaise } = parseAmountToPaise(amount);
 
     const { data: payoutRows, error: rpcErr } = await service
       .rpc("request_payout", {

@@ -2,6 +2,59 @@ import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 
+export function parseAmountToPaise(amount: unknown): { paise?: number, error?: PaymentError } {
+  if (amount === undefined || amount === null) {
+    return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount is required", false) };
+  }
+
+  let amtStr = "";
+  if (typeof amount === "number") {
+    if (!Number.isFinite(amount)) {
+      return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount must be a finite number", false) };
+    }
+    
+    // CONSERVATIVE NUMERIC RANGE:
+    // Floating point precision degrades at large magnitudes. We enforce a strict upper bound
+    // of 10,000,000 on raw numbers. For larger amounts, the client MUST send a decimal string.
+    if (amount > 10000000) {
+      return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "Numeric amounts > 10,000,000 are unsafe. Send as decimal string.", false) };
+    }
+
+    // Number.toString() correctly avoids floating point drift (e.g. 10.5 -> "10.5")
+    amtStr = amount.toString();
+  } else if (typeof amount === "string") {
+    amtStr = amount;
+  } else {
+    return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount must be a number or string", false) };
+  }
+
+  // Exact decimal-string -> integer-paise parser
+  // Reject exponent notation, NaN, Infinity, negative, multi-dots, or >2 fractional digits.
+  if (!/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(amtStr)) {
+    return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount must be a positive decimal with up to 2 fractional digits", false) };
+  }
+
+  const parts = amtStr.split(".");
+  const wholeStr = parts[0];
+  const fracStr = parts[1] || "";
+  
+  // Convert safely to integer paise
+  const paiseStr = wholeStr + fracStr.padEnd(2, "0");
+  const paise = parseInt(paiseStr, 10);
+
+  if (paise <= 0) {
+    return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount must be strictly greater than 0", false) };
+  }
+
+  // Enforce JS MAX_SAFE_INTEGER (9007199254740991). PostgreSQL BIGINT is slightly larger,
+  // but we must safely represent it in JS before passing to the RPC.
+  if (paise > Number.MAX_SAFE_INTEGER) {
+    return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount exceeds safe integer limits", false) };
+  }
+
+  return { paise };
+}
+
 export function validatePayoutRequest(body: any): PaymentError | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_PAYLOAD, "Invalid JSON payload structure", false);
@@ -9,8 +62,9 @@ export function validatePayoutRequest(body: any): PaymentError | null {
 
   const { amount, methodId, idempotencyKey, p_idempotency_key: legacyKey } = body;
 
-  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount must be a positive number", false);
+  const amountResult = parseAmountToPaise(amount);
+  if (amountResult.error) {
+    return amountResult.error;
   }
 
   if (methodId !== undefined && methodId !== null && typeof methodId !== "string") {
