@@ -106,11 +106,12 @@ Deno.serve(async (req) => {
     // all inside a single transaction. This eliminates the TOCTOU window
     // that existed when balance-read and insert were separate round-trips.
     const methodIdValue = (methodId && typeof methodId === "string") ? methodId : null;
+    const amountPaise = Math.round(amount * 100);
 
     const { data: payoutRows, error: rpcErr } = await service
       .rpc("request_payout", {
         p_vendor_id: vendorId,
-        p_amount: amount,
+        p_amount_paise: amountPaise,
         p_method_id: methodIdValue,
         p_idempotency_key: idempotencyKeyValue,
       });

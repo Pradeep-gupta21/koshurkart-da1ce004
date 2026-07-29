@@ -14,6 +14,7 @@ export function normalizeRpcError(rpcErr: any): PaymentError {
     case "23503": // foreign_key_violation
       return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid reference to a related record.", false);
     case "40001": // serialization_failure
+    case "40P01": // deadlock_detected
       return new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.CONFLICT, "Transaction serialization failed. Please retry.", true);
     case "42P01": // undefined_table
       return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error (database table missing).", false);
