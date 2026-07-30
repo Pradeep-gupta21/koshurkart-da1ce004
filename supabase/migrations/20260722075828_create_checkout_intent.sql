@@ -307,9 +307,12 @@ BEGIN
         SELECT id, payment_status, ROUND(amount * 100)::BIGINT INTO v_payment_id, v_payment_status, v_total_order_amount
         FROM public.payments
         WHERE order_id = v_order_id
+        ORDER BY created_at DESC NULLS LAST, id DESC
         LIMIT 1;
 
-        IF v_payment_id IS NULL THEN
+        IF v_payment_id IS NULL 
+           OR v_payment_status IS NULL 
+           OR v_total_order_amount IS NULL THEN
             RAISE WARNING 'Replay inconsistent: missing payment for order % (operation_key %)', v_order_id, v_existing_operation_key;
             RETURN jsonb_build_object(
                 'success', false,
@@ -401,7 +404,7 @@ BEGIN
             (p.stock - COALESCE(p.reserved_stock, 0)) AS available_stock,
             p.price,
             p.title,
-            p.image,
+            p.images[1] AS image,
             v.verification_status AS vendor_status
         FROM requested r
         LEFT JOIN public.products p ON p.id = r.product_id
