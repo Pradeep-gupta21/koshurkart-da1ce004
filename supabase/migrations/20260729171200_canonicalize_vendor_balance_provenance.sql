@@ -29,6 +29,36 @@ COMMENT ON COLUMN public.payouts.amount IS 'Legacy compatibility float (rupees) 
 -- 2. Snapshot Population B Before Trigger Mutation
 -- -----------------------------------------------------------------------------
 -- Create an immutable snapshot of candidates.
+--
+-- Population B eligibility: vendor has a legacy withdrawable_balance but no
+-- ledger_entries yet (i.e., was never migrated to the ledger-first architecture).
+--
+-- PAYOUT-SIDE PROOF — Why pending/processing payouts exclude a vendor:
+--
+-- The atomic request_payout RPC (20260717000004) RESERVES funds immediately
+-- on payout creation (pending state) by deducting from withdrawable_balance.
+-- Therefore, if a vendor has a non-terminal payout, the current
+-- withdrawable_balance is already reduced by that reserved amount. However,
+-- such a payout has NO corresponding ledger entry (it predates the ledger
+-- architecture). We cannot create an opening credit that is mathematically
+-- sound in both: (a) the case the payout later settles (the credit would
+-- over-state inbound earnings) and (b) the case it fails/is-cancelled (the
+-- refund trigger would add back to a balance already credited in the ledger).
+-- The only safe treatment is fail-closed exclusion.
+--
+-- CUTOVER PRE-FLIGHT GUARANTEE:
+-- Migration 20260729163901 enforces that ALL payouts are in terminal states
+-- (completed, failed, rejected, cancelled) before ledger cutover may proceed.
+-- Therefore, the pending/processing exclusion below cannot match any row in
+-- a correctly ordered migration chain. It exists as a defence-in-depth guard
+-- against an incorrectly ordered re-run or a future regression.
+--
+-- TERMINAL PAYOUTS (completed, failed, cancelled, rejected):
+-- Their effect on withdrawable_balance is already fully resolved:
+--   - completed: deducted by the legacy trigger (then this trigger was dropped).
+--   - failed/rejected/cancelled: refunded by admin_update_payout_status.
+-- A Pop-B vendor with only terminal payouts can safely receive an opening
+-- credit equal to the current withdrawable_balance.
 CREATE TEMP TABLE legacy_balance_candidates ON COMMIT DROP AS
 SELECT
     v.id AS vendor_id,
@@ -46,6 +76,7 @@ WHERE v.withdrawable_balance > 0
       WHERE p.vendor_id = v.id
         AND p.status IN ('pending', 'processing')
   );
+
 
 -- -----------------------------------------------------------------------------
 -- 3. Validate Population B Before Conversion
@@ -542,19 +573,31 @@ BEGIN
     RAISE EXCEPTION 'MIGRATION ABORTED: Expected exactly 1 request_payout overload, but found %.', v_overload_count;
   END IF;
 
+  -- ── Role-existence guard ────────────────────────────────────────────────
+  -- has_function_privilege() raises an error if the role does not exist.
+  -- We must guard each call with an explicit existence check. PL/pgSQL
+  -- IF-THEN-ELSIF branches are evaluated sequentially and guarantee the
+  -- privilege function is never called for a missing role.
+  --
+  -- Convention: this migration targets the Supabase-managed platform where
+  -- service_role, anon, and authenticated are mandatory. If any role is absent
+  -- the migration aborts with a diagnostic exception rather than silently
+  -- continuing with weakened ACL guarantees.
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role service_role is missing.';
+    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role service_role is missing. This migration is designed for the Supabase platform.';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
-    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role anon is missing.';
+    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role anon is missing. This migration is designed for the Supabase platform.';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
-    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role authenticated is missing.';
+    RAISE EXCEPTION 'MIGRATION ABORTED: Required Supabase role authenticated is missing. This migration is designed for the Supabase platform.';
   END IF;
 
-  -- Verify exact signature identity, SECURITY DEFINER, and correct ACL grants
+  -- ── Security assertion — all three roles are confirmed to exist ─────────
+  -- Each has_function_privilege() call is now guaranteed safe because the
+  -- role-existence checks above would have raised before reaching this point.
   SELECT EXISTS (
     SELECT 1
     FROM pg_proc p
