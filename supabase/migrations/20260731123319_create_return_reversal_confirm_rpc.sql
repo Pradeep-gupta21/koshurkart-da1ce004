@@ -24,9 +24,6 @@ DECLARE
     -- timestamps
     v_now TIMESTAMPTZ := now();
 
-    -- response construction
-    v_response JSONB;
-
 BEGIN
     -------------------------------------------------------------------------
     -- 1. Authorization
@@ -264,23 +261,52 @@ BEGIN
     -------------------------------------------------------------------------
     -- 7. Error & Concurrency Normalization
     -------------------------------------------------------------------------
-    -- TODO Task 3.7 (must account for:
-    -- Retryable/re-raised: serialization_failure, deadlock_detected, lock_not_available
-    -- Integrity/business normalization: unique_violation, check_violation, foreign_key_violation
-    -- Unexpected: OTHERS with internal logging and sanitized API response)
 EXCEPTION
     WHEN serialization_failure OR deadlock_detected OR lock_not_available THEN
         RAISE; -- Preserve Phase 4 architectural retryable SQLSTATE re-raise behavior
+
+    WHEN unique_violation THEN
+        RAISE WARNING '[return_reversal_confirmation_failure] Unique constraint violation for order_item %: % (SQLSTATE: %)', 
+            p_order_item_id, SQLERRM, SQLSTATE;
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'CONFLICT'
+        );
+
+    WHEN check_violation OR foreign_key_violation THEN
+        RAISE WARNING '[return_reversal_confirmation_failure] Data integrity violation for order_item %: % (SQLSTATE: %)', 
+            p_order_item_id, SQLERRM, SQLSTATE;
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'VALIDATION_FAILED'
+        );
+
     WHEN raise_exception THEN
-        -- Explicitly raised conflicts (e.g., failed defensive UPDATEs) are caught here.
+        -- Explicitly raised conflicts (e.g., failed defensive UPDATEs) are safely discriminated by message.
         -- This guarantees the PL/pgSQL subtransaction is fully rolled back before returning CONFLICT.
-        -- Without this explicit handler, OTHERS would incorrectly swallow them as INTERNAL_ERROR.
+        IF SQLERRM IN ('ledger_confirmation_failed', 'order_item_transition_failed') THEN
+            RETURN jsonb_build_object(
+              'success', false,
+              'data', null,
+              'isIdempotentReplay', false,
+              'errorCode', 'CONFLICT'
+            );
+        END IF;
+        
+        -- Unknown P0001 exceptions are treated as unexpected internal errors to prevent leaking programmer errors.
+        RAISE WARNING '[return_reversal_confirmation_failure] Unhandled raise_exception in create_return_reversal_confirm (order_item_id: %). SQLSTATE: %, SQLERRM: %',
+            p_order_item_id, SQLSTATE, SQLERRM;
         RETURN jsonb_build_object(
           'success', false,
           'data', null,
           'isIdempotentReplay', false,
-          'errorCode', 'CONFLICT'
+          'errorCode', 'INTERNAL_ERROR'
         );
+
     WHEN OTHERS THEN
         RAISE WARNING '[return_reversal_confirmation_failure] Unhandled exception in create_return_reversal_confirm (order_item_id: %). SQLSTATE: %, SQLERRM: %',
             p_order_item_id, SQLSTATE, SQLERRM;
@@ -291,6 +317,7 @@ EXCEPTION
           'errorCode', 'INTERNAL_ERROR'
         );
 END;
+
 $$;
 
 REVOKE ALL ON FUNCTION public.create_return_reversal_confirm(uuid, text) FROM PUBLIC;
