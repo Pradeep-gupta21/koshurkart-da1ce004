@@ -129,6 +129,7 @@ BEGIN
               AND vendor_id = v_order_item.vendor_id
               AND type = 'reversal'
               AND status = 'pending'
+              AND razorpay_reference_id IS NULL
             FOR UPDATE
         )
         SELECT COUNT(*), MIN(id), MIN(operation_key)
@@ -206,7 +207,8 @@ BEGIN
             razorpay_reference_id = p_razorpay_reversal_id
         WHERE id = v_ledger_entry_id
           AND type = 'reversal'
-          AND status = 'pending';
+          AND status = 'pending'
+          AND razorpay_reference_id IS NULL;
 
         GET DIAGNOSTICS v_ledger_row_count = ROW_COUNT;
         IF v_ledger_row_count <> 1 THEN
@@ -289,6 +291,8 @@ EXCEPTION
         -- Explicitly raised conflicts (e.g., failed defensive UPDATEs) are safely discriminated by message.
         -- This guarantees the PL/pgSQL subtransaction is fully rolled back before returning CONFLICT.
         IF SQLERRM IN ('ledger_confirmation_failed', 'order_item_transition_failed') THEN
+            RAISE WARNING '[return_reversal_confirmation_conflict] Defensive invariant failure for order_item %: % (SQLSTATE: %)',
+                p_order_item_id, SQLERRM, SQLSTATE;
             RETURN jsonb_build_object(
               'success', false,
               'data', null,
