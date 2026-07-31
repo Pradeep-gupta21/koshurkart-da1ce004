@@ -16,6 +16,7 @@ DECLARE
 
     -- idempotency & ledger provenance
     v_is_idempotent_replay BOOLEAN := FALSE;
+    v_ledger_entry_id UUID;
     v_operation_key TEXT;
     v_ledger_row_count INTEGER;
     v_ledger_razorpay_reference_id TEXT;
@@ -120,15 +121,22 @@ BEGIN
         END IF;
 
         -- 2. Prove exactly one canonical pending reversal ledger row exists
-        -- for the completely locked financial context.
-        SELECT COUNT(*)
-        INTO v_ledger_row_count
-        FROM public.ledger_entries
-        WHERE order_item_id = p_order_item_id
-          AND order_id = v_order_item.order_id
-          AND vendor_id = v_order_item.vendor_id
-          AND type = 'reversal'
-          AND status = 'pending';
+        -- for the completely locked financial context, locking it safely to prevent TOCTOU.
+        -- A single CTE forces PostgreSQL to evaluate the FOR UPDATE lock simultaneously
+        -- with the cardinality/identity snapshot, closing the READ COMMITTED gap.
+        WITH locked_rows AS (
+            SELECT id, operation_key
+            FROM public.ledger_entries
+            WHERE order_item_id = p_order_item_id
+              AND order_id = v_order_item.order_id
+              AND vendor_id = v_order_item.vendor_id
+              AND type = 'reversal'
+              AND status = 'pending'
+            FOR UPDATE
+        )
+        SELECT COUNT(*), MIN(id), MIN(operation_key)
+        INTO v_ledger_row_count, v_ledger_entry_id, v_operation_key
+        FROM locked_rows;
 
         IF v_ledger_row_count <> 1 THEN
             RETURN jsonb_build_object(
@@ -138,17 +146,6 @@ BEGIN
                 'errorCode', 'CONFLICT'
             );
         END IF;
-
-        -- 3. Identify and lock the exact canonical row for confirmation.
-        SELECT operation_key
-        INTO v_operation_key
-        FROM public.ledger_entries
-        WHERE order_item_id = p_order_item_id
-          AND order_id = v_order_item.order_id
-          AND vendor_id = v_order_item.vendor_id
-          AND type = 'reversal'
-          AND status = 'pending'
-        FOR UPDATE;
 
         v_is_idempotent_replay := FALSE;
 
@@ -167,14 +164,18 @@ BEGIN
 
         -- 2. Prove exactly one canonical confirmed reversal ledger row exists
         -- for the completely locked financial context.
-        SELECT COUNT(*)
-        INTO v_ledger_row_count
-        FROM public.ledger_entries
-        WHERE order_item_id = p_order_item_id
-          AND order_id = v_order_item.order_id
-          AND vendor_id = v_order_item.vendor_id
-          AND type = 'reversal'
-          AND status = 'confirmed';
+        WITH candidate_rows AS (
+            SELECT id, razorpay_reference_id, operation_key
+            FROM public.ledger_entries
+            WHERE order_item_id = p_order_item_id
+              AND order_id = v_order_item.order_id
+              AND vendor_id = v_order_item.vendor_id
+              AND type = 'reversal'
+              AND status = 'confirmed'
+        )
+        SELECT COUNT(*), MIN(id), MIN(razorpay_reference_id), MIN(operation_key)
+        INTO v_ledger_row_count, v_ledger_entry_id, v_ledger_razorpay_reference_id, v_operation_key
+        FROM candidate_rows;
 
         IF v_ledger_row_count <> 1 THEN
             RETURN jsonb_build_object(
@@ -186,15 +187,6 @@ BEGIN
         END IF;
 
         -- 3. Verify ledger provider reference perfectly matches the incoming reversal ID.
-        SELECT razorpay_reference_id, operation_key
-        INTO v_ledger_razorpay_reference_id, v_operation_key
-        FROM public.ledger_entries
-        WHERE order_item_id = p_order_item_id
-          AND order_id = v_order_item.order_id
-          AND vendor_id = v_order_item.vendor_id
-          AND type = 'reversal'
-          AND status = 'confirmed';
-
         IF v_ledger_razorpay_reference_id IS DISTINCT FROM p_razorpay_reversal_id THEN
             RETURN jsonb_build_object(
                 'success', false,
@@ -210,15 +202,43 @@ BEGIN
     -------------------------------------------------------------------------
     -- 4. Canonical Reversal Ledger Confirmation
     -------------------------------------------------------------------------
-    -- TODO Task 3.5
+    IF NOT v_is_idempotent_replay THEN
+        UPDATE public.ledger_entries
+        SET status = 'confirmed',
+            confirmed_at = v_now,
+            razorpay_reference_id = p_razorpay_reversal_id
+        WHERE id = v_ledger_entry_id
+          AND type = 'reversal'
+          AND status = 'pending';
+
+        GET DIAGNOSTICS v_ledger_row_count = ROW_COUNT;
+        IF v_ledger_row_count <> 1 THEN
+            -- Raising an exception guarantees the PL/pgSQL subtransaction rolls back,
+            -- aborting any partial state mutations.
+            RAISE EXCEPTION 'ledger_confirmation_failed' USING ERRCODE = 'P0001';
+        END IF;
+    END IF;
 
     -------------------------------------------------------------------------
     -- 5. Atomic Return State Transition
     -------------------------------------------------------------------------
-    -- TODO Task 3.5
     -- Note: The authoritative state transition is 'reversing' -> 'refunding'.
     -- There is NO 'reversed' state. 'refunding' is the mandatory postcondition.
     -- (The final 'refunding' -> 'approved' transition will be owned by create_return_refund_confirm).
+    IF NOT v_is_idempotent_replay THEN
+        UPDATE public.order_items
+        SET return_status = 'refunding',
+            razorpay_reversal_id = p_razorpay_reversal_id
+        WHERE id = p_order_item_id
+          AND return_status = 'reversing'
+          AND razorpay_reversal_id IS NULL;
+
+        GET DIAGNOSTICS v_ledger_row_count = ROW_COUNT;
+        IF v_ledger_row_count <> 1 THEN
+            -- Raising an exception here will atomatically roll back the previous ledger confirmation.
+            RAISE EXCEPTION 'order_item_transition_failed' USING ERRCODE = 'P0001';
+        END IF;
+    END IF;
 
     -------------------------------------------------------------------------
     -- 6. Response / Replay Hydration
@@ -244,6 +264,16 @@ BEGIN
 EXCEPTION
     WHEN serialization_failure OR deadlock_detected OR lock_not_available THEN
         RAISE; -- Preserve Phase 4 architectural retryable SQLSTATE re-raise behavior
+    WHEN raise_exception THEN
+        -- Explicitly raised conflicts (e.g., failed defensive UPDATEs) are caught here.
+        -- This guarantees the PL/pgSQL subtransaction is fully rolled back before returning CONFLICT.
+        -- Without this explicit handler, OTHERS would incorrectly swallow them as INTERNAL_ERROR.
+        RETURN jsonb_build_object(
+          'success', false,
+          'data', null,
+          'isIdempotentReplay', false,
+          'errorCode', 'CONFLICT'
+        );
     WHEN OTHERS THEN
         RAISE WARNING '[return_reversal_confirmation_failure] Unhandled exception in create_return_reversal_confirm (order_item_id: %). SQLSTATE: %, SQLERRM: %',
             p_order_item_id, SQLSTATE, SQLERRM;
