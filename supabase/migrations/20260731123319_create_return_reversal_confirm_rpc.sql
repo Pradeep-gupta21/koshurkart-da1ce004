@@ -243,16 +243,23 @@ BEGIN
     -------------------------------------------------------------------------
     -- 6. Response / Replay Hydration
     -------------------------------------------------------------------------
-    -- TODO Task 3.6
+    -- Both fresh execution and valid idempotent replay reach this point having proven
+    -- or successfully mutated the canonical authoritative state.
+    -- We do not query v_order_item.return_status because the RECORD is stale (it reads 'reversing').
+    -- Instead, we construct the response exactly matching the proven post-mutation state.
 
-    -- Temporary NOT_IMPLEMENTED response for the skeleton
-    v_response := jsonb_build_object(
-      'success', false,
-      'data', null,
-      'isIdempotentReplay', false,
-      'errorCode', 'NOT_IMPLEMENTED'
+    RETURN jsonb_build_object(
+      'success', true,
+      'data', jsonb_build_object(
+          'orderItemId', p_order_item_id,
+          'returnStatus', 'refunding',
+          'razorpayReversalId', p_razorpay_reversal_id,
+          'ledgerEntryId', v_ledger_entry_id,
+          'operationKey', v_operation_key
+      ),
+      'isIdempotentReplay', v_is_idempotent_replay,
+      'errorCode', null
     );
-    RETURN v_response;
 
     -------------------------------------------------------------------------
     -- 7. Error & Concurrency Normalization
