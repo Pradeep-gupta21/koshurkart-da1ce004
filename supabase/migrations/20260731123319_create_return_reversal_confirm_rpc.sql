@@ -132,11 +132,15 @@ BEGIN
               AND razorpay_reference_id IS NULL
             FOR UPDATE
         )
-        SELECT COUNT(*), MIN(id), MIN(operation_key)
+        SELECT 
+            COUNT(*) OVER () as total_rows,
+            id,
+            operation_key
         INTO v_ledger_row_count, v_ledger_entry_id, v_operation_key
-        FROM locked_rows;
+        FROM locked_rows
+        LIMIT 1;
 
-        IF v_ledger_row_count <> 1 THEN
+        IF NOT FOUND OR v_ledger_row_count <> 1 THEN
             RETURN jsonb_build_object(
                 'success', false,
                 'data', null,
@@ -163,7 +167,11 @@ BEGIN
         -- 2. Prove exactly one canonical confirmed reversal ledger row exists
         -- for the completely locked financial context.
         WITH candidate_rows AS (
-            SELECT id, razorpay_reference_id, operation_key
+            SELECT
+                COUNT(*) OVER () as total_rows,
+                id,
+                razorpay_reference_id,
+                operation_key
             FROM public.ledger_entries
             WHERE order_item_id = p_order_item_id
               AND order_id = v_order_item.order_id
@@ -171,11 +179,20 @@ BEGIN
               AND type = 'reversal'
               AND status = 'confirmed'
         )
-        SELECT COUNT(*), MIN(id), MIN(razorpay_reference_id), MIN(operation_key)
-        INTO v_ledger_row_count, v_ledger_entry_id, v_ledger_razorpay_reference_id, v_operation_key
-        FROM candidate_rows;
+        SELECT
+            total_rows,
+            id,
+            razorpay_reference_id,
+            operation_key
+        INTO
+            v_ledger_row_count,
+            v_ledger_entry_id,
+            v_ledger_razorpay_reference_id,
+            v_operation_key
+        FROM candidate_rows
+        LIMIT 1;
 
-        IF v_ledger_row_count <> 1 THEN
+        IF NOT FOUND OR v_ledger_row_count <> 1 THEN
             RETURN jsonb_build_object(
                 'success', false,
                 'data', null,

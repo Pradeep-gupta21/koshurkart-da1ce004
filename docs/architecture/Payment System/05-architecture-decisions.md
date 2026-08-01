@@ -159,3 +159,44 @@ Architecture Scope: Payment, Ledger, Payout, Return, and Reconciliation Subsyste
 - Materializing the value (rather than computing it live on every read) is a deliberate performance choice at the target scale (500–5,000 vendors, 1,000–10,000 orders/day), not a correctness requirement — correctness comes from the ledger being authoritative regardless of how the projection is computed.
 
 **Related documents:** `01-core-architecture-specification.md` P5, P11; `03-database-ledger-specification.md` §1.3, §6
+
+---
+
+## ADR-011: return_refunded_at is Legacy Metadata, Not a Phase 4 Idempotency Guard
+
+**Context:** The Phase 4 Task 3.1 blueprint and related legacy Edge Function designs contained conflicting statements about `order_items.return_refunded_at`.
+
+**Decision:** The canonical state machine document (`02-state-machines.md`) is authoritative. The blueprint's claims regarding this timestamp are formally superseded.
+
+> [!IMPORTANT]
+> SUPERSEDED BY ADR-011:
+> `return_refunded_at` is legacy/non-authoritative metadata and is not part
+> of the Phase 4 `create_return_refund_confirm` completion or replay invariant.
+>
+> A completed Phase 4 customer refund is proven by:
+> 1. `order_items.return_status = 'approved'`;
+> 2. `order_items.razorpay_refund_id` exactly matching the incoming provider ID; and
+> 3. exactly one canonical confirmed platform customer-refund ledger entry
+>    (`type='refund'`, `status='confirmed'`, `vendor_id IS NULL`) whose
+>    `razorpay_reference_id` matches that same provider ID.
+>
+> `create_return_refund_confirm` does NOT read or write
+> `order_items.return_refunded_at`.
+>
+> Existing writes to `return_refunded_at` belong to legacy flows and do not
+> participate in Phase 4 idempotency.
+
+The blueprint's lifecycle section should consequently become:
+
+```text
+return_status: 'refunding' → 'approved' (TERMINAL)
+ledger_entries (refund): CREATE with status='confirmed', vendor_id=NULL
+order_items.razorpay_refund_id: incoming provider refund ID
+```
+
+**Consequences:**
+- Removed `order_items: return_refunded_at = now()` from the Phase 4 ownership list.
+- Corrected the precondition saying the Edge Function has already persisted `razorpay_refund_id`. The RPC explicitly requires a fresh `refunding` item to have `razorpay_refund_id IS NULL` and atomically persists it itself.
+- Marked the stale three-argument signature (`p_vendor_id`, `p_order_item_id`, `p_razorpay_refund_id`) as superseded. The working RPC correctly derives vendor ownership/context from the locked `order_items` row and requires only `p_order_item_id` and `p_razorpay_refund_id`.
+
+**Related documents:** `01-core-architecture-specification.md` §9; `02-state-machines.md` §3
