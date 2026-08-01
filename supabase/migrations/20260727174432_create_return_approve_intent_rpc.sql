@@ -4,8 +4,7 @@
 
 CREATE OR REPLACE FUNCTION public.approve_return_intent(
     p_order_item_id UUID,
-    p_vendor_id UUID,
-    p_customer_id UUID
+    p_vendor_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -106,13 +105,7 @@ BEGIN
         RETURN v_response;
     END IF;
 
-    -- 5. Customer verification
-    -- Architecture alignment (Task 2.1): strictly enforce that intent is originating
-    -- from the canonical buyer for this order. (p_customer_id represents the user)
-    IF p_customer_id IS NULL OR v_order.user_id IS DISTINCT FROM p_customer_id THEN
-        v_response := jsonb_build_object('success', false, 'data', null, 'isIdempotentReplay', false, 'errorCode', 'FORBIDDEN');
-        RETURN v_response;
-    END IF;
+
 
     -- Cache lookup dependencies for ledger/escalation operations
     v_order_customer_id := v_order.user_id;
@@ -369,16 +362,16 @@ END;
 $$;
 
 REVOKE ALL
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 FROM PUBLIC;
 
 REVOKE EXECUTE
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 FROM anon, authenticated;
 
 GRANT EXECUTE
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 TO service_role;
 
-COMMENT ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+COMMENT ON FUNCTION public.approve_return_intent(UUID, UUID)
 IS 'Canonical return approval intent RPC for processing vendor return approvals and their financial state transitions.';

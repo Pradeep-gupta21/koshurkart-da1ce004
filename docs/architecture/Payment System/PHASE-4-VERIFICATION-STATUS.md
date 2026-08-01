@@ -178,3 +178,6 @@ Blocks further development: NO
 
 Blocks production deployment: YES
 
+
+
+Verification Debt (Task 3): Runtime verification pending. Static implementation completed and reviewed. Pending actions: apply migrations to the linked Supabase project, execute the Task 3 regression suite (fresh flow, replay, conflict, rollback, concurrency, and migration verification), and record results before declaring Task 3 production-ready.

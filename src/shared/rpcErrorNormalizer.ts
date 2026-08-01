@@ -7,6 +7,25 @@ export function normalizeRpcError(rpcErr: any): PaymentError {
     return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false);
   }
 
+  // Canonical RPC JSON response
+  if (rpcErr.errorCode) {
+    switch (rpcErr.errorCode) {
+      case "NOT_FOUND":
+        return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.NOT_FOUND, "Resource not found.", false);
+      case "FORBIDDEN":
+        return new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden.", false);
+      case "VALIDATION_FAILED":
+        return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Validation failed.", false);
+      case "CONFLICT":
+        return new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.CONFLICT, "Transaction conflict. Please retry.", true);
+      case "PAYMENT_NOT_FOUND":
+        return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.NOT_FOUND, "Payment missing.", false);
+      case "INTERNAL_ERROR":
+      default:
+        return new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false);
+    }
+  }
+
   // Common PostgreSQL SQLSTATE codes
   switch (rpcErr.code) {
     case "23505": // unique_violation

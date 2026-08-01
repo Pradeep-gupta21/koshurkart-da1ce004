@@ -40,13 +40,13 @@ DECLARE
   v_res JSONB;
 BEGIN
   -- first execution
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002');
   IF (v_res->>'success')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'Case 1 initial run failed: %', v_res;
   END IF;
 
   -- replay
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002');
   IF (v_res->>'isIdempotentReplay')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'Case 1 replay flag not set: %', v_res;
   END IF;
@@ -66,7 +66,7 @@ DECLARE
   v_res JSONB;
 BEGIN
   -- try replay when ledger_entries is missing
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000007', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000007', '22222222-0000-0000-0000-000000000002');
   IF (v_res->>'success')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'Case 2 failed closed condition. Should have failed, but returned: %', v_res;
   END IF;
@@ -86,7 +86,7 @@ DECLARE
   v_res JSONB;
 BEGIN
   -- try replay when escalation is missing
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000008', '22222222-0000-0000-0000-000000000002');
   IF (v_res->>'success')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'Case 3 failed closed condition. Should have failed, but returned: %', v_res;
   END IF;
@@ -96,34 +96,19 @@ BEGIN
   RAISE NOTICE 'Case 3 PASSED';
 END $$;
 
--- Case 4: NULL customer ID
+-- Case 4: Wrong vendor ID (replaces former customer ID tests)
 DO $$
 DECLARE
   v_res JSONB;
 BEGIN
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002', NULL);
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '99999999-9999-9999-9999-999999999999');
   IF (v_res->>'success')::boolean IS NOT FALSE THEN
-    RAISE EXCEPTION 'Case 4 failed. NULL customer should be rejected. Result: %', v_res;
+    RAISE EXCEPTION 'Case 4 failed. Wrong vendor should be rejected. Result: %', v_res;
   END IF;
   IF (v_res->>'errorCode') IS DISTINCT FROM 'FORBIDDEN' THEN
     RAISE EXCEPTION 'Case 4 incorrect error code. Expected FORBIDDEN, got: %', v_res;
   END IF;
   RAISE NOTICE 'Case 4 PASSED';
-END $$;
-
--- Case 5: Wrong customer ID
-DO $$
-DECLARE
-  v_res JSONB;
-BEGIN
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000005', '22222222-0000-0000-0000-000000000002', '99999999-9999-9999-9999-999999999999');
-  IF (v_res->>'success')::boolean IS NOT FALSE THEN
-    RAISE EXCEPTION 'Case 5 failed. Wrong customer should be rejected. Result: %', v_res;
-  END IF;
-  IF (v_res->>'errorCode') IS DISTINCT FROM 'FORBIDDEN' THEN
-    RAISE EXCEPTION 'Case 5 incorrect error code. Expected FORBIDDEN, got: %', v_res;
-  END IF;
-  RAISE NOTICE 'Case 5 PASSED';
 END $$;
 
 -- Case 6: Timestamp Collision Deterministic Payment Resolution
@@ -152,7 +137,7 @@ DO $$
 DECLARE
   v_res JSONB;
 BEGIN
-  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002');
   IF (v_res->>'success')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'Case 6 failed to execute RPC: %', v_res;
   END IF;
@@ -167,7 +152,7 @@ END $$;
 DO $$
 BEGIN
   SET ROLE anon;
-  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002');
   RAISE EXCEPTION 'Case 7 failed. anon role should not be able to execute the RPC.';
 EXCEPTION
   WHEN insufficient_privilege THEN
@@ -179,7 +164,7 @@ RESET ROLE;
 DO $$
 BEGIN
   SET ROLE authenticated;
-  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002');
   RAISE EXCEPTION 'Case 8 failed. authenticated role should not be able to execute the RPC.';
 EXCEPTION
   WHEN insufficient_privilege THEN
@@ -192,7 +177,7 @@ DO $$
 BEGIN
   SET ROLE service_role;
   -- Expected to fail with logic error (since it's a replay or something else, but NOT insufficient_privilege)
-  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001');
+  PERFORM public.approve_return_intent('55555555-0000-0000-0000-000000000006', '22222222-0000-0000-0000-000000000002');
   RAISE NOTICE 'Case 9 PASSED';
 EXCEPTION
   WHEN insufficient_privilege THEN

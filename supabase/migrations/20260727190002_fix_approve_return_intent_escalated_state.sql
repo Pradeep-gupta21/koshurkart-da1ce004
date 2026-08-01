@@ -47,11 +47,11 @@
 -- ============================================================================
 
 DROP FUNCTION IF EXISTS public.approve_return_intent(UUID, UUID, UUID);
+DROP FUNCTION IF EXISTS public.approve_return_intent(UUID, UUID);
 
 CREATE OR REPLACE FUNCTION public.approve_return_intent(
     p_order_item_id UUID,
-    p_vendor_id UUID,
-    p_customer_id UUID
+    p_vendor_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -156,11 +156,7 @@ BEGIN
         RETURN v_response;
     END IF;
 
-    -- 5. Customer verification (p_customer_id represents the user)
-    IF p_customer_id IS NULL OR v_order.user_id IS DISTINCT FROM p_customer_id THEN
-        v_response := jsonb_set(v_response, '{errorCode}', '"FORBIDDEN"');
-        RETURN v_response;
-    END IF;
+
 
     -- 6. Preserve data for later sections
     v_order_item_status := v_order_item.return_status;
@@ -423,16 +419,16 @@ END;
 $$;
 
 REVOKE ALL
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 FROM PUBLIC;
 
 REVOKE EXECUTE
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 FROM anon, authenticated;
 
 GRANT EXECUTE
-ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+ON FUNCTION public.approve_return_intent(UUID, UUID)
 TO service_role;
 
-COMMENT ON FUNCTION public.approve_return_intent(UUID, UUID, UUID)
+COMMENT ON FUNCTION public.approve_return_intent(UUID, UUID)
 IS 'Canonical return approval intent RPC. Transitions return_status to ''reversing'' (sufficient balance) or ''escalated'' (insufficient balance requiring finance_admin resolution). Idempotent via FOR UPDATE lock + status guard. Architecture-aligned in Task 2.8: ''escalated'' is now the exclusive escalation state; ''approved'' is reserved for the terminal state set by create_return_refund_confirm.';
