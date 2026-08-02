@@ -15,9 +15,17 @@ import { ok, err, ToolResult } from "../../types";
 export type GetCartInput = Record<string, never>;
 
 export interface GetCartOutput {
-  cart: any;
-  itemCount: number;
+  products: Array<{
+    productId: string;
+    title: string;
+    price: number;
+    quantity: number;
+  }>;
+  quantities: number;
+  subtotal: number;
+  totalItems: number;
   message: string;
+  cart?: any;
 }
 
 export class GetCartTool extends BaseCommerceTool<GetCartInput, GetCartOutput> {
@@ -70,12 +78,26 @@ export class GetCartTool extends BaseCommerceTool<GetCartInput, GetCartOutput> {
     }
 
     const cart = result.data ?? { order_items: [] };
-    const itemCount: number = Array.isArray(cart.order_items) ? cart.order_items.length : 0;
+    const items = Array.isArray(cart.order_items) ? cart.order_items : [];
+    
+    const products = items.map((item: any) => ({
+      productId: item.product_id,
+      title: item.title,
+      price: item.price,
+      quantity: item.quantity,
+    }));
+    
+    const quantities = items.reduce((acc: number, item: any) => acc + item.quantity, 0);
+    const subtotal = items.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0);
+    const totalItems = items.length;
 
     return ok({
+      products,
+      quantities,
+      subtotal,
+      totalItems,
       cart,
-      itemCount,
-      message: itemCount === 0 ? "Your cart is empty." : `Your cart has ${itemCount} item(s).`,
+      message: totalItems === 0 ? "Your cart is empty." : `Your cart has ${totalItems} item(s) (${quantities} total units) with a subtotal of ₹${subtotal}.`,
     });
   }
 }

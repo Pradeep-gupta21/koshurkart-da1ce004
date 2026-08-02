@@ -3,11 +3,7 @@ import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface CategoryNode {
   id: string;
@@ -58,7 +54,7 @@ function buildCategoryTree(rows: { category: string; count: number }[]): Categor
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -113,7 +109,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ trending, categories, programs }),
       {
         headers: {
-          ...corsHeaders,
+          ...getCorsHeaders(req),
           "Content-Type": "application/json",
           "Cache-Control": "public, max-age=300",
         },
@@ -121,6 +117,6 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     console.error("get-sidebar-menu error:", e);
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, e instanceof Error ? e.message : "Unknown error", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, e instanceof Error ? e.message : "Unknown error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

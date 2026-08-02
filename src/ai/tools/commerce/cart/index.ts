@@ -9,3 +9,4 @@ export { AddToCartTool } from "./AddToCartTool";
 export { RemoveFromCartTool } from "./RemoveFromCartTool";
 export { UpdateCartQuantityTool } from "./UpdateCartQuantityTool";
 export { GetCartTool } from "./GetCartTool";
+export { ClearCartTool } from "./ClearCartTool";

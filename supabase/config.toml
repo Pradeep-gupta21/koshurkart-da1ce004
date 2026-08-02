@@ -1,27 +1,77 @@
 project_id = "xlqzbomiuuadxcygnsal"
 
+# M-3 (audit): Every edge function is listed explicitly with its intended
+# verify_jwt value. Functions not listed default to verify_jwt=true, which
+# is secure but undocumented — listing them all prevents confusion.
+
 [functions]
+  # --- Authenticated (verify_jwt = true) ---
+  # These functions require a valid Supabase JWT to be called.
   [functions.admin-resync-payment]
     verify_jwt = true
-  [functions.auth-email-hook]
-    verify_jwt = false
-  [functions.confirm-upi-payment]
-    verify_jwt = false
-  [functions.create-checkout]
-    verify_jwt = false
-  [functions.location]
-    verify_jwt = false
-  [functions.log-auth-event]
-    verify_jwt = false
+  [functions.admin-verify-payment]
+    verify_jwt = true
+  [functions.ai-chat]
+    verify_jwt = true
+  [functions.ai-job-worker]
+    verify_jwt = true
+  [functions.audit-payment-reconciliation]
+    verify_jwt = true
+  [functions.get-sidebar-menu]
+    verify_jwt = true
+  [functions.menu]
+    verify_jwt = true
   [functions.process-email-queue]
     verify_jwt = true
-  [functions.quote-checkout]
-    verify_jwt = false
-  [functions.razorpay-webhook]
-    verify_jwt = false
+  [functions.recalculate-prices]
+    verify_jwt = true
+  [functions.request-payout]
+    verify_jwt = true
+  [functions.send-transactional-email]
+    verify_jwt = true
   [functions.test-bootstrap]
-    verify_jwt = false
+    verify_jwt = true
   [functions.vendor-approve-return]
     verify_jwt = true
+  [functions.vendor-setup-payment]
+    verify_jwt = true
+
+  # --- Unauthenticated (verify_jwt = false) ---
+  # These perform their own auth checks internally, or are called by
+  # external services (webhooks, hooks, OTP flows, public APIs).
+  [functions.auth-email-hook]
+    # Called by Supabase Auth as a hook — no JWT available.
+    verify_jwt = false
+  [functions.confirm-upi-payment]
+    # User-authenticated internally via Bearer token + Supabase getUser().
+    verify_jwt = false
+  [functions.create-checkout]
+    # User-authenticated internally via Bearer token + Supabase getUser().
+    verify_jwt = false
+  [functions.create-razorpay-order]
+    # User-authenticated internally via Bearer token + Supabase getUser().
+    verify_jwt = false
+  [functions.location]
+    # Public geolocation lookup, no auth needed.
+    verify_jwt = false
+  [functions.log-auth-event]
+    # Called by Supabase Auth hooks — no JWT available.
+    verify_jwt = false
+  [functions.otp-send]
+    # Pre-auth OTP flow — user is not yet authenticated.
+    verify_jwt = false
+  [functions.otp-verify]
+    # Pre-auth OTP flow — user is not yet authenticated.
+    verify_jwt = false
+  [functions.quote-checkout]
+    # User-authenticated internally via Bearer token + Supabase getUser().
+    verify_jwt = false
+  [functions.razorpay-webhook]
+    # Called by Razorpay servers — authenticated via HMAC signature.
+    verify_jwt = false
+  [functions.verify-razorpay-payment]
+    # User-authenticated internally via Bearer token + Supabase getUser().
+    verify_jwt = false
   [functions.verify-upi-payment]
+    # User-authenticated internally via Bearer token + Supabase getUser().
     verify_jwt = false

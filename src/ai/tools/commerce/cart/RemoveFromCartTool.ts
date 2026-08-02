@@ -58,9 +58,7 @@ export class RemoveFromCartTool extends BaseCommerceTool<RemoveFromCartInput, Re
     input: RemoveFromCartInput,
     context: CommerceToolContext
   ): Promise<ToolResult<RemoveFromCartOutput>> {
-    console.log(`[DEBUG] RemoveFromCartTool.run START - productId: ${input.productId} at ${new Date().toISOString()}`);
     if (!context.userId) {
-      console.log(`[DEBUG] RemoveFromCartTool.run unauthorized at ${new Date().toISOString()}`);
       return err({
         code: "unauthorized",
         message: "You must be signed in to modify your cart.",
@@ -70,7 +68,6 @@ export class RemoveFromCartTool extends BaseCommerceTool<RemoveFromCartInput, Re
 
     const cartService = context.services?.cart;
     if (!cartService) {
-      console.log(`[DEBUG] RemoveFromCartTool.run unavailable at ${new Date().toISOString()}`);
       return err({
         code: "unavailable",
         message: "Cart service is not available. Please try again later.",
@@ -78,19 +75,15 @@ export class RemoveFromCartTool extends BaseCommerceTool<RemoveFromCartInput, Re
       });
     }
 
-    console.log(`[DEBUG] RemoveFromCartTool.run calling cartService.removeFromCart at ${new Date().toISOString()}`);
     const result = await cartService.removeFromCart(context.userId, input.productId, input.quantity);
-    console.log(`[DEBUG] RemoveFromCartTool.run cartService.removeFromCart return at ${new Date().toISOString()}, success: ${result.success}`);
 
     if (!result.success) {
-      console.log(`[DEBUG] RemoveFromCartTool.run returning error at ${new Date().toISOString()}`);
       return err({
         code: "execution_error",
         message: result.error?.message ?? "Failed to remove item from cart.",
       });
     }
 
-    console.log(`[DEBUG] RemoveFromCartTool.run returning ok at ${new Date().toISOString()}`);
     return ok({ message: "Item removed from your cart successfully." });
   }
 }

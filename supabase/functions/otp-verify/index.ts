@@ -1,10 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const BodySchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{9,14}$/),
@@ -35,19 +32,19 @@ function phoneToSyntheticEmail(phone: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
   try {
     const json = await req.json().catch(() => ({}));
     const parsed = BodySchema.safeParse(json);
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
     const { phone, code } = parsed.data;
     if (!hit(`verify:${phone}`, 5, 5 * 60_000)) {
       return new Response(JSON.stringify({ error: "Too many attempts. Request a new code." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -65,18 +62,18 @@ Deno.serve(async (req) => {
     if (selErr) throw new Error(selErr.message);
     if (!row) {
       return new Response(JSON.stringify({ error: "No code requested for this number" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       await supabase.from("phone_otps").delete().eq("phone", phone);
       return new Response(JSON.stringify({ error: "Code expired. Request a new one." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
     if ((row.attempts ?? 0) >= 5) {
       return new Response(JSON.stringify({ error: "Too many attempts. Request a new code." }), {
-        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -87,7 +84,7 @@ Deno.serve(async (req) => {
         .update({ attempts: (row.attempts ?? 0) + 1 })
         .eq("phone", phone);
       return new Response(JSON.stringify({ error: "Invalid code" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -146,14 +143,14 @@ Deno.serve(async (req) => {
         type: "magiclink",
         user_id: userId,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     const stack = e instanceof Error ? e.stack : undefined;
     console.error("otp-verify error:", msg, stack);
     return new Response(JSON.stringify({ error: "Verification failed. Please try again." }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 

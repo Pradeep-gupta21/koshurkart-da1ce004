@@ -1,6 +1,7 @@
 import { BaseCommerceTool } from "../base-commerce.tool";
 import type { CommerceToolContext } from "../types";
 import { ok, err, ToolResult } from "../../types";
+import { RecentlyViewedStore } from "../recently-viewed/store";
 
 export interface GetProductInput {
   productId?: string;
@@ -61,6 +62,10 @@ export class GetProductTool extends BaseCommerceTool<GetProductInput, any> {
           code: "execution_error",
           message: result.error.message,
         });
+      }
+
+      if (context.customer?.id) {
+        RecentlyViewedStore.add(context.customer.id, result.data);
       }
 
       return ok(result.data);

@@ -10,16 +10,12 @@ import { calculateOrderAmount } from "../_shared/pricing.ts";
 
 const DEBUG_PRICING = Deno.env.get("DEBUG_PRICING") === "true";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const json = (body: unknown, status = 200) =>
+const json = (req: Request, body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 
 const BodySchema = z.object({
@@ -35,11 +31,11 @@ const BodySchema = z.object({
 });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
+  if (req.method !== "POST") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (!authHeader?.startsWith("Bearer ")) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   const anon = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -47,16 +43,16 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } },
   );
   const { data: { user }, error: userErr } = await anon.auth.getUser();
-  if (userErr || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (userErr || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   let parsed;
   try {
     parsed = BodySchema.safeParse(await req.json());
   } catch {
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
   if (!parsed.success) {
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid input", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid input", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
   const { items } = parsed.data;
 
@@ -68,7 +64,7 @@ Deno.serve(async (req) => {
   // Rate limit
   const { data: allowed } = await service.rpc("quote_rate_limit", { _user_id: user.id });
   if (allowed === false) {
-    return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Too many quote requests. Please wait a moment.", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.RATE_LIMIT, ERROR_CODES.INTERNAL_ERROR, "Too many quote requests. Please wait a moment.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 
   // Log attempt (best-effort)
@@ -92,10 +88,10 @@ Deno.serve(async (req) => {
       hint: (prodErr as any).hint,
       productIds,
     });
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to load products", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to load products", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
   if (!products || products.length !== productIds.length) {
-    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "One or more products not found", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "One or more products not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 
   const byId = new Map(products.map((p: any) => [p.id, p]));
@@ -104,11 +100,11 @@ Deno.serve(async (req) => {
 
   for (const it of items) {
     const p: any = byId.get(it.product_id);
-    if (!p) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, `Product ${it.product_id} not available`, false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (!p) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, `Product ${it.product_id} not available`, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     const available = (p.stock ?? 0) - (p.reserved_stock ?? 0);
     const unit = Number(p.discount_price ?? p.dynamic_price ?? p.price);
     if (!Number.isFinite(unit) || unit <= 0) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Invalid price for "${p.title}"`, false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Invalid price for "${p.title}"`, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     pricingInput.push({ product_id: p.id, quantity: it.quantity, unit_price: unit });
     lines.push({
@@ -143,5 +139,5 @@ Deno.serve(async (req) => {
     };
   }
 
-  return json(response);
+  return json(req, response);
 });

@@ -27,6 +27,16 @@ import type {
 } from "./types";
 import { err } from "./types";
 
+/** Dev-only logging — silenced in production builds (audit H-3). */
+const IS_DEV = typeof process !== "undefined"
+  ? process.env.NODE_ENV !== "production"
+  : typeof (globalThis as any).Deno !== "undefined"
+    ? (globalThis as any).Deno.env.get("ENV") !== "production"
+    : true;
+function devLog(...args: unknown[]): void {
+  if (IS_DEV) console.debug("[BaseTool]", ...args);
+}
+
 export abstract class BaseTool<
   TInput = Record<string, unknown>,
   TOutput = unknown,
@@ -67,10 +77,10 @@ export abstract class BaseTool<
     input: TInput,
     context: ToolContext<TServices>,
   ): Promise<ToolResult<TOutput>> {
-    console.log(`[DEBUG] BaseTool.execute START - name: ${this.name} at ${new Date().toISOString()}`);
+    devLog(`execute START - name: ${this.name}`);
     // Bail immediately if the caller already cancelled.
     if (context.signal?.aborted) {
-      console.log(`[DEBUG] BaseTool.execute ABORTED - name: ${this.name} at ${new Date().toISOString()}`);
+      devLog(`execute ABORTED - name: ${this.name}`);
       return err<TOutput>(
         {
           code: "timeout",
@@ -84,7 +94,7 @@ export abstract class BaseTool<
     // validation failure message; `null`/`undefined` means "valid".
     const validationError = this.validate(input);
     if (validationError) {
-      console.log(`[DEBUG] BaseTool.execute VALIDATION ERROR - name: ${this.name} at ${new Date().toISOString()}`);
+      devLog(`execute VALIDATION ERROR - name: ${this.name}`);
       return err<TOutput>(
         {
           code: "invalid_input",
@@ -95,12 +105,12 @@ export abstract class BaseTool<
     }
 
     try {
-      console.log(`[DEBUG] BaseTool.execute calling this.run - name: ${this.name} at ${new Date().toISOString()}`);
+      devLog(`execute calling run - name: ${this.name}`);
       const res = await this.run(input, context);
-      console.log(`[DEBUG] BaseTool.execute this.run return - name: ${this.name} at ${new Date().toISOString()}, ok: ${res.ok}`);
+      devLog(`execute run return - name: ${this.name}, ok: ${res.ok}`);
       return res;
     } catch (caught) {
-      console.log(`[DEBUG] BaseTool.execute CATCH - name: ${this.name} at ${new Date().toISOString()}, error:`, caught);
+      devLog(`execute CATCH - name: ${this.name}`, caught);
       return err<TOutput>(this.normalizeThrow(caught));
     }
   }

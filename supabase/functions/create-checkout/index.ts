@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
   const productIds = [...new Set(items.map((i) => i.product_id))];
   const { data: products, error: prodErr } = await service
     .from("products")
-    .select("id, title, price, discount_price, dynamic_price, stock, reserved_stock, status, vendor_id, images")
+    .select("id, title, price, discount_price, dynamic_price, stock, reserved_stock, status, vendor_id, images, allow_cod")
     .in("id", productIds);
 
   if (prodErr) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Failed to load products", false), { ...corsHeaders, "Content-Type": "application/json" });
@@ -548,6 +548,27 @@ Deno.serve(async (req) => {
     });
 
   if (payment_method === "cod") {
+    // ---- M-8: Server-side COD eligibility (audit) ----
+    // Verify every product allows COD. Products with allowCod=false reject COD.
+    for (const ln of lines) {
+      const p: any = byId.get(ln.product_id);
+      if (p && p.allow_cod === false) {
+        await releaseReserved();
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Product "${ln.title}" does not support Cash on Delivery`, false), { ...corsHeaders, "Content-Type": "application/json" });
+      }
+    }
+    // Validate shipping pincode supports COD if pincode is provided
+    if (shipping?.pincode) {
+      const { data: codZone } = await service
+        .from("delivery_zones")
+        .select("cod_available")
+        .eq("pincode", shipping.pincode)
+        .maybeSingle();
+      if (codZone && codZone.cod_available === false) {
+        await releaseReserved();
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Cash on Delivery is not available for pincode ${shipping.pincode}`, false), { ...corsHeaders, "Content-Type": "application/json" });
+      }
+    }
     await service.from("orders").update({ order_status: "confirmed" }).eq("id", orderId);
     await logSuccess("cod");
     return json({ orderId, paymentId: payment.id, total, method: "cod", mode, ...debugBlock }, 200, req);

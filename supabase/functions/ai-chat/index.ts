@@ -25,17 +25,7 @@ import { SupabaseJobStore } from "@/ai/jobs";
 
 import { createMarketplaceTools, registerMarketplaceTools } from "@/ai/tools/marketplace";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const RequestSchema = z.object({
   audience: z.enum(["customer", "vendor", "admin"]),
@@ -45,8 +35,14 @@ const RequestSchema = z.object({
 });
 
 Deno.serve(async (req: Request) => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: getCorsHeaders(req) });
   }
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
@@ -89,7 +85,56 @@ Deno.serve(async (req: Request) => {
   }
   const { audience, message, conversationId, sessionId } = parsed.data;
 
-  // ---- 3. Dependency Injection (Composition Root) ----
+  // ---- 3. Service client (needed for rate-limiting + role check) ----
+  const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // ---- 4. Rate limiting (C-3: sliding window, per user) ----
+  const { data: allowed } = await supabaseClient.rpc("ai_chat_rate_limit", { _user_id: user.id });
+  if (allowed === false) {
+    await supabaseClient.from("analytics_events").insert({
+      event_type: "ai_chat_rate_limited",
+      user_id: user.id,
+      metadata: { audience },
+    });
+    return json({ error: "Too many requests. Please wait a moment." }, 429);
+  }
+
+  // Log every attempt for the rate-limit accounting window.
+  await supabaseClient.from("analytics_events").insert({
+    event_type: "ai_chat_attempt",
+    user_id: user.id,
+    metadata: { audience },
+  });
+
+  // ---- 5. Audience role verification (H-1: never trust client) ----
+  // Map audience → required role. "customer" is the default role for all
+  // authenticated users, so any signed-in user qualifies.
+  if (audience !== "customer") {
+    const { data: roles } = await supabaseClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", audience);
+
+    if (!roles || roles.length === 0) {
+      return json({ error: "Forbidden: insufficient role for this audience" }, 403);
+    }
+  }
+
+  // ---- Conversation ownership (M-6: verify conversationId belongs to user) ----
+  if (conversationId) {
+    const { data: convOwner } = await supabaseClient
+      .from("ai_memory")
+      .select("user_id")
+      .eq("conversation_id", conversationId)
+      .limit(1)
+      .maybeSingle();
+    if (convOwner && convOwner.user_id !== user.id) {
+      return json({ error: "Forbidden: conversation does not belong to this user" }, 403);
+    }
+  }
+
+  // ---- 6. Dependency Injection (Composition Root) ----
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   if (!geminiApiKey) {
     return json({ error: "Server AI configuration missing" }, 500);
@@ -98,7 +143,6 @@ Deno.serve(async (req: Request) => {
   const provider = new GeminiProvider({ apiKey: geminiApiKey });
   const ai = new AIService({ provider });
 
-  const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
   const jobStore = new SupabaseJobStore(supabaseClient);
 
   const services: { supabase: any; agents?: AgentRegistry; jobs: SupabaseJobStore } = {
@@ -175,7 +219,7 @@ Deno.serve(async (req: Request) => {
 
   return new Response(stream, {
     headers: {
-      ...corsHeaders,
+      ...getCorsHeaders(req),
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",

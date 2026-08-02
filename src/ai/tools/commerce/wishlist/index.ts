@@ -8,3 +8,4 @@
 export { AddToWishlistTool } from "./AddToWishlistTool";
 export { RemoveFromWishlistTool } from "./RemoveFromWishlistTool";
 export { GetWishlistTool } from "./GetWishlistTool";
+export { ClearWishlistTool } from "./ClearWishlistTool";

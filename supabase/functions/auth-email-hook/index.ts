@@ -14,11 +14,7 @@ import { PaymentError, respondWithError } from "../../../src/shared/errorRespons
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, x-lovable-signature, x-lovable-timestamp, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const EMAIL_SUBJECTS: Record<string, string> = {
   signup: 'Confirm your email',
@@ -123,20 +119,17 @@ function productionAuthUrl(rawUrl?: string): string {
 
 // Preview endpoint handler - returns rendered HTML without sending email
 async function handlePreview(req: Request): Promise<Response> {
-  const previewCorsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
-  }
+
 
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: previewCorsHeaders })
+    return new Response(null, { headers: getCorsHeaders(req) })
   }
 
   const apiKey = Deno.env.get('LOVABLE_API_KEY')
   const authHeader = req.headers.get('Authorization')
 
   if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-    return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, 'Unauthorized', false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, 'Unauthorized', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   let type: string
@@ -144,13 +137,13 @@ async function handlePreview(req: Request): Promise<Response> {
     const body = await req.json()
     type = body.type
   } catch (error) {
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid JSON in request body', false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid JSON in request body', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   const EmailTemplate = EMAIL_TEMPLATES[type]
 
   if (!EmailTemplate) {
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${type}`, false), { ...previewCorsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${type}`, false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   const sampleData = SAMPLE_DATA[type] || {}
@@ -158,7 +151,7 @@ async function handlePreview(req: Request): Promise<Response> {
 
   return new Response(html, {
     status: 200,
-    headers: { ...previewCorsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
+    headers: { ...getCorsHeaders(req), 'Content-Type': 'text/html; charset=utf-8' },
   })
 }
 
@@ -168,7 +161,7 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   if (!apiKey) {
     console.error('LOVABLE_API_KEY not configured')
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, 'Server configuration error', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, 'Server configuration error', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   // Verify signature + timestamp, then parse payload.
@@ -190,26 +183,26 @@ async function handleWebhook(req: Request): Promise<Response> {
         case 'invalid_timestamp':
         case 'stale_timestamp':
           console.error('Invalid webhook signature', { error: error.message })
-          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid signature', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid signature', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
         case 'invalid_payload':
         case 'invalid_json':
           console.error('Invalid webhook payload', { error: error.message })
-          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+          return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
       }
     }
 
     console.error('Webhook verification failed', { error })
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   if (!run_id) {
     console.error('Webhook payload missing run_id')
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, 'Invalid webhook payload', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   if (payload.version !== '1') {
     console.error('Unsupported payload version', { version: payload.version, run_id })
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unsupported payload version: ${payload.version}`, false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unsupported payload version: ${payload.version}`, false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   // The email action type is in payload.data.action_type (e.g., "signup", "recovery")
@@ -220,7 +213,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   const EmailTemplate = EMAIL_TEMPLATES[emailType]
   if (!EmailTemplate) {
     console.error('Unknown email type', { emailType, run_id })
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${emailType}`, false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, `Unknown email type: ${emailType}`, false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 
   // Build template props from payload.data (HookData structure)
@@ -296,7 +289,7 @@ async function handleWebhook(req: Request): Promise<Response> {
         })
         return new Response(
           JSON.stringify({ success: true, sent: true, provider: 'resend', id: resendData?.id }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
 
@@ -354,7 +347,7 @@ async function handleWebhook(req: Request): Promise<Response> {
         provider: 'lovable-queue',
         primary_error: resendError,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     const fallbackError = err instanceof Error ? err.message : String(err)
@@ -366,7 +359,7 @@ async function handleWebhook(req: Request): Promise<Response> {
       status: 'failed',
       error_message: `Fallback enqueue failed: ${fallbackError.slice(0, 400)}`,
     })
-    return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, 'All email providers failed', false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, 'All email providers failed', false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 }
 
@@ -375,7 +368,7 @@ Deno.serve(async (req) => {
 
   // Handle CORS preflight for main endpoint
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: getCorsHeaders(req) })
   }
 
   // Route to preview handler for /preview path
@@ -389,6 +382,6 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Webhook handler error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, message, false), { ...corsHeaders, 'Content-Type': 'application/json' })
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, message, false), { ...getCorsHeaders(req), 'Content-Type': 'application/json' })
   }
 })

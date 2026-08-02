@@ -8,10 +8,7 @@ const ALLOWED_ORIGINS = [
   "https://koshurkart.com",
   "https://www.koshurkart.com",
 ];
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 interface Body {
   paymentId: string;
@@ -26,7 +23,7 @@ function json(data: any, status = 200, req: Request) {
   const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Access-Control-Allow-Origin": allowOrigin, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Access-Control-Allow-Origin": allowOrigin, "Content-Type": "application/json" },
   });
 }
 
@@ -35,7 +32,7 @@ Deno.serve(async (req) => {
     const origin = req.headers.get("origin") || "";
     const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
     return new Response("ok", {
-      headers: { ...corsHeaders, "Access-Control-Allow-Origin": allowOrigin },
+      headers: { ...getCorsHeaders(req), "Access-Control-Allow-Origin": allowOrigin },
     });
   }
 
@@ -46,18 +43,18 @@ Deno.serve(async (req) => {
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE) {
       console.error("[verify-upi-payment] Missing environment variables");
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: userError } = await anon.auth.getUser();
-    if (userError || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (userError || !user) return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     const userId = user.id;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
@@ -68,15 +65,15 @@ Deno.serve(async (req) => {
     });
     if (roleErr) {
       const mappedErr = normalizeRpcError(roleErr);
-      return respondWithError(mappedErr, { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-    if (!isAdmin) return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden: admin only", false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (!isAdmin) return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden: admin only", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     let body: Body;
     try {
       body = await req.json();
     } catch {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const valErr = validateActionRequest(body, true);
@@ -93,10 +90,10 @@ Deno.serve(async (req) => {
 
     if (payErr) {
       console.error("[verify-upi-payment] payment DB lookup error", payErr.code, payErr.message);
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-    if (!payment) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.NOT_FOUND, "Payment not found", false), { ...corsHeaders, "Content-Type": "application/json" });
-    if (payment.payment_method !== "upi") return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Not a UPI payment", false), { ...corsHeaders, "Content-Type": "application/json" });
+    if (!payment) return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.NOT_FOUND, "Payment not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    if (payment.payment_method !== "upi") return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Not a UPI payment", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
     const { data: result, error: rpcErr } = await admin.rpc("admin_process_payment", {
       p_payment_id: body.paymentId,
@@ -109,12 +106,12 @@ Deno.serve(async (req) => {
     if (rpcErr) {
       const mappedErr = normalizeRpcError(rpcErr);
       console.error("[verify-upi-payment] admin_process_payment RPC error:", rpcErr.code, rpcErr.message);
-      return respondWithError(mappedErr, { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     return json({ success: true, ...result }, 200, req);
   } catch (err) {
     console.error("[verify-upi-payment] unexpected error:", (err as Error).message);
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error occurred.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

@@ -3,13 +3,7 @@ import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { z } from "npm:zod@3.23.8";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // 24h in-memory IP cache (best effort; per edge instance)
 const ipCache = new Map<string, { value: unknown; expiresAt: number }>();
@@ -61,7 +55,7 @@ async function detectByIp(ip: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -84,7 +78,7 @@ Deno.serve(async (req) => {
       const ip = getIp(req);
       const detected = await detectByIp(ip);
       return new Response(JSON.stringify(detected), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -94,7 +88,7 @@ Deno.serve(async (req) => {
       const parsed = PincodeSchema.safeParse(body);
       if (!parsed.success) {
         log(400, { reason: "invalid_pincode" });
-        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid pincode", false), { ...corsHeaders, "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid pincode", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       const { data, error } = await supabase
         .from("serviceable_pincodes")
@@ -117,7 +111,7 @@ Deno.serve(async (req) => {
           fallback: true,
         }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       // Best-effort usage tracking
@@ -128,12 +122,12 @@ Deno.serve(async (req) => {
       if (!data) {
         log(200, { pincode: parsed.data.pincode, serviceable: false });
         return new Response(JSON.stringify({ serviceable: false, pincode: parsed.data.pincode }), {
-          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       log(200, { pincode: parsed.data.pincode, serviceable: true });
       return new Response(JSON.stringify({ serviceable: true, ...data }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -142,7 +136,7 @@ Deno.serve(async (req) => {
       const q = (url.searchParams.get("q") ?? "").trim();
       if (q.length < 2) {
         return new Response(JSON.stringify([]), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       const { data, error } = await supabase
@@ -153,7 +147,7 @@ Deno.serve(async (req) => {
         .limit(10);
       if (error) throw error;
       return new Response(JSON.stringify(data ?? []), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -163,7 +157,7 @@ Deno.serve(async (req) => {
       const lat = Number(body?.lat);
       const lng = Number(body?.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid coordinates", false), { ...corsHeaders, "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Invalid coordinates", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       try {
         const r = await fetch(
@@ -188,12 +182,12 @@ Deno.serve(async (req) => {
         });
         log(200, { kind: "reverse_geocode", pincode: result.pincode });
         return new Response(JSON.stringify(result), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       } catch (e) {
         console.error(JSON.stringify({ fn: "location", action: "reverse-geocode", err: (e as Error).message }));
         log(502, { error: (e as Error).message });
-        return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Reverse geocoding failed", false), { ...corsHeaders, "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Reverse geocoding failed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
     }
 
@@ -202,7 +196,7 @@ Deno.serve(async (req) => {
       const q = (url.searchParams.get("q") ?? "").trim();
       if (q.length < 2) {
         return new Response(JSON.stringify([]), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       const isNumeric = /^\d+$/.test(q);
@@ -220,15 +214,15 @@ Deno.serve(async (req) => {
       const { data, error } = await query;
       if (error) throw error;
       return new Response(JSON.stringify(data ?? []), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
     log(404);
-    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Not found", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.INTERNAL_ERROR, "Not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   } catch (e) {
     console.error(JSON.stringify({ fn: "location", action: path, err: (e as Error).message }));
     log(500, { error: "Internal server error" });
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

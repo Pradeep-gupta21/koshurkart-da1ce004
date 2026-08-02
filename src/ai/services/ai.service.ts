@@ -121,13 +121,21 @@ export class AIService {
       
       currentRequest.messages = [...currentRequest.messages, response.message];
       
-      const toolPromises = response.toolCalls!.map(async (call) => {
-        const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
-        const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
-        return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
-      });
-      
-      const toolMessages = await Promise.all(toolPromises);
+      // M-4 (audit): Limit concurrent tool executions to avoid burst DB queries.
+      const TOOL_CONCURRENCY = 3;
+      const calls = response.toolCalls!;
+      const toolMessages: typeof currentRequest.messages = [];
+      for (let i = 0; i < calls.length; i += TOOL_CONCURRENCY) {
+        const batch = calls.slice(i, i + TOOL_CONCURRENCY);
+        const batchResults = await Promise.all(
+          batch.map(async (call) => {
+            const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
+            const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+            return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
+          }),
+        );
+        toolMessages.push(...batchResults);
+      }
       currentRequest.messages = [...currentRequest.messages, ...toolMessages];
     }
   }
@@ -193,13 +201,20 @@ export class AIService {
       const assistantMsg = AIService.createMessage("assistant", assistantContent, { toolCalls });
       currentRequest.messages = [...currentRequest.messages, assistantMsg];
 
-      const toolPromises = toolCalls.map(async (call) => {
-        const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
-        const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
-        return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
-      });
-
-      const toolMessages = await Promise.all(toolPromises);
+      // M-4 (audit): Limit concurrent tool executions to avoid burst DB queries.
+      const TOOL_CONCURRENCY = 3;
+      const toolMessages: typeof currentRequest.messages = [];
+      for (let i = 0; i < toolCalls.length; i += TOOL_CONCURRENCY) {
+        const batch = toolCalls.slice(i, i + TOOL_CONCURRENCY);
+        const batchResults = await Promise.all(
+          batch.map(async (call) => {
+            const result = await this.executor!.run(call, { signal: currentRequest.options?.signal });
+            const resultContent = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+            return AIService.createMessage("tool", resultContent, { toolCallId: call.id });
+          }),
+        );
+        toolMessages.push(...batchResults);
+      }
       currentRequest.messages = [...currentRequest.messages, ...toolMessages];
     }
   }

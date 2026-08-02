@@ -11,11 +11,7 @@ import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/brevo";
 const FROM_EMAIL = Deno.env.get("BREVO_FROM_EMAIL") ?? "no-reply@koshurkart.in";
@@ -146,7 +142,7 @@ async function sendViaBrevo(to: string, name: string | null, subject: string, ht
 
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -155,7 +151,7 @@ Deno.serve(async (req) => {
 
     const args = (await req.json()) as SendArgs;
     if (!args?.type) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "type required", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "type required", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
     const admin = createClient(supabaseUrl, serviceKey);
@@ -167,20 +163,20 @@ Deno.serve(async (req) => {
       const email = (args.email ?? "").trim().toLowerCase();
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return new Response(JSON.stringify({ ok: true, skipped: "invalid_email" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
       const user = list?.users?.find((u) => (u.email ?? "").toLowerCase() === email);
       if (!user) {
         return new Response(JSON.stringify({ ok: true, skipped: "user_not_found" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       const createdAt = new Date(user.created_at).getTime();
       if (Date.now() - createdAt > 10 * 60 * 1000) {
         return new Response(JSON.stringify({ ok: true, skipped: "stale_signup" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
       const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
@@ -196,7 +192,7 @@ Deno.serve(async (req) => {
       });
       console.log("email.sent", { type: args.type, templateId: CUSTOMER_WELCOME_TEMPLATE_ID, to: email });
       return new Response(JSON.stringify({ ok: true, result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -207,7 +203,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.INTERNAL_ERROR, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
     const userId = userData.user.id;
 
@@ -237,7 +233,7 @@ Deno.serve(async (req) => {
       });
       console.log("email.sent", { type: args.type, templateId: VENDOR_KYC_WELCOME_TEMPLATE_ID, to });
       return new Response(JSON.stringify({ ok: true, result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -251,7 +247,7 @@ Deno.serve(async (req) => {
         .single();
       if (error || !order) throw new Error(error?.message ?? "Order not found");
       if (order.user_id !== userId) {
-        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
@@ -295,7 +291,7 @@ Deno.serve(async (req) => {
         to,
       });
       return new Response(JSON.stringify({ ok: true, result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -310,7 +306,7 @@ Deno.serve(async (req) => {
       if (error || !item) throw new Error(error?.message ?? "Item not found");
       const order = item.orders as any;
       if (order.user_id !== userId) {
-        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.INTERNAL_ERROR, "Forbidden", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
@@ -318,14 +314,14 @@ Deno.serve(async (req) => {
       const result = await sendViaBrevo(to, order.recipient_name, subject, html);
       console.log("email.sent", { type: args.type, orderItemId: args.orderItemId, to });
       return new Response(JSON.stringify({ ok: true, result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Unknown type", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Unknown type", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("send-transactional-email.error", msg);
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, msg, false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, msg, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

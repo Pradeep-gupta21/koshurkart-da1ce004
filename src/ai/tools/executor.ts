@@ -24,6 +24,17 @@ import type {
   ToolResult,
 } from "./types";
 import { err, ok } from "./types";
+import { z } from "zod";
+
+/** Dev-only logging — silenced in production builds (audit H-3). */
+const IS_DEV = typeof process !== "undefined"
+  ? process.env.NODE_ENV !== "production"
+  : typeof (globalThis as any).Deno !== "undefined"
+    ? (globalThis as any).Deno.env.get("ENV") !== "production"
+    : true;
+function devLog(...args: unknown[]): void {
+  if (IS_DEV) console.debug("[ToolExecutor]", ...args);
+}
 
 /**
  * A source of `ToolContext` for an execution. Either a ready context or a
@@ -77,6 +88,16 @@ export class ToolExecutor<
       });
     }
 
+    // ---- H-2: Centralized argument validation (before tool executes) ----
+    const validationErr = this.validateArgs(tool, args);
+    if (validationErr) {
+      return err<TOutput>({
+        code: "invalid_input",
+        message: validationErr,
+        retryable: false,
+      });
+    }
+
     const run = tool.execute(args, context) as Promise<ToolResult<TOutput>>;
 
     // Optional soft timeout: race the tool against a timer.
@@ -110,9 +131,9 @@ export class ToolExecutor<
     call: ToolCall,
     options: ToolExecutionOptions = {},
   ): Promise<WireToolResult> {
-    console.log(`[DEBUG] ToolExecutor.run START - call.name: ${call.name} at ${new Date().toISOString()}`);
+    devLog(`run START - ${call.name}`);
     const result = await this.executeCall(call, options);
-    console.log(`[DEBUG] ToolExecutor.run END - call.name: ${call.name} at ${new Date().toISOString()}, ok: ${result.ok}`);
+    devLog(`run END - ${call.name}, ok: ${result.ok}`);
     return ToolExecutor.toWireResult(call, result);
   }
 
@@ -163,6 +184,69 @@ export class ToolExecutor<
   /** Audience gate: unrestricted tools pass; scoped tools must list it. */
   private isAllowed(tool: AnyTool, context: ToolContext<TServices>): boolean {
     return !tool.audiences || tool.audiences.includes(context.audience);
+  }
+
+  /**
+   * H-2: Validate tool arguments against the tool's declared JSON Schema
+   * parameters at the executor level — BEFORE tool.execute() is called.
+   * Returns an error message string on failure, or null on success.
+   */
+  private validateArgs(
+    tool: AnyTool,
+    args: Record<string, unknown>,
+  ): string | null {
+    const schema = tool.parameters;
+    if (!schema || !schema.properties) return null; // No schema = no validation
+
+    try {
+      // Build a Zod schema from the tool's JSON Schema properties.
+      const shape: Record<string, z.ZodTypeAny> = {};
+      const required = new Set<string>(
+        Array.isArray(schema.required) ? (schema.required as string[]) : [],
+      );
+
+      for (const [key, prop] of Object.entries(schema.properties as Record<string, any>)) {
+        let field: z.ZodTypeAny;
+        switch (prop.type) {
+          case "string":
+            field = z.string();
+            break;
+          case "number":
+          case "integer":
+            field = z.number();
+            break;
+          case "boolean":
+            field = z.boolean();
+            break;
+          case "array":
+            field = z.array(z.unknown());
+            break;
+          case "object":
+            field = z.record(z.unknown());
+            break;
+          default:
+            field = z.unknown();
+        }
+        if (!required.has(key)) {
+          field = field.optional();
+        }
+        shape[key] = field;
+      }
+
+      const zodSchema = z.object(shape).passthrough();
+      const result = zodSchema.safeParse(args);
+      if (!result.success) {
+        const issues = result.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ");
+        return `Invalid arguments for tool "${tool.name}": ${issues}`;
+      }
+      return null;
+    } catch {
+      // If schema parsing itself fails, allow the call through — the tool's
+      // own validate() method is the secondary gate.
+      return null;
+    }
   }
 
   /**

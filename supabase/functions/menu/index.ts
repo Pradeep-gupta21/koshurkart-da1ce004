@@ -10,12 +10,7 @@ import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const APP_ROLES = ["user", "vendor", "admin"] as const;
 const SECTIONS = ["shop", "dashboard"] as const;
@@ -80,10 +75,10 @@ function invalidateCache() {
 }
 
 // ---------- helpers ----------
-function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
+function json(req: Request, body: unknown, status = 200, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json", ...extra },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json", ...extra },
   });
 }
 
@@ -99,7 +94,7 @@ async function requireAdmin(req: Request): Promise<
 > {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" }) };
+    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }) };
   }
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -108,11 +103,11 @@ async function requireAdmin(req: Request): Promise<
   );
   const { data: userData, error } = await supabase.auth.getUser();
   if (error || !userData?.user?.id) {
-    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...corsHeaders, "Content-Type": "application/json" }) };
+    return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHENTICATION, ERROR_CODES.UNAUTHORIZED, "Unauthorized", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }) };
   }
   const userId = userData.user.id;
   const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
-  if (!isAdmin) return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...corsHeaders, "Content-Type": "application/json" }) };
+  if (!isAdmin) return { ok: false, res: respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }) };
   return { ok: true, userId, supabase };
 }
 
@@ -171,7 +166,7 @@ async function handleGet(req: Request): Promise<Response> {
   const section = url.searchParams.get("section") ?? "shop";
   const pincode = (url.searchParams.get("pincode") ?? "").trim() || null;
   if (!SECTIONS.includes(section as typeof SECTIONS[number])) {
-    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid section", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid section", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 
   const supabase = createClient(
@@ -192,7 +187,7 @@ async function handleGet(req: Request): Promise<Response> {
   const key = cacheKey(section, roles, pincode);
   const cached = cache.get(key);
   if (cached && cached.expires > Date.now()) {
-    return json(
+    return json(req, 
       { tree: cached.tree, meta: cached.meta },
       200,
       { "Cache-Control": "private, max-age=60", "X-Cache": "HIT" },
@@ -206,7 +201,7 @@ async function handleGet(req: Request): Promise<Response> {
     .eq("is_active", true)
     .order("order_index", { ascending: true });
 
-  if (error) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (error) return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   // ---- Location-aware shaping ----
   const meta: MenuMeta = { pincode };
@@ -257,7 +252,7 @@ async function handleGet(req: Request): Promise<Response> {
   const tree = buildTree(shaped, roles);
   cache.set(key, { tree, meta, expires: Date.now() + TTL_MS });
 
-  return json(
+  return json(req, 
     { tree, meta },
     200,
     { "Cache-Control": "private, max-age=60", "X-Cache": "MISS" },
@@ -269,19 +264,19 @@ async function handlePost(req: Request): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" }); }
+  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }); }
   const parsed = CreateSchema.safeParse(body);
-  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   const { data, error } = await auth.supabase
     .from("menu_items")
     .insert(parsed.data)
     .select()
     .single();
-  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   invalidateCache();
-  return json({ item: data }, 201);
+  return json(req, { item: data }, 201);
 }
 
 async function handlePut(req: Request, id: string): Promise<Response> {
@@ -289,13 +284,13 @@ async function handlePut(req: Request, id: string): Promise<Response> {
   if (!auth.ok) return auth.res;
 
   let body: unknown;
-  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...corsHeaders, "Content-Type": "application/json" }); }
+  try { body = await req.json(); } catch { return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid JSON", false), { ...getCorsHeaders(req), "Content-Type": "application/json" }); }
   const parsed = UpdateSchema.safeParse(body);
-  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (!parsed.success) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, parsed.error.flatten().fieldErrors, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   if (parsed.data.parent_id) {
     if (await wouldCreateCycle(auth.supabase, id, parsed.data.parent_id)) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Cannot set parent: would create a cycle", false), { ...corsHeaders, "Content-Type": "application/json" });
+      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Cannot set parent: would create a cycle", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
   }
 
@@ -305,10 +300,10 @@ async function handlePut(req: Request, id: string): Promise<Response> {
     .eq("id", id)
     .select()
     .single();
-  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   invalidateCache();
-  return json({ item: data });
+  return json(req, { item: data });
 }
 
 async function handleDelete(req: Request, id: string): Promise<Response> {
@@ -332,15 +327,15 @@ async function handleDelete(req: Request, id: string): Promise<Response> {
     .from("menu_items")
     .update({ is_active: false })
     .in("id", Array.from(toDeactivate));
-  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...corsHeaders, "Content-Type": "application/json" });
+  if (error) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, error.message, false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
 
   invalidateCache();
-  return json({ deactivated: toDeactivate.size });
+  return json(req, { deactivated: toDeactivate.size });
 }
 
 // ---------- entry ----------
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
 
   try {
     const url = new URL(req.url);
@@ -352,16 +347,16 @@ Deno.serve(async (req) => {
     if (req.method === "GET") return await handleGet(req);
     if (req.method === "POST") return await handlePost(req);
     if (req.method === "PUT") {
-      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...corsHeaders, "Content-Type": "application/json" });
+      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       return await handlePut(req, idParam);
     }
     if (req.method === "DELETE") {
-      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...corsHeaders, "Content-Type": "application/json" });
+      if (!idParam) return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Missing id", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       return await handleDelete(req, idParam);
     }
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.METHOD_NOT_ALLOWED, "Method not allowed", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.METHOD_NOT_ALLOWED, "Method not allowed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   } catch (e) {
     console.error("menu function error:", e);
-    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, e instanceof Error ? e.message : "Unknown error", false), { ...corsHeaders, "Content-Type": "application/json" });
+    return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, e instanceof Error ? e.message : "Unknown error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

@@ -4,10 +4,7 @@ import { PaymentError, respondWithError } from "../../../src/shared/errorRespons
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
 import { z } from "zod";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const BodySchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{9,14}$/, "Phone must be E.164 (e.g. +919876543210)"),
@@ -47,7 +44,7 @@ function generateCode() {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
   try {
     const json = await req.json().catch(() => ({}));
     const parsed = BodySchema.safeParse(json);
@@ -61,7 +58,7 @@ Deno.serve(async (req) => {
             .join("; "),
           false
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
     const { phone } = parsed.data;
@@ -76,7 +73,7 @@ Deno.serve(async (req) => {
           "Too many requests.",
           false
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
     if (!hit(`send:phone:${phone}`, 3, 30_000)) {
@@ -87,7 +84,7 @@ Deno.serve(async (req) => {
           "Please wait before requesting another code.",
           false
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
 
@@ -111,7 +108,7 @@ Deno.serve(async (req) => {
           "Too many OTP requests from this network.",
           false
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
 
@@ -128,7 +125,7 @@ Deno.serve(async (req) => {
           "Too many OTP requests for this number. Try again in 10 minutes.",
           false
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
 
@@ -222,7 +219,7 @@ Deno.serve(async (req) => {
 
 
     return new Response(JSON.stringify({ ok: true, provider: "twilio" }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message.toLowerCase() : "unknown error";
@@ -235,7 +232,7 @@ Deno.serve(async (req) => {
           "Gateway rate limited. Please try again later.",
           true
         ),
-        { ...corsHeaders, "Content-Type": "application/json" }
+        { ...getCorsHeaders(req), "Content-Type": "application/json" }
       );
     }
     return respondWithError(
@@ -245,7 +242,7 @@ Deno.serve(async (req) => {
         "Failed to send verification code. Please try again.",
         false
       ),
-      { ...corsHeaders, "Content-Type": "application/json" }
+      { ...getCorsHeaders(req), "Content-Type": "application/json" }
     );
   }
 });
