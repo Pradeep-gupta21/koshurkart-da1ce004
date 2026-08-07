@@ -27,6 +27,13 @@ const errorCodeMap: Record<string, { message: string; retryable: boolean }> = {
   'INVALID_AMOUNT': { message: 'The requested amount is invalid.', retryable: false },
 };
 
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf'
+};
+
 export async function normalizeError(err: unknown): Promise<never> {
   if (err && typeof err === 'object' && 'status' in err && 'retryable' in err) {
     throw err;
@@ -110,6 +117,21 @@ export interface CheckoutResult {
 // In-memory fallback for strict privacy browsers that throw on sessionStorage access
 const fallbackIdempotencyKeys = new Map<string, string>();
 
+function buildCheckoutIdempotencyStoreKey(
+  items: CheckoutItemInput[],
+  paymentMethod: string,
+  pincode?: string,
+  shipping?: { recipient_name: string; recipient_phone?: string; recipient_email?: string; address: string; city?: string; state?: string; pincode: string; notes?: string; [key: string]: any }
+): string {
+  const itemsHash = items.map((i) => `${i.product_id}:${i.quantity}`).sort().join('|');
+  const shippingHash = shipping 
+    ? `${shipping.recipient_name}|${shipping.recipient_phone || ''}|${shipping.recipient_email || ''}|${shipping.address}|${shipping.city || ''}|${shipping.state || ''}|${shipping.pincode}|${shipping.notes || ''}` 
+    : (pincode || '');
+  
+  const hash = `${itemsHash}|${paymentMethod}|${shippingHash}`;
+  return `checkout_idem:${hash}`;
+}
+
 function getOrCreateIdempotencyKey(
   items: CheckoutItemInput[],
   paymentMethod: string,
@@ -118,13 +140,7 @@ function getOrCreateIdempotencyKey(
 ): string {
   if (typeof window === 'undefined') return crypto.randomUUID();
   
-  const itemsHash = items.map((i) => `${i.product_id}:${i.quantity}`).sort().join('|');
-  const shippingHash = shipping 
-    ? `${shipping.recipient_name}|${shipping.recipient_phone || ''}|${shipping.recipient_email || ''}|${shipping.address}|${shipping.city || ''}|${shipping.state || ''}|${shipping.pincode}|${shipping.notes || ''}` 
-    : (pincode || '');
-  
-  const hash = `${itemsHash}|${paymentMethod}|${shippingHash}`;
-  const storeKey = `checkout_idem:${hash}`;
+  const storeKey = buildCheckoutIdempotencyStoreKey(items, paymentMethod, pincode, shipping);
   
   try {
     const existing = sessionStorage.getItem(storeKey);
@@ -153,12 +169,7 @@ function clearIdempotencyKey(
   shipping?: { recipient_name: string; recipient_phone?: string; recipient_email?: string; address: string; city?: string; state?: string; pincode: string; notes?: string; [key: string]: any }
 ) {
   if (typeof window === 'undefined') return;
-  const itemsHash = items.map((i) => `${i.product_id}:${i.quantity}`).sort().join('|');
-  const shippingHash = shipping 
-    ? `${shipping.recipient_name}|${shipping.recipient_phone || ''}|${shipping.recipient_email || ''}|${shipping.address}|${shipping.city || ''}|${shipping.state || ''}|${shipping.pincode}|${shipping.notes || ''}` 
-    : (pincode || '');
-  const hash = `${itemsHash}|${paymentMethod}|${shippingHash}`;
-  const storeKey = `checkout_idem:${hash}`;
+  const storeKey = buildCheckoutIdempotencyStoreKey(items, paymentMethod, pincode, shipping);
   
   try {
     sessionStorage.removeItem(storeKey);
@@ -328,7 +339,7 @@ export const paymentService = {
     if (file.size > 5 * 1024 * 1024) {
       await normalizeError(Object.assign(new Error('File must be smaller than 5MB'), { status: 400, errorCode: 'FILE_TOO_LARGE' }));
     }
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    const allowedTypes = Object.keys(MIME_TO_EXT);
     if (!allowedTypes.includes(file.type)) {
       await normalizeError(Object.assign(new Error('Invalid file type'), { status: 400, errorCode: 'INVALID_FILE_TYPE' }));
     }
@@ -347,7 +358,10 @@ export const paymentService = {
       });
     }
 
-    const ext = file.name.split('.').pop() ?? 'png';
+    const ext = MIME_TO_EXT[file.type];
+    if (!ext) {
+      await normalizeError(Object.assign(new Error('Invalid file type'), { status: 400, errorCode: 'INVALID_FILE_TYPE' }));
+    }
     const uuidFallback = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
     const path = `${user.id}/${Date.now()}-${uuidFallback.split('-')[0]}.${ext}`;
 
@@ -418,12 +432,11 @@ export const paymentService = {
   },
 
   async rejectReturn(id: string, idempotencyKey?: string) {
-    const payload: any = { _order_item_id: id };
-    if (idempotencyKey) {
-      payload._idempotency_key = idempotencyKey;
-    }
-    const { error } = await supabase.rpc("vendor_reject_return", payload);
+    const { data, error } = await supabase.functions.invoke("vendor-reject-return", {
+      body: { order_item_id: id, idempotency_key: idempotencyKey },
+    });
     if (error) await normalizeError(error);
+    if (data?.error) await normalizeError(Object.assign(new Error(data.error), { status: 400, errorCode: data.errorCode }));
   },
 
   async getReturns(vendorId: string, options?: { limit?: number; offset?: number }) {
