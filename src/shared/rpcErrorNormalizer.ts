@@ -16,6 +16,9 @@ export function normalizeRpcError(rpcErr: any): PaymentError {
         return new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden.", false);
       case "VALIDATION_FAILED":
         return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Validation failed.", false);
+      case "RETURN_ALREADY_PROCESSED":
+      case "RETURN_NOT_PENDING":
+        return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "The return request is in an invalid state for this operation.", false);
       case "CONFLICT":
         return new PaymentError(ErrorCategory.CONFLICT, ERROR_CODES.CONFLICT, "Transaction conflict. Please retry.", true);
       case "PAYMENT_NOT_FOUND":
