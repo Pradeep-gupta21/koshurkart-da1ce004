@@ -1,7 +1,7 @@
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
-
+import { MAX_RETURN_REASON_LENGTH, MAX_RETURN_DESCRIPTION_LENGTH, MAX_RETURN_PHOTOS_COUNT } from "../../../src/shared/returnConstants.ts";
 export function parseAmountToPaise(amount: unknown): { paise?: number, error?: PaymentError } {
   if (amount === undefined || amount === null) {
     return { error: new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_AMOUNT, "amount is required", false) };
@@ -138,3 +138,53 @@ export function validateVendorApproveReturnRequest(body: any): PaymentError | nu
 
   return null;
 }
+
+export function validateVendorRejectReturnRequest(body: any): PaymentError | null {
+  return validateVendorApproveReturnRequest(body);
+}
+
+export function validateCustomerRequestReturnRequest(body: any): PaymentError | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_PAYLOAD, "Invalid JSON payload structure", false);
+  }
+
+  if (typeof body.order_item_id !== "string" || body.order_item_id.trim() === "") {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INVALID_ORDER_ITEM_ID, "order_item_id is required and must be a non-empty string", false);
+  }
+
+  if (typeof body.return_reason !== "string" || body.return_reason.trim() === "") {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.MISSING_REQUIRED_FIELDS, "return_reason is required and must be a non-empty string", false);
+  }
+
+  if (body.return_reason.length > MAX_RETURN_REASON_LENGTH) {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, `return_reason exceeds maximum length of ${MAX_RETURN_REASON_LENGTH} characters`, false);
+  }
+
+  if (typeof body.return_description !== "string" || body.return_description.trim() === "") {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.MISSING_REQUIRED_FIELDS, "return_description is required and must be a non-empty string", false);
+  }
+
+  if (body.return_description.length > MAX_RETURN_DESCRIPTION_LENGTH) {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, `return_description exceeds maximum length of ${MAX_RETURN_DESCRIPTION_LENGTH} characters`, false);
+  }
+
+  if (!Array.isArray(body.return_photos)) {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, "return_photos must be an array", false);
+  }
+
+  if (body.return_photos.length > MAX_RETURN_PHOTOS_COUNT) {
+    return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, `return_photos cannot exceed ${MAX_RETURN_PHOTOS_COUNT} items`, false);
+  }
+
+  for (const photo of body.return_photos) {
+    if (typeof photo !== "string") {
+      return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, "return_photos must contain only strings", false);
+    }
+    if (photo.trim() === "") {
+      return new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.VALIDATION_ERROR, "return_photos cannot contain empty or whitespace-only strings", false);
+    }
+  }
+
+  return null;
+}
+
