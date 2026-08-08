@@ -245,15 +245,56 @@ ON CONFLICT DO NOTHING;
 DO $$
 DECLARE
   v_res JSONB;
+  v_initial_ledgers UUID[];
+  v_final_ledgers UUID[];
+  v_mutation_count INT;
 BEGIN
-  -- replay
+  -- Record strict ledger identity prior to replay to verify immutability
+  SELECT array_agg(id ORDER BY id) INTO v_initial_ledgers FROM public.ledger_entries WHERE order_item_id = '55555555-0000-0000-0000-000000000010';
+
+  -- 1. Initial replay
   v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000010', 'aaaaaaaa-0000-0000-0000-000000000002');
-  IF (v_res->>'isIdempotentReplay')::boolean IS NOT TRUE THEN
-    RAISE EXCEPTION 'Case 10 replay flag not set: %', v_res;
+  
+  -- Verify replay returns a successful operation
+  IF (v_res->>'success')::boolean IS NOT TRUE OR (v_res->>'isIdempotentReplay')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'Replay invariant failed: Expected success=true and isIdempotentReplay=true. Received: success=%, isIdempotentReplay=%', (v_res->>'success'), (v_res->>'isIdempotentReplay');
   END IF;
-  IF (v_res->'data'->>'amountPaise') IS NULL OR (v_res->'data'->>'operationKey') IS NULL THEN
-    RAISE EXCEPTION 'Case 10 replay missing financial provenance: %', v_res;
+
+  -- Verify the canonical replay payload exactly
+  IF (v_res->'data'->>'orderItemId') IS DISTINCT FROM '55555555-0000-0000-0000-000000000010' THEN RAISE EXCEPTION 'Replay invariant failed: Expected orderItemId=55555555-0000-0000-0000-000000000010, received %', v_res->'data'->>'orderItemId'; END IF;
+  IF (v_res->'data'->>'paymentId') IS DISTINCT FROM 'cccccccc-0000-0000-0000-00000000000c' THEN RAISE EXCEPTION 'Replay invariant failed: Expected paymentId=cccccccc-0000-0000-0000-00000000000c, received %', v_res->'data'->>'paymentId'; END IF;
+  IF (v_res->'data'->>'status') IS DISTINCT FROM 'reversing' THEN RAISE EXCEPTION 'Replay invariant failed: Expected status=reversing, received %', v_res->'data'->>'status'; END IF;
+  IF (v_res->'data'->>'amountPaise') IS DISTINCT FROM '900' THEN RAISE EXCEPTION 'Replay invariant failed: Expected amountPaise=900, received %', v_res->'data'->>'amountPaise'; END IF;
+  IF (v_res->'data'->>'operationKey') IS DISTINCT FROM 'rev10' THEN RAISE EXCEPTION 'Replay invariant failed: Expected operationKey=rev10, received %', v_res->'data'->>'operationKey'; END IF;
+
+  -- 2. Mutate payment and verify setup
+  UPDATE public.payments SET payment_status = 'captured' WHERE id = 'cccccccc-0000-0000-0000-00000000000c';
+  GET DIAGNOSTICS v_mutation_count = ROW_COUNT;
+  IF v_mutation_count <> 1 THEN
+    RAISE EXCEPTION 'Test 10 SETUP FAILED: Expected to update 1 payment row to captured, but updated % rows.', v_mutation_count;
   END IF;
+
+  -- 3. Replay again after lifecycle mutation
+  v_res := public.approve_return_intent('55555555-0000-0000-0000-000000000010', 'aaaaaaaa-0000-0000-0000-000000000002');
+  
+  -- Verify it still succeeds
+  IF (v_res->>'success')::boolean IS NOT TRUE OR (v_res->>'isIdempotentReplay')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'Replay invariant failed: Expected success=true and isIdempotentReplay=true after payment mutation. Received: success=%, isIdempotentReplay=%', (v_res->>'success'), (v_res->>'isIdempotentReplay');
+  END IF;
+
+  -- Verify canonical replay payload hasn't changed
+  IF (v_res->'data'->>'orderItemId') IS DISTINCT FROM '55555555-0000-0000-0000-000000000010' THEN RAISE EXCEPTION 'Replay invariant failed: Expected orderItemId=55555555-0000-0000-0000-000000000010 after payment mutation, received %', v_res->'data'->>'orderItemId'; END IF;
+  IF (v_res->'data'->>'paymentId') IS DISTINCT FROM 'cccccccc-0000-0000-0000-00000000000c' THEN RAISE EXCEPTION 'Replay invariant failed: Expected paymentId=cccccccc-0000-0000-0000-00000000000c after payment mutation, received %', v_res->'data'->>'paymentId'; END IF;
+  IF (v_res->'data'->>'status') IS DISTINCT FROM 'reversing' THEN RAISE EXCEPTION 'Replay invariant failed: Expected status=reversing after payment mutation, received %', v_res->'data'->>'status'; END IF;
+  IF (v_res->'data'->>'amountPaise') IS DISTINCT FROM '900' THEN RAISE EXCEPTION 'Replay invariant failed: Expected amountPaise=900 after payment mutation, received %', v_res->'data'->>'amountPaise'; END IF;
+  IF (v_res->'data'->>'operationKey') IS DISTINCT FROM 'rev10' THEN RAISE EXCEPTION 'Replay invariant failed: Expected operationKey=rev10 after payment mutation, received %', v_res->'data'->>'operationKey'; END IF;
+  
+  -- Verify ledger identity is completely and strictly immutable
+  SELECT array_agg(id ORDER BY id) INTO v_final_ledgers FROM public.ledger_entries WHERE order_item_id = '55555555-0000-0000-0000-000000000010';
+  IF v_final_ledgers IS DISTINCT FROM v_initial_ledgers THEN
+    RAISE EXCEPTION 'Replay invariant failed: Ledger identity changed from % to % (Duplicate or altered financial mutations occurred)', v_initial_ledgers, v_final_ledgers;
+  END IF;
+
   RAISE NOTICE 'Case 10 PASSED';
 END $$;
 
