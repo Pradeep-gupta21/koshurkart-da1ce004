@@ -6,7 +6,7 @@ Architecture Scope: Payment, Ledger, Payout, Return, and Reconciliation Subsyste
 
 # KoshurKart Payment System — Architecture Decision Records
 
-**Purpose:** This document explains *why* the target architecture (docs 01–04) made the decisions it made. It does not introduce, modify, or reinterpret any decision — each ADR below documents a choice already stated in the core specification, state machines, database specification, or operational standards, with its rationale and trade-offs made explicit for future maintainers.
+**Purpose:** This document records the architectural decisions governing the KoshurKart payment system, including the rationale and trade-offs behind decisions established in the core architecture and formally approved architectural amendments. New or changed architectural decisions must be explicitly recorded and approved through the change-control process; they must never be introduced silently through implementation.
 
 **Companion documents:** `01-core-architecture-specification.md` · `02-state-machines.md` · `03-database-ledger-specification.md` · `04-operational-standards.md` · `06-glossary.md` · `07-sequence-diagrams.md`
 
@@ -200,3 +200,25 @@ order_items.razorpay_refund_id: incoming provider refund ID
 - Marked the stale three-argument signature (`p_vendor_id`, `p_order_item_id`, `p_razorpay_refund_id`) as superseded. The working RPC correctly derives vendor ownership/context from the locked `order_items` row and requires only `p_order_item_id` and `p_razorpay_refund_id`.
 
 **Related documents:** `01-core-architecture-specification.md` §9; `02-state-machines.md` §3
+
+---
+
+## ADR-012: Phase 4 Email Queue Provider Extension
+
+**Context:** CodeRabbit identified that the `return_requested` email dispatch bypassed the durable `transactional_emails` queue, performing a synchronous external HTTP call to Brevo which, if it failed, resulted in permanent notification loss because the return-intent RPC had already committed.
+
+**Decision:** The existing `transactional_emails` queue is extended to support a Brevo delivery adapter specifically for `return_requested` transactional notifications.
+- Existing Lovable queue consumers and their behavior remain unchanged.
+- Existing direct Brevo flows for `customer_welcome`, `vendor_kyc_welcome`, and `order_confirmation` remain unchanged.
+- The queue remains responsible for notification delivery lifecycle, retry, backoff, TTL and DLQ handling.
+- The Brevo adapter is responsible only for Brevo transport.
+- No payment, return-state, ledger, refund, reversal, or financial idempotency behavior is changed.
+- The design does not claim exactly-once external email delivery.
+- Queue-enqueue failure remains a known residual notification failure boundary and is not converted into a financial rollback/outbox redesign by this change.
+
+**Consequences:**
+- `return_requested` notifications benefit from the queue's durable retry semantics.
+- We maintain the isolated external provider (Brevo) for notifications without replacing the existing Lovable queue subsystem.
+- Resolves the primary network-failure risk without redesigning the financial intent RPCs.
+
+**Related documents:** `01-core-architecture-specification.md` §8
