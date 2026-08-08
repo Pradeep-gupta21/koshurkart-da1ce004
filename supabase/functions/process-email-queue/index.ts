@@ -306,47 +306,49 @@ Deno.serve(async (req) => {
             error_message: errorMsg.slice(0, 1000),
           })
 
-          const retryAfterSecs = getRetryAfterSeconds(error)
-          await supabase
-            .from('email_send_state')
-            .update({
-              retry_after_until: new Date(
-                Date.now() + retryAfterSecs * 1000
-              ).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', 1)
+          if (payload.provider !== 'brevo') {
+            const retryAfterSecs = getRetryAfterSeconds(error)
+            await supabase
+              .from('email_send_state')
+              .update({
+                retry_after_until: new Date(
+                  Date.now() + retryAfterSecs * 1000
+                ).toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', 1)
 
-          // Stop processing — remaining messages stay in queue (VT expires, retried next cycle)
-          return new Response(
-            JSON.stringify({ processed: totalProcessed, stopped: 'rate_limited' }),
-            { headers: { 'Content-Type': 'application/json' } }
-          )
-        }
-
-        // 403s are permanent configuration or authorization failures for this
-        // message, so move straight to DLQ and stop processing the rest of the batch.
-        if (isForbidden(error)) {
+            // Stop processing — remaining messages stay in queue (VT expires, retried next cycle)
+            return new Response(
+              JSON.stringify({ processed: totalProcessed, stopped: 'rate_limited' }),
+              { headers: { 'Content-Type': 'application/json' } }
+            )
+          }
+          // Brevo rate limits: do not update global cooldown, do not stop batch.
+          // Fall through to end of loop so VT mechanism handles retry natively.
+        } else if (isForbidden(error)) {
+          // 403s are permanent configuration or authorization failures for this
+          // message, so move straight to DLQ and stop processing the rest of the batch.
           await moveToDlq(supabase, queue, msg, errorMsg.slice(0, 1000))
           return new Response(
             JSON.stringify({ processed: totalProcessed, stopped: 'forbidden' }),
             { headers: { 'Content-Type': 'application/json' } }
           )
-        }
+        } else {
+          // Log non-429 failures to track real retry attempts.
+          await supabase.from('email_send_log').insert({
+            message_id: payload.message_id,
+            template_name: payload.label || queue,
+            recipient_email: payload.to,
+            status: 'failed',
+            error_message: errorMsg.slice(0, 1000),
+          })
+          if (payload?.message_id && typeof payload.message_id === 'string') {
+            failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)
+          }
 
-        // Log non-429 failures to track real retry attempts.
-        await supabase.from('email_send_log').insert({
-          message_id: payload.message_id,
-          template_name: payload.label || queue,
-          recipient_email: payload.to,
-          status: 'failed',
-          error_message: errorMsg.slice(0, 1000),
-        })
-        if (payload?.message_id && typeof payload.message_id === 'string') {
-          failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)
+          // Non-429 errors: message stays invisible until VT expires, then retried
         }
-
-        // Non-429 errors: message stays invisible until VT expires, then retried
       }
 
       // Small delay between sends to smooth bursts
