@@ -95,11 +95,16 @@ async function runTests() {
   console.log("  - Upload successful:", uploadData.path);
   const photoPath = uploadData.path;
 
+  const errorCodeOf = (res) =>
+    res.body && typeof res.body === 'object'
+      ? (res.body.errorCode ?? res.body.error?.code)
+      : undefined;
+
   // Issue 6: Validation Boundary Testing
   console.log("Test 2: Validation boundaries");
   const missingReason = await callEdgeFunction({ order_item_id: orderItemId, return_description: "t", return_photos: [] });
   assert.equal(missingReason.status, 400);
-  assert.equal(missingReason.body.errorCode || missingReason.body.error?.code, 'MISSING_REQUIRED_FIELDS');
+  assert.equal(errorCodeOf(missingReason), 'MISSING_REQUIRED_FIELDS');
 
   // Issue 3: Expand Runtime Integration Assertions (Success)
   console.log("Test 3: Successful initial request & atomic persistence");
@@ -127,7 +132,7 @@ async function runTests() {
   console.log("Test 4: Idempotent replay immutability");
   const replayRes = await callEdgeFunction(payload);
   assert.equal(replayRes.status, 200);
-  assert.equal(replayRes.body.isIdempotentReplay, true);
+  assert.equal(replayRes.body?.isIdempotentReplay, true);
   
   const { data: replayed, error: replayedErr } = await admin.from('order_items').select('*').eq('id', orderItemId).single();
   if (replayedErr) {
@@ -163,7 +168,7 @@ async function runTests() {
     return_photos: []
   });
   assert.equal(invalidStateRes.status, 400, "Test 5 BUSINESS FAILURE: invalid state did not produce the expected HTTP 400 response. Got: " + JSON.stringify(invalidStateRes.body));
-  assert.equal(invalidStateRes.body.errorCode || invalidStateRes.body.error?.code, 'BAD_REQUEST');
+  assert.equal(errorCodeOf(invalidStateRes), 'BAD_REQUEST');
   console.log("  - Error mapping verified");
 
   // Issue 5: Direct Database Mutation Protection (HTTP — authenticated user)
