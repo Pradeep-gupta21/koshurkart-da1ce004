@@ -1,11 +1,21 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@lovable.dev/email-js@*": "0.1.2",
     "npm:@supabase/supabase-js@2": "2.45.0",
     "npm:@supabase/supabase-js@2.45.0": "2.45.0",
     "npm:zod@3.23.8": "3.23.8"
   },
   "npm": {
+    "@lovable.dev/email-js@0.1.2": {
+      "integrity": "sha512-+lYPJl807b9gGBJaeoFd/hElW3/0Ir/K79J8dGZRU/Y0K7FlpEYvaAPQMWL3WDm7gZIUsZY7fZKGPhOb8IWrBA==",
+      "dependencies": [
+        "@lovable.dev/webhooks-js"
+      ]
+    },
+    "@lovable.dev/webhooks-js@0.0.1": {
+      "integrity": "sha512-TdaXXNszX2r9VAWdHpxgpF7cb/aLvejfkVD5S6jTCmH0ArUjAMPkkTlFnG52kkOdWlD5dtW2sNWvqptqVJYVIg=="
+    },
     "@supabase/auth-js@2.64.4": {
       "integrity": "sha512-9ITagy4WP4FLl+mke1rchapOH0RQpf++DI+WSG2sO1OFOZ0rW3cwAM0nCrMOxu+Zw4vJ4zObc08uvQrXx590Tg==",
       "dependencies": [
