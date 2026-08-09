@@ -293,6 +293,7 @@ Deno.serve(async (req) => {
           subject,
           html,
           message_id: `return_requested:${item.id}`,
+          idempotency_key: `return_requested:${item.id}`,
           label: "return_requested"
         }
       });
