@@ -4,8 +4,7 @@ import { sendViaBrevo } from '../_shared/brevo.ts'
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
-import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
-import { isRateLimited, isForbidden, getRetryAfterSeconds, moveToDlq } from './helpers.ts';
+import { isRateLimited, isForbidden, getRetryAfterSeconds, moveToDlq, applyDurableBrevoCooldown } from './helpers.ts';
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -93,11 +92,12 @@ Deno.serve(async (req) => {
 
   if (brevoCooldownError) {
     console.error('Failed to read durable Brevo cooldown:', brevoCooldownError)
-  } else if (durableBrevoCooldown?.retry_after_until) {
-    const parsedTimestamp = Date.parse(durableBrevoCooldown.retry_after_until)
-    if (!Number.isNaN(parsedTimestamp) && parsedTimestamp > Date.now()) {
-      brevoRateLimitedUntil = Math.max(brevoRateLimitedUntil, parsedTimestamp)
-    }
+  } else {
+    brevoRateLimitedUntil = applyDurableBrevoCooldown(
+      brevoRateLimitedUntil,
+      durableBrevoCooldown?.retry_after_until,
+      Date.now()
+    )
   }
 
   // 2. Process auth_emails first (priority), then transactional_emails
@@ -157,10 +157,21 @@ Deno.serve(async (req) => {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]
       const payload = msg.message
-      const failedAttempts =
-        payload?.message_id && typeof payload.message_id === 'string'
-          ? (failedAttemptsByMessageId.get(payload.message_id) ?? 0)
-          : msg.read_ct ?? 0
+
+      const messageId = payload?.message_id && typeof payload.message_id === 'string'
+        ? payload.message_id
+        : null
+
+      if (!messageId) {
+        console.error('Invariant error: message missing message_id', {
+          queue,
+          msg_id: msg.msg_id
+        })
+        await moveToDlq(supabase, queue, msg, 'Invariant error: missing message_id')
+        continue
+      }
+
+      const failedAttempts = failedAttemptsByMessageId.get(messageId) ?? 0
 
       // Drop expired messages (TTL exceeded).
       // Prefer payload.queued_at when present; fall back to PGMQ's enqueued_at
@@ -190,29 +201,27 @@ Deno.serve(async (req) => {
       }
 
       // Guard: skip if another worker already sent this message (VT expired race)
-      if (payload.message_id) {
-        const { data: alreadySent } = await supabase
-          .from('email_send_log')
-          .select('id')
-          .eq('message_id', payload.message_id)
-          .eq('status', 'sent')
-          .maybeSingle()
+      const { data: alreadySent } = await supabase
+        .from('email_send_log')
+        .select('id')
+        .eq('message_id', messageId)
+        .eq('status', 'sent')
+        .maybeSingle()
 
-        if (alreadySent) {
-          console.warn('Skipping duplicate send (already sent)', {
-            queue,
-            msg_id: msg.msg_id,
-            message_id: payload.message_id,
-          })
-          const { error: dupDelError } = await supabase.rpc('delete_email', {
-            queue_name: queue,
-            message_id: msg.msg_id,
-          })
-          if (dupDelError) {
-            console.error('Failed to delete duplicate message from queue', { queue, msg_id: msg.msg_id, error: dupDelError })
-          }
-          continue
+      if (alreadySent) {
+        console.warn('Skipping duplicate send (already sent)', {
+          queue,
+          msg_id: msg.msg_id,
+          message_id: messageId,
+        })
+        const { error: dupDelError } = await supabase.rpc('delete_email', {
+          queue_name: queue,
+          message_id: msg.msg_id,
+        })
+        if (dupDelError) {
+          console.error('Failed to delete duplicate message from queue', { queue, msg_id: msg.msg_id, error: dupDelError })
         }
+        continue
       }
 
       // Issue 2 fix: skip Brevo messages while provider is disabled for this
@@ -221,7 +230,7 @@ Deno.serve(async (req) => {
         console.warn('Brevo disabled for this batch (403 received); deferring message', {
           queue,
           msg_id: msg.msg_id,
-          message_id: payload.message_id,
+          message_id: messageId,
         })
         continue
       }
@@ -232,7 +241,7 @@ Deno.serve(async (req) => {
         console.warn('Brevo cooldown active; deferring message', {
           queue,
           msg_id: msg.msg_id,
-          message_id: payload.message_id,
+          message_id: messageId,
           cooldown_until: new Date(brevoRateLimitedUntil).toISOString(),
         })
         continue
@@ -248,7 +257,7 @@ Deno.serve(async (req) => {
             payload.html as string,
             {
               idempotencyKey: (payload.idempotency_key as string) ?? null,
-              messageId: (payload.message_id as string) ?? null,
+              messageId: messageId,
               unsubscribeToken: (payload.unsubscribe_token as string) ?? null,
               text: (payload.text as string) ?? null,
             }
@@ -267,7 +276,7 @@ Deno.serve(async (req) => {
               label: payload.label,
               idempotency_key: payload.idempotency_key,
               unsubscribe_token: payload.unsubscribe_token,
-              message_id: payload.message_id,
+              message_id: messageId,
             },
             // sendUrl is optional — when LOVABLE_SEND_URL is not set, the library
             // falls back to the default Lovable API endpoint (https://api.lovable.dev).
@@ -278,7 +287,7 @@ Deno.serve(async (req) => {
 
         // Log successful send
         await supabase.from('email_send_log').insert({
-          message_id: payload.message_id,
+          message_id: messageId,
           template_name: payload.label || queue,
           recipient_email: payload.to,
           status: 'sent',
@@ -306,7 +315,7 @@ Deno.serve(async (req) => {
         if (isRateLimited(error)) {
           // Log the rate-limit event.
           const { error: rateLimitLogError } = await supabase.from('email_send_log').insert({
-            message_id: payload.message_id,
+            message_id: messageId,
             template_name: payload.label || queue,
             recipient_email: payload.to,
             status: 'rate_limited',
@@ -317,7 +326,7 @@ Deno.serve(async (req) => {
             console.error('Failed to log rate_limited event', {
               queue,
               msg_id: msg.msg_id,
-              message_id: payload.message_id,
+              message_id: messageId,
               error: rateLimitLogError,
             })
           }
@@ -347,6 +356,24 @@ Deno.serve(async (req) => {
               }
             }
 
+            // Explicitly consume retry budget for the message that caused the 429
+            const { error: failLogError } = await supabase.from('email_send_log').insert({
+              message_id: messageId,
+              template_name: payload.label || queue,
+              recipient_email: payload.to,
+              status: 'failed',
+              error_message: `brevo_429: ${errorMsg.slice(0, 950)}`,
+            })
+            if (failLogError) {
+              console.error('Failed to log actual failed attempt for Brevo 429', {
+                queue,
+                msg_id: msg.msg_id,
+                message_id: messageId,
+                error: failLogError,
+              })
+            }
+            failedAttemptsByMessageId.set(messageId, failedAttempts + 1)
+
             // Do NOT update global email_send_state. Do NOT stop the batch.
             // Remaining messages stay under VT; next invocation retries Brevo.
           } else {
@@ -375,7 +402,7 @@ Deno.serve(async (req) => {
 
           if (!dlqSuccess) {
             const { error: failedLogError } = await supabase.from('email_send_log').insert({
-              message_id: payload.message_id,
+              message_id: messageId,
               template_name: payload.label || queue,
               recipient_email: payload.to,
               status: 'failed',
@@ -386,14 +413,12 @@ Deno.serve(async (req) => {
               console.error('Failed to log DLQ transfer failure', {
                 queue,
                 msg_id: msg.msg_id,
-                message_id: payload.message_id,
+                message_id: messageId,
                 error: failedLogError,
               })
             }
 
-            if (payload?.message_id && typeof payload.message_id === 'string') {
-              failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)
-            }
+            failedAttemptsByMessageId.set(messageId, failedAttempts + 1)
           }
 
           if (payload.provider === 'brevo') {
@@ -405,15 +430,13 @@ Deno.serve(async (req) => {
         } else {
           // Log non-429 failures to track real retry attempts.
           await supabase.from('email_send_log').insert({
-            message_id: payload.message_id,
+            message_id: messageId,
             template_name: payload.label || queue,
             recipient_email: payload.to,
             status: 'failed',
             error_message: errorMsg.slice(0, 1000),
           })
-          if (payload?.message_id && typeof payload.message_id === 'string') {
-            failedAttemptsByMessageId.set(payload.message_id, failedAttempts + 1)
-          }
+          failedAttemptsByMessageId.set(messageId, failedAttempts + 1)
 
           // Non-429 errors: message stays invisible until VT expires, then retried
         }

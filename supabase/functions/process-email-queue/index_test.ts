@@ -30,6 +30,7 @@ import {
   isForbidden,
   getRetryAfterSeconds,
   moveToDlq,
+  applyDurableBrevoCooldown,
 } from "./helpers.ts";
 
 function captureEnv(keys: string[]) {
@@ -174,6 +175,17 @@ Deno.test("[PROD] getRetryAfterSeconds: future HTTP-date Retry-After → correct
   assertExists(err.retryAfterSeconds);
   const secs = getRetryAfterSeconds(err);
   assertEquals(secs >= 28 && secs <= 32, true, `Expected ~30s, got ${secs}`);
+});
+
+Deno.test("[PROD] getRetryAfterSeconds: very large Retry-After is capped at 30 days", () => {
+  const THIRTY_ONE_DAYS = 31 * 24 * 60 * 60;
+  const ONE_YEAR_SECS = 365 * 24 * 60 * 60;
+  const EXTREME_SECS = Number.MAX_SAFE_INTEGER;
+  const MAX_COOLDOWN = 30 * 24 * 60 * 60;
+
+  assertEquals(getRetryAfterSeconds({ retryAfterSeconds: THIRTY_ONE_DAYS }), MAX_COOLDOWN, "31 days should cap at 30");
+  assertEquals(getRetryAfterSeconds({ retryAfterSeconds: ONE_YEAR_SECS }), MAX_COOLDOWN, "1 year should cap at 30");
+  assertEquals(getRetryAfterSeconds({ retryAfterSeconds: EXTREME_SECS }), MAX_COOLDOWN, "MAX_SAFE_INTEGER should cap at 30");
 });
 
 Deno.test("[PROD] getRetryAfterSeconds: plain Error (no retryAfterSeconds) → 60", () => {
@@ -383,6 +395,10 @@ function simulateFailure(
           brevoRateLimitedUntil = Math.max(brevoRateLimitedUntil, parsedEffective);
         }
       }
+
+      loggedFailed = true;
+      failedAttemptsByMessageId.set(messageId, failedAttempts + 1);
+      counterIncremented = true;
     } else {
       workerReturned = true;
     }
@@ -413,7 +429,7 @@ function simulateFailure(
 }
 
 // ---------------------------------------------------------------------------
-// Worker Startup: Durable Brevo Cooldown 
+// Brevo 429 Simulations
 // ---------------------------------------------------------------------------
 
 Deno.test("[SIM] Brevo 429: RPC returns LONGER cooldown → local updates to longer", () => {
@@ -462,78 +478,60 @@ Deno.test("[SIM] Brevo 403: DLQ transfer fail + Fallback log fail → still incr
   assertEquals(r.brevoDisabled, true, "Brevo remains disabled");
 });
 
-Deno.test("[SIM] Worker Startup: Durable read loads future Brevo cooldown and defers Brevo messages", () => {
-  let brevoRateLimitedUntil = 0;
-  
-  // Simulate successful read of a future durable cooldown
-  const durableTimestamp = Date.now() + 60_000;
-  const parsedTimestamp = Date.parse(new Date(durableTimestamp).toISOString());
-  if (!Number.isNaN(parsedTimestamp) && parsedTimestamp > Date.now()) {
-    brevoRateLimitedUntil = Math.max(brevoRateLimitedUntil, parsedTimestamp);
-  }
+// ---------------------------------------------------------------------------
+// Worker Startup: Durable Brevo Cooldown
+// ---------------------------------------------------------------------------
 
-  assertEquals(brevoRateLimitedUntil > Date.now(), true);
-
-  // Simulate a mixed batch processing block after startup
-  const batch = [
-    { provider: "brevo", id: "A" },
-    { provider: "lovable", id: "B" },
-  ];
-  const processed: string[] = [];
-  const deferred: string[] = [];
-
-  for (const msg of batch) {
-    if (msg.provider === "brevo" && brevoRateLimitedUntil > Date.now()) {
-      deferred.push(msg.id);
-      continue;
-    }
-    processed.push(msg.id);
-  }
-
-  assertEquals(deferred, ["A"], "Brevo message is skipped while durable cooldown active");
-  assertEquals(processed, ["B"], "Lovable message continues normally");
+Deno.test("[PROD] applyDurableBrevoCooldown: future durable cooldown is loaded", () => {
+  const nowMs = Date.now();
+  const future = new Date(nowMs + 60000).toISOString();
+  const res = applyDurableBrevoCooldown(0, future, nowMs);
+  assertEquals(res, nowMs + 60000);
 });
 
-Deno.test("[SIM] Worker Startup: Expired durable cooldown does not block Brevo", () => {
-  let brevoRateLimitedUntil = 0;
-  
-  const durableTimestamp = Date.now() - 60_000;
-  const parsedTimestamp = Date.parse(new Date(durableTimestamp).toISOString());
-  if (!Number.isNaN(parsedTimestamp) && parsedTimestamp > Date.now()) {
-    brevoRateLimitedUntil = Math.max(brevoRateLimitedUntil, parsedTimestamp);
-  }
-
-  assertEquals(brevoRateLimitedUntil, 0);
+Deno.test("[PROD] applyDurableBrevoCooldown: expired cooldown is ignored", () => {
+  const nowMs = Date.now();
+  const expired = new Date(nowMs - 60000).toISOString();
+  const res = applyDurableBrevoCooldown(0, expired, nowMs);
+  assertEquals(res, 0);
 });
 
-Deno.test("[SIM] Worker Startup: Read failure leaves brevoRateLimitedUntil at 0 and does not crash", () => {
-  let brevoRateLimitedUntil = 0;
-  let readFailed = false;
-
-  try {
-    // Simulate error
-    readFailed = true;
-    const err = new Error("DB read failed");
-    if (err) { /* console.error */ }
-    // else block is skipped
-  } catch (_e) {
-    // should not throw
-  }
-
-  assertEquals(readFailed, true);
-  assertEquals(brevoRateLimitedUntil, 0);
+Deno.test("[PROD] applyDurableBrevoCooldown: malformed timestamp is ignored", () => {
+  const res = applyDurableBrevoCooldown(0, "INVALID", Date.now());
+  assertEquals(res, 0);
 });
 
-Deno.test("[SIM] Brevo 429: rate_limited logged, NO failed record, NO counter increment, cooldown set, batch continues", () => {
+Deno.test("[PROD] applyDurableBrevoCooldown: null/undefined is ignored", () => {
+  assertEquals(applyDurableBrevoCooldown(0, null, Date.now()), 0);
+  assertEquals(applyDurableBrevoCooldown(0, undefined, Date.now()), 0);
+});
+
+Deno.test("[PROD] applyDurableBrevoCooldown: existing longer cooldown is preserved", () => {
+  const nowMs = Date.now();
+  const current = nowMs + 100000;
+  const longer = new Date(nowMs + 200000).toISOString();
+  const res = applyDurableBrevoCooldown(current, longer, nowMs);
+  assertEquals(res, nowMs + 200000);
+});
+
+Deno.test("[PROD] applyDurableBrevoCooldown: a shorter persisted cooldown does not shorten an already-active invocation cooldown", () => {
+  const nowMs = Date.now();
+  const current = nowMs + 100000;
+  const shorter = new Date(nowMs + 60000).toISOString();
+  const res = applyDurableBrevoCooldown(current, shorter, nowMs);
+  assertEquals(res, current);
+});
+
+Deno.test("[SIM] Brevo 429: rate_limited logged, failed record inserted, counter incremented, cooldown set, batch continues", () => {
   const error = new BrevoError(429, "30", "rate limited");
   const map = new Map<string, number>();
   const nowMs = Date.now();
   const r = simulateFailure(error, "brevo", "msg-A", 0, map, nowMs);
 
   assertEquals(r.loggedRateLimited, true);
-  assertEquals(r.loggedFailed, false);
-  assertEquals(r.counterIncremented, false);
-  assertEquals(map.get("msg-A"), undefined);
+  assertEquals(r.loggedFailed, true, "MUST record actual failed attempt exactly once");
+  assertEquals(r.counterIncremented, true);
+  assertEquals(map.get("msg-A"), 1);
   assertEquals(r.brevoRateLimitedUntil, nowMs + 30_000);
   assertEquals(r.durableRpcCalled, true);
   assertEquals(r.workerReturned, false);
@@ -566,15 +564,47 @@ Deno.test("[SIM] Normal failure (non-429, non-403) still increments failed attem
   assertEquals(map.get("msg-X"), 3);
 });
 
-Deno.test("[SIM] Rate-limit log insert failure: error caught, batch continues, cooldown established", () => {
+Deno.test("[SIM] Rate-limit log insert failure: error caught, batch continues, cooldown established, failure recorded", () => {
   const map = new Map<string, number>();
   const nowMs = Date.now();
   const r = simulateFailure(new BrevoError(429, "10", "FAIL_LOG"), "brevo", "msg-Y", 0, map, nowMs);
   assertEquals(r.loggedRateLimited, true);
   assertExists(r.rateLimitLogError);
-  assertEquals(r.loggedFailed, false);
+  assertEquals(r.loggedFailed, true);
+  assertEquals(map.get("msg-Y"), 1);
   assertEquals(r.brevoRateLimitedUntil, nowMs + 10_000);
   assertEquals(r.workerReturned, false);
+});
+
+Deno.test("[SIM] Operational clearing path: reset_provider_cooldown RPC clears durable cooldown and allows send", () => {
+  // Simulate the DB state after `reset_provider_cooldown('brevo')` is called.
+  // The RPC updates `retry_after_until = now()`, which effectively clears the cooldown.
+  const clearedTimestamp = Date.now(); // Effective cooldown is <= Date.now()
+  let brevoRateLimitedUntil = 0;
+
+  const parsedTimestamp = Date.parse(new Date(clearedTimestamp).toISOString());
+  if (!Number.isNaN(parsedTimestamp) && parsedTimestamp > Date.now()) {
+    brevoRateLimitedUntil = Math.max(brevoRateLimitedUntil, parsedTimestamp);
+  }
+
+  // The worker correctly sees the cooldown has expired (brevoRateLimitedUntil remains 0).
+  assertEquals(brevoRateLimitedUntil, 0);
+
+  // When a message is processed:
+  const batch = [{ provider: "brevo", id: "A" }];
+  const deferred: string[] = [];
+  const processed: string[] = [];
+
+  for (const msg of batch) {
+    if (msg.provider === "brevo" && brevoRateLimitedUntil > Date.now()) {
+      deferred.push(msg.id);
+      continue;
+    }
+    processed.push(msg.id);
+  }
+
+  assertEquals(deferred.length, 0);
+  assertEquals(processed, ["A"], "Message is processed after operational clear");
 });
 
 Deno.test("[SIM] Non-Brevo 429 still stops the batch (existing behavior preserved)", () => {
