@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getVendorCommissionPercentage, calculateVendorEarnings, calculatePlatformCommission } from '@/shared/commission';
 
 export const platformSettings = {
   commissionEnabled: false,
@@ -66,13 +67,20 @@ export async function fetchPaymentMethodSettings(): Promise<PaymentMethodSetting
   };
 }
 
-export function calculateCommission(amount: number, settings?: CommissionSettings) {
-  const enabled = settings?.enabled ?? platformSettings.commissionEnabled;
-  const percentage = settings?.percentage ?? platformSettings.commissionPercentage;
-
-  if (!enabled || percentage <= 0) {
-    return { commission: 0, vendorEarnings: amount };
+// Phase 2: Frontend display delegates to the shared commission module.
+// Phase 3: Payment lifecycle code will adopt the same module.
+export function calculateCommission(amount: number) {
+  if (typeof amount !== 'number' || Number.isNaN(amount) || !Number.isFinite(amount) || amount < 0) {
+    throw new Error('amount must be a positive finite number');
   }
-  const commission = amount * (percentage / 100);
-  return { commission, vendorEarnings: amount - commission };
+
+  const amountPaise = Math.round(amount * 100);
+  const commissionPercentage = getVendorCommissionPercentage(undefined);
+  const vendorEarningsPaise = calculateVendorEarnings(amountPaise, commissionPercentage);
+  const commissionPaise = calculatePlatformCommission(amountPaise, vendorEarningsPaise);
+
+  return {
+    commission: commissionPaise / 100,
+    vendorEarnings: vendorEarningsPaise / 100,
+  };
 }

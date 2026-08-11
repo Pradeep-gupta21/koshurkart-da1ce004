@@ -7,13 +7,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Wallet, IndianRupee, CreditCard, ArrowDownToLine, Megaphone, TrendingUp, Info } from "lucide-react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { paymentService } from "@/services/paymentService";
-
+import { getVendorCommissionPercentage } from "@/shared/commission";
 const VendorPayments = () => {
   const { vendorId } = useOutletContext<{ vendorId: string }>();
   const { toast } = useToast();
   const { formatPrice } = useCurrency();
   const queryClient = useQueryClient();
-
+  const commissionPercentage = getVendorCommissionPercentage(undefined);
   /**
    * In-memory fallback for the payout idempotency key.
    * sessionStorage can throw a QuotaExceededError in private-browsing mode or
@@ -153,7 +153,7 @@ const VendorPayments = () => {
       {/* Commission info banner */}
       <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
         <Info className="h-4 w-4 text-primary shrink-0" />
-        <span>Platform commission is currently <strong>0%</strong>. Vendors receive <strong>100%</strong> earnings.</span>
+        <span>Platform commission is currently <strong>{commissionPercentage}%</strong>. Vendors receive <strong>{100 - commissionPercentage}%</strong> earnings.</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

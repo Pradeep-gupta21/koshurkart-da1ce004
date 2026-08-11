@@ -5,9 +5,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Loader2, Upload, X, PackageOpen } from "lucide-react";
+import { MAX_RETURN_DESCRIPTION_LENGTH, MAX_RETURN_PHOTOS_COUNT, MAX_RETURN_PHOTO_SIZE_BYTES } from "@/shared/returnConstants";
 
 export interface ReturnItem {
   id: string;
@@ -28,8 +30,7 @@ const REASONS = [
   "Changed Mind / Disliked",
 ];
 
-const MAX_FILES = 4;
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
 
 export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Props) => {
   const { user } = useAuth();
@@ -51,13 +52,13 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
         toast.error(`${f.name} is not an image`);
         return false;
       }
-      if (f.size > MAX_FILE_BYTES) {
+      if (f.size > MAX_RETURN_PHOTO_SIZE_BYTES) {
         toast.error(`${f.name} exceeds 5MB`);
         return false;
       }
       return true;
     });
-    setFiles((prev) => [...prev, ...incoming].slice(0, MAX_FILES));
+    setFiles((prev) => [...prev, ...incoming].slice(0, MAX_RETURN_PHOTOS_COUNT));
   };
 
   const handleSubmit = async () => {
@@ -80,24 +81,20 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
         photoPaths.push(path);
       }
 
-      const { error } = await supabase
-        .from("order_items")
-        .update({
-          return_status: "requested",
+      const { data, error } = await supabase.functions.invoke("customer-request-return", {
+        body: {
+          order_item_id: item.id,
           return_reason: reason,
-          return_description: description.trim() || null,
+          return_description: description.trim() || "",
           return_photos: photoPaths,
-          return_requested_at: new Date().toISOString(),
-        })
-        .eq("id", item.id);
+        },
+      });
+
       if (error) throw error;
 
-      // Fire-and-forget transactional email — do not block the UI on email delivery
-      supabase.functions
-        .invoke("send-transactional-email", {
-          body: { type: "return_requested", orderItemId: item.id },
-        })
-        .catch((e) => console.warn("return email failed", e));
+      if (data?.warnings?.length) {
+        console.warn("Return request completed with warnings:", data.warnings);
+      }
 
       toast.success("Return request submitted", {
         description: "Our team will review your request shortly.",
@@ -106,7 +103,22 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
       reset();
       onOpenChange(false);
     } catch (err: any) {
-      toast.error("Failed to submit return request", { description: err?.message });
+      let errorDescription = err?.message;
+
+      if (err instanceof FunctionsHttpError && err.context) {
+        try {
+          // Attempt to parse the structured backend error from the response body
+          const parsed = await err.context.json();
+          errorDescription =
+            parsed?.error?.message ??
+            parsed?.message ??
+            err?.message;
+        } catch {
+          // Ignore response parsing failures and preserve the original invoke error.
+        }
+      }
+
+      toast.error("Failed to submit return request", { description: errorDescription });
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +165,7 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add any details that will help us resolve your request faster..."
-              maxLength={1000}
+              maxLength={MAX_RETURN_DESCRIPTION_LENGTH}
               rows={4}
             />
           </div>
@@ -166,7 +178,7 @@ export const ReturnRequestModal = ({ item, open, onOpenChange, onSubmitted }: Pr
             >
               <Upload className="h-5 w-5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground text-center">
-                Click to upload (up to {MAX_FILES} images, max 5MB each)
+                Click to upload (up to {MAX_RETURN_PHOTOS_COUNT} images, max 5MB each)
               </span>
               <input
                 id="return-photos"

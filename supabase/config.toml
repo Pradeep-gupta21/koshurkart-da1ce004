@@ -1,5 +1,23 @@
 project_id = "xlqzbomiuuadxcygnsal"
 
+[api]
+port = 54321
+
+[db]
+port = 55000
+
+[studio]
+port = 55001
+
+[analytics]
+port = 55002
+vector_port = 55003
+
+[local_smtp]
+port = 55004
+smtp_port = 55005
+pop3_port = 55006
+
 [functions]
   [functions.admin-resync-payment]
     verify_jwt = true

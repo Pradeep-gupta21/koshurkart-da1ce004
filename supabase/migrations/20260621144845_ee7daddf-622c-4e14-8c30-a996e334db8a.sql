@@ -83,4 +83,15 @@ WITH CHECK (
 );
 
 -- 4) Stop broadcasting fraud-detection data via Realtime to all authenticated subscribers.
-ALTER PUBLICATION supabase_realtime DROP TABLE public.suspicious_clicks;
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime
+      DROP TABLE public.suspicious_clicks;
+  EXCEPTION
+    WHEN invalid_parameter_value THEN
+      -- Table is not a member of the publication.
+      NULL;
+  END;
+END;
+$$;

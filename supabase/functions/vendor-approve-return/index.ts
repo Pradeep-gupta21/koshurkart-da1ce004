@@ -1,40 +1,12 @@
-// vendor-approve-return: concurrency-safe wrapper around vendor_approve_return RPC.
+// vendor-approve-return: Thin orchestration wrapper around canonical Phase 4 RPCs.
+// The Edge Function must become a thin orchestration layer. If implementation requires duplicating
+// business rules already enforced by the RPCs, stop and remove the duplication instead of reimplementing it.
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
-//
-// Concurrency contract
-// --------------------
-// 1. Atomic edge-function lock   — UPDATE order_items SET return_status='processing',
-//    return_lock_key=<idempotency key> WHERE id=? AND return_status='requested'.
-//    No prior SELECT. If 0 rows updated, the stored return_lock_key decides:
-//      * matches the incoming key → same operation retrying → RESUME (each money
-//        step below is individually idempotent via persisted reversal/refund ids)
-//      * differs (or item not 'processing') → 409, genuine conflict.
-//    Same-key racers may both proceed; the gateway idempotency keys (2) and the
-//    RPC row lock (3) keep double-execution money-safe.
-// 2. Razorpay idempotency keys   — deterministic per-(item,transfer/payment) pair
-//    so a network retry never double-moves money at the gateway.
-// 3. RPC row lock                — SELECT … FOR UPDATE inside vendor_approve_return
-//    serialises any concurrent DB calls; transitions processing → approved.
-// 4. Lock release                — every pre-money failure path releases the lock
-//    via releaseLock(), fenced by the owner's idempotency key so it can only
-//    release its OWN lock. A key mismatch (another request took over) is a clean
-//    no-op warning; a failed release is CRITICAL (the row would be stuck in
-//    'processing') and logged with full context, never silently.
-//
-// Money-safe ordering (unchanged)
-// --------------------------------
-//   1. Reverse Route transfer (pulls vendor share back first)
-//   2. Refund customer          (only after reversal succeeds)
-//   3. vendor_approve_return    (DB balance deduction + ledger row)
 import { createClient } from "@supabase/supabase-js";
 import { validateVendorApproveReturnRequest } from "../_shared/validation.ts";
 import { normalizeRpcError } from "../../../src/shared/rpcErrorNormalizer.ts";
-import {
-  calculateVendorTransferAmount,
-  getVendorCommissionPercentage,
-} from "../_shared/pricing.ts";
 
 const ALLOWED_ORIGINS = [
   "https://koshurkart.com",
@@ -62,59 +34,6 @@ const json = (body: unknown, status = 200, req: Request) =>
     headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 
-// Columns pulled when acquiring OR resuming the processing lock. Kept in one
-// place so the acquisition UPDATE and the resume SELECT always agree.
-const LOCK_COLUMNS =
-  "id, order_id, vendor_id, price, quantity, title, razorpay_transfer_id, transfer_status, razorpay_reversal_id, razorpay_refund_id, return_status, return_lock_key";
-
-// Release a processing lock back to 'requested' so a future request can re-enter.
-//
-// The release is FENCED by the caller's idempotency key: it only touches the row
-// while that row is still in 'processing' AND still owned by this operation's
-// key. This prevents a slow/duplicate invocation from releasing a lock that a
-// newer request has since taken ownership of.
-//
-// Three outcomes:
-//   * "released"          — the row was ours and is now back to 'requested'.
-//   * "ownership_changed" — 0 rows matched: the row is no longer in 'processing'
-//                           under our key (another request took over, or it
-//                           already advanced). Not an error — we exit cleanly
-//                           and leave the record untouched.
-//   * "db_error"          — the update itself failed (infrastructure). CRITICAL:
-//                           the row may be stuck in 'processing'; surfaced loudly.
-// deno-lint-ignore no-explicit-any
-async function releaseLock(
-  service: any,
-  itemId: string,
-  ownerKey: string,
-  context: string,
-): Promise<"released" | "ownership_changed" | "db_error"> {
-  const { data, error } = await service
-    .from("order_items")
-    .update({ return_status: "requested", return_lock_key: null })
-    .eq("id", itemId)
-    .eq("return_status", "processing")
-    .eq("return_lock_key", ownerKey)
-    .select("id");
-  if (error) {
-    console.error(
-      "[vendor-approve-return] CRITICAL: lock release FAILED — item may be stuck in 'processing', manual reset required",
-      { order_item_id: itemId, release_context: context, code: error.code, message: error.message },
-    );
-    return "db_error";
-  }
-  if (!data || data.length === 0) {
-    // Fencing check failed: the lock is no longer ours to release. Another
-    // request has taken ownership (or the row already advanced). Exit cleanly.
-    console.warn(
-      "[vendor-approve-return] lock release skipped — ownership changed, another request now owns this item",
-      { order_item_id: itemId, release_context: context },
-    );
-    return "ownership_changed";
-  }
-  return "released";
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: getCorsHeaders(req) });
   if (req.method !== "POST") return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Method not allowed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
@@ -141,11 +60,8 @@ Deno.serve(async (req) => {
       return json(valErr, 400, req);
     }
 
-    const body = payload as Record<string, any>;
-    const orderItemId = body.order_item_id;
-    const rawKey = body.idempotency_key;
-
-    const idempotencyKey = rawKey ?? crypto.randomUUID();
+    const body = payload as Record<string, unknown>;
+    const orderItemId = typeof body.order_item_id === "string" ? body.order_item_id : "";
 
     // ---- Razorpay creds ----
     const keyId = Deno.env.get("RAZORPAY_KEY_ID");
@@ -159,320 +75,190 @@ Deno.serve(async (req) => {
     );
 
     // ============================================================
-    // ATOMIC LOCK — transition requested → processing, stamping the
-    // idempotency key of the request that now owns the lock. No prior
-    // SELECT. If another invocation already owns it (or the item is past
-    // 'requested') this matches 0 rows and we fall through to the
-    // resume/conflict decision below.
+    // STAGE 1 — Intent RPC
     // ============================================================
-    const { data: locked, error: lockErr } = await service
-      .from("order_items")
-      .update({ return_status: "processing", return_lock_key: idempotencyKey })
-      .eq("id", orderItemId)
-      .eq("return_status", "requested")
-      .select(LOCK_COLUMNS)
-      .maybeSingle();
+    console.log("[vendor-approve-return] STAGE 1: Invoking approve_return_intent", { orderItemId, vendorId: user.id });
+    
+    const { data: intentData, error: intentErr } = await service.rpc("approve_return_intent", {
+      p_order_item_id: orderItemId,
+      p_vendor_id: user.id
+    });
 
-    if (lockErr) {
-      // DB failure acquiring the lock — infrastructure error, not a conflict.
-      // Nothing was locked, so there is nothing to release.
-      console.error("[vendor-approve-return] lock acquisition query FAILED", {
-        order_item_id: orderItemId,
-        code: lockErr.code,
-        message: lockErr.message,
-      });
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    if (intentErr || !intentData?.success) {
+      const errorCode = intentData?.errorCode || "INTERNAL_ERROR";
+      const isIdempotentReplay = intentData?.isIdempotentReplay || false;
+      console.error("[vendor-approve-return] STAGE 1 STOP: Intent rejected", { orderItemId, isIdempotentReplay, errorCode, error: intentErr || intentData });
+      const mappedErr = normalizeRpcError(intentErr || intentData);
+      return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
-    let item = locked;
+    const intentStatus = intentData.data.status;
+    const amountPaise = intentData.data.amountPaise;
+    const paymentId = intentData.data.paymentId;
+    const operationKey = intentData.data.operationKey;
+    const isIdempotentReplay = intentData.isIdempotentReplay;
 
+    if (intentStatus === "escalated") {
+      console.log("[vendor-approve-return] STAGE 1 STOP: Return escalated", { orderItemId, operationKey, isIdempotentReplay, escalationId: intentData.data.escalationId });
+      return json(intentData, 200, req); // Return canonical RPC response
+    }
+    
+    if (intentStatus !== "reversing") {
+      console.error("[vendor-approve-return] STAGE 1 FATAL: Unknown intent status", { orderItemId, intentStatus, operationKey, isIdempotentReplay });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Invalid intent status", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
+
+    console.log("[vendor-approve-return] STAGE 1 CONTINUE: Return reversing", { orderItemId, operationKey, isIdempotentReplay });
+
+    // Read-only lookup required solely to invoke Razorpay APIs.
+    const { data: item, error: itemErr } = await service.from("order_items").select("razorpay_transfer_id, price, quantity, order_id").eq("id", orderItemId).single();
+    if (itemErr) {
+      console.error("[vendor-approve-return] STAGE 1 FATAL: DB error looking up order item", { orderItemId, operationKey, error: itemErr });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Database error retrieving order item", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
     if (!item) {
-      // 0 rows updated: the item is not in 'requested'. It may be an already
-      // in-flight operation that THIS request is legitimately retrying, or a
-      // genuine conflict. Read the current row to decide.
-      const { data: existing, error: existingErr } = await service
-        .from("order_items")
-        .select(LOCK_COLUMNS)
-        .eq("id", orderItemId)
-        .maybeSingle();
-
-      if (existingErr) {
-        console.error("[vendor-approve-return] lock-state lookup FAILED", {
-          order_item_id: orderItemId,
-          code: existingErr.code,
-          message: existingErr.message,
-        });
-        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-      }
-
-      const isProcessing = existing?.return_status === "processing";
-      const keyMatches = !!existing?.return_lock_key && existing.return_lock_key === idempotencyKey;
-
-      if (isProcessing && keyMatches) {
-        // Same operation retrying — resume it. The Razorpay steps below are each
-        // guarded by the persisted reversal/refund ids, so already-completed work
-        // is skipped rather than repeated.
-        console.log("[vendor-approve-return] resuming in-flight operation for matching idempotency key", {
-          order_item_id: orderItemId,
-        });
-        item = existing;
-      } else {
-        console.log("[vendor-approve-return] lock conflict — not requested, or in-flight under a different key", {
-          order_item_id: orderItemId,
-          current_status: existing?.return_status ?? null,
-          key_matches: keyMatches,
-        });
-        // Surface a machine-readable errorCode so the UI can distinguish a
-        // genuine lock conflict (another request owns the row) from other 409s
-        // and decide whether to retry or refresh the return list.
-        const isStaleState = existing?.return_status !== "processing";
-        const errorCode = isStaleState ? ERROR_CODES.CONFLICT : ERROR_CODES.CONFLICT;
-        return respondWithError(new PaymentError(ErrorCategory.CONFLICT, errorCode, "Return is not in requested state or is already being processed", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-      }
+      console.error("[vendor-approve-return] STAGE 1 FATAL: Order item not found", { orderItemId, operationKey });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.NOT_FOUND, "Order item not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-
-    // ---- Authorize BEFORE moving money ----
-    const { data: vendor, error: vendorErr } = await service
-      .from("vendors")
-      .select("id, user_id, is_commission_exempt")
-      .eq("id", item.vendor_id)
-      .maybeSingle();
-    if (vendorErr) {
-      console.error("[vendor-approve-return] vendor DB lookup error", vendorErr.code, vendorErr.message);
-      // Roll back the lock so a retry can re-enter.
-      await releaseLock(service, item.id, idempotencyKey, "vendor-db-lookup-error");
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
-    if (!vendor) {
-      console.error("[vendor-approve-return] vendor row not found for id", item.vendor_id);
-      // Roll back the lock so a retry can re-enter.
-      await releaseLock(service, item.id, idempotencyKey, "vendor-not-found");
-      return respondWithError(new PaymentError(ErrorCategory.NOT_FOUND, ERROR_CODES.NOT_FOUND, "Vendor not found", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
-    if (vendor.user_id !== user.id) {
-      await releaseLock(service, item.id, idempotencyKey, "caller-not-vendor-owner");
-      return respondWithError(new PaymentError(ErrorCategory.AUTHORIZATION, ERROR_CODES.FORBIDDEN, "Forbidden", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
-
-    // ---- Amounts ----
+    const transferId = item.razorpay_transfer_id;
+    // Gateway payload only.
+    // Canonical validation occurs inside create_return_refund_confirm RPC.
     const linePaise = Math.round(Number(item.price) * Number(item.quantity) * 100);
-    if (!Number.isFinite(linePaise) || linePaise <= 0) {
-      await releaseLock(service, item.id, idempotencyKey, "invalid-line-amount");
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid line amount", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
 
-    // ---- Commission — MUST be resolved BEFORE any DB writes or gateway calls ----
-    // Fail loudly if the configuration is absent or out of range. A silent fallback
-    // to 0% would incorrectly refund 100% of the line value to the customer.
-    const { data: settingsRows, error: settingsErr } = await service
-      .from("platform_settings")
-      .select("key, value")
-      .eq("key", "commission");
-    if (settingsErr) {
-      // DB failure — NOT the same as "commission not configured". Abort; do not
-      // fall back to a default commission value.
-      console.error("[vendor-approve-return] platform_settings lookup FAILED", {
-        order_item_id: item.id,
-        code: settingsErr.code,
-        message: settingsErr.message,
-      });
-      await releaseLock(service, item.id, idempotencyKey, "commission-db-lookup-error");
-      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    const { data: payment, error: paymentErr } = await service.from("payments").select("razorpay_payment_id").eq("id", paymentId).single();
+    if (paymentErr) {
+      console.error("[vendor-approve-return] STAGE 1 FATAL: DB error looking up payment", { orderItemId, paymentId, operationKey, error: paymentErr });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Database error retrieving payment", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-    if (!settingsRows || settingsRows.length === 0) {
-      // Query succeeded but the commission setting row is absent — configuration
-      // is missing, which is a distinct failure from a DB outage. Fail closed.
-      console.error("[vendor-approve-return] commission configuration missing in platform_settings", {
-        order_item_id: item.id,
-      });
-      await releaseLock(service, item.id, idempotencyKey, "commission-config-missing");
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    if (!payment) {
+      console.error("[vendor-approve-return] STAGE 1 FATAL: Payment missing", { orderItemId, paymentId, operationKey });
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.NOT_FOUND, "Payment missing", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
-    let commissionEnabled = false, commissionPct = 0;
-    for (const row of settingsRows as { value: { enabled?: boolean; percentage?: number | string } }[]) {
-      commissionEnabled = row.value?.enabled ?? false;
-      commissionPct = Number(row.value?.percentage ?? 0);
-    }
-    const platformSettings = { commission: { enabled: commissionEnabled, percentage: commissionPct } };
-
-    let pct: number;
-    try {
-      pct = getVendorCommissionPercentage(
-        { id: vendor.id, is_commission_exempt: !!vendor.is_commission_exempt },
-        platformSettings,
-      );
-    } catch (commErr) {
-      console.error("[vendor-approve-return] getVendorCommissionPercentage threw", commErr);
-      await releaseLock(service, item.id, idempotencyKey, "commission-computation-threw");
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
-    if (pct == null || !Number.isFinite(pct) || pct < 0 || pct > 100) {
-      console.error("[vendor-approve-return] commission out of range", { pct, vendor_id: item.vendor_id });
-      await releaseLock(service, item.id, idempotencyKey, "commission-out-of-range");
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Commission configuration unavailable or invalid. Aborting.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-    }
-
-    const vendorSharePaise = calculateVendorTransferAmount(linePaise, pct, false);
+    const rzpPaymentId = payment.razorpay_payment_id;
 
     // ============================================================
-    // STEP 1 — Reverse the Route transfer
+    // STAGE 2 — Razorpay Reversal & Reversal Confirm
     // ============================================================
-    let reversalId: string | null = item.razorpay_reversal_id ?? null;
-    const transferProcessed = item.transfer_status === "processed" && !!item.razorpay_transfer_id;
+    let confirmReversalData: { data?: { operationKey?: string }, isIdempotentReplay?: boolean } | null = null;
+    let revIsIdempotentReplay = false;
 
-    // TODO: Implement separate admin RPC to query order_items stuck in 'processing'
-    //       state for > 1 hour and allow manual reset to 'pending' or 'rejected'.
-
-    if (transferProcessed && !reversalId) {
+    if (transferId) {
+      console.log("[vendor-approve-return] STAGE 2A: Calling Razorpay Reversal", { orderItemId, operationKey, isIdempotentReplay, transferId, amountPaise });
+      
       const revRes = await fetch(
-        `https://api.razorpay.com/v1/transfers/${item.razorpay_transfer_id}/reversals`,
+        `https://api.razorpay.com/v1/transfers/${transferId}/reversals`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: rzpAuth,
-            // VERIFY against live Razorpay docs: the header name and key format below
-            // must match exactly to prevent silent duplicate reversals on network retries.
-            "X-Razorpay-Idempotency-Key": `return-reversal-${orderItemId}-${item.razorpay_transfer_id}`,
+            // Gateway retry MUST reuse the exact same idempotency key
+            "X-Razorpay-Idempotency-Key": `return-reversal-${orderItemId}-${transferId}`,
           },
-          body: JSON.stringify({ amount: vendorSharePaise }),
+          body: JSON.stringify({ amount: amountPaise }),
         },
       );
+      
       if (!revRes.ok) {
         const errText = await revRes.text();
-        const errMessage = (errText ?? "").toLowerCase();
-        console.error(
-          "[vendor-approve-return] TRANSFER REVERSAL FAILED — aborting before refund",
-          { order_item_id: item.id, transfer_id: item.razorpay_transfer_id, status: revRes.status, body: errText.slice(0, 500) },
-        );
+        const errMessage = errText.toLowerCase();
+        console.error("[vendor-approve-return] STAGE 2A STOP: Gateway reversal failed", { orderItemId, operationKey, isIdempotentReplay, transferId, status: revRes.status, response: errText });
         const code = errMessage.includes("rate") || errMessage.includes("throttle") ? ERROR_CODES.RATE_LIMIT : ERROR_CODES.INTERNAL_ERROR;
         const category = errMessage.includes("rate") || errMessage.includes("throttle") ? ErrorCategory.RATE_LIMIT : ErrorCategory.GATEWAY_ERROR;
-        return respondWithError(new PaymentError(category, code, "Return processing failed. Please try again or contact support.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+        return respondWithError(new PaymentError(category, code, "Gateway reversal failed. Please try again.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
-      reversalId = (await revRes.json())?.id ?? null;
 
-      const { error: revPersistErr }  = await service
-        .from("order_items")
-        .update({ razorpay_reversal_id: reversalId })
-        .eq("id", item.id);
-      if (revPersistErr) {
-        console.error(
-          "[vendor-approve-return] reversal succeeded but id persist FAILED — reconcile manually",
-          { order_item_id: item.id, reversal_id: reversalId, code: revPersistErr.code },
-        );
-        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+      const reversalId = (await revRes.json())?.id ?? null;
+      if (!reversalId) {
+        console.error("[vendor-approve-return] STAGE 2A STOP: Gateway returned no reversal ID", { orderItemId, operationKey, isIdempotentReplay });
+        return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Invalid gateway response.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
       }
-    } else if (!transferProcessed) {
-      console.log("[vendor-approve-return] no processed transfer; skipping reversal", {
-        order_item_id: item.id,
-        transfer_status: item.transfer_status ?? null,
+
+      console.log("[vendor-approve-return] STAGE 2B: Invoking create_return_reversal_confirm", { orderItemId, operationKey, isIdempotentReplay, reversalId });
+      
+      const { data: revData, error: revErr } = await service.rpc("create_return_reversal_confirm", {
+        p_order_item_id: orderItemId,
+        p_razorpay_reversal_id: reversalId
       });
+
+      if (revErr || !revData?.success) {
+        const errorCode = revData?.errorCode || "INTERNAL_ERROR";
+        // CRITICAL ORCHESTRATION OBSERVABILITY: Gateway succeeded, but local DB confirmation failed.
+        console.error("[vendor-approve-return] STAGE 2B STOP: Gateway reversal Succeeded but local DB confirm rejected", { orderItemId, operationKey, reversalId, errorCode, error: revErr || revData });
+        const mappedErr = normalizeRpcError(revErr || revData);
+        return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
+      }
+      
+      confirmReversalData = revData;
+      revIsIdempotentReplay = revData.isIdempotentReplay;
+      console.log("[vendor-approve-return] STAGE 2 CONTINUE: Reversal confirmed", { orderItemId, operationKey: revData.data.operationKey, isIdempotentReplay: revIsIdempotentReplay, reversalId });
+    } else {
+      console.log("[vendor-approve-return] STAGE 2 SKIPPED: No transfer ID present", { orderItemId, operationKey, isIdempotentReplay });
     }
 
     // ============================================================
-    // STEP 2 — Refund the customer
+    // STAGE 3 — Razorpay Refund & Refund Confirm
     // ============================================================
-    let refundId: string | null = item.razorpay_refund_id ?? null;
+    if (!rzpPaymentId) {
+      console.log("[vendor-approve-return] STAGE 3 STOP: No razorpay_payment_id available. Refunding logic skipped.", { orderItemId, operationKey });
+      return json(confirmReversalData || intentData, 200, req);
+    }
 
+    const currentOperationKey = confirmReversalData?.data?.operationKey || operationKey;
+    const operationKeySource = confirmReversalData?.data?.operationKey ? "reversal_confirm" : "intent";
+    const currentIsIdempotentReplay = confirmReversalData ? revIsIdempotentReplay : isIdempotentReplay;
+
+    console.log("[vendor-approve-return] STAGE 3A: Calling Razorpay Refund", { orderItemId, operationKey: currentOperationKey, operationKeySource, isIdempotentReplay: currentIsIdempotentReplay, rzpPaymentId, linePaise });
+    
+    const refRes = await fetch(
+      `https://api.razorpay.com/v1/payments/${rzpPaymentId}/refund`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: rzpAuth,
+          // Gateway retry MUST reuse the exact same idempotency key
+          "X-Razorpay-Idempotency-Key": `return-refund-${orderItemId}-${rzpPaymentId}`,
+        },
+        body: JSON.stringify({ amount: linePaise, notes: { order_item_id: orderItemId, order_id: item.order_id } }),
+      },
+    );
+
+    if (!refRes.ok) {
+      const errText = await refRes.text();
+      const errMessage = errText.toLowerCase();
+      console.error("[vendor-approve-return] STAGE 3A STOP: Gateway refund failed", { orderItemId, operationKey: currentOperationKey, isIdempotentReplay: currentIsIdempotentReplay, rzpPaymentId, status: refRes.status, response: errText });
+      const code = errMessage.includes("rate") || errMessage.includes("throttle") ? ERROR_CODES.RATE_LIMIT : ERROR_CODES.INTERNAL_ERROR;
+      const category = errMessage.includes("rate") || errMessage.includes("throttle") ? ErrorCategory.RATE_LIMIT : ErrorCategory.GATEWAY_ERROR;
+      return respondWithError(new PaymentError(category, code, "Gateway refund failed. Please try again.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
+    }
+
+    const refundId = (await refRes.json())?.id ?? null;
     if (!refundId) {
-      const { data: payment, error: paymentErr } = await service
-        .from("payments")
-        .select("id, razorpay_payment_id, payment_method")
-        .eq("order_id", item.order_id)
-        .not("razorpay_payment_id", "is", null)
-        .maybeSingle();
-
-      if (paymentErr) {
-        // DB/query failure — must NOT be treated as "payment not found" (which
-        // would silently skip the customer refund after the transfer reversal).
-        // Safe to release the lock: any completed reversal already has its id
-        // persisted (persist failure aborts earlier), so a retry skips it.
-        console.error("[vendor-approve-return] payment lookup FAILED — aborting before refund", {
-          order_item_id: item.id,
-          order_id: item.order_id,
-          reversal_id: reversalId,
-          code: paymentErr.code,
-          message: paymentErr.message,
-        });
-        await releaseLock(service, item.id, idempotencyKey, "payment-db-lookup-error");
-        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-      }
-
-      if (!payment?.razorpay_payment_id) {
-        console.log("[vendor-approve-return] no razorpay_payment_id; skipping gateway refund", {
-          order_item_id: item.id,
-          order_id: item.order_id,
-          payment_method: payment?.payment_method ?? null,
-        });
-      } else {
-        const refRes = await fetch(
-          `https://api.razorpay.com/v1/payments/${payment.razorpay_payment_id}/refund`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: rzpAuth,
-              // VERIFY against live Razorpay docs: the header name and key format below
-              // must match exactly to prevent silent duplicate refunds on network retries.
-              "X-Razorpay-Idempotency-Key": `return-refund-${orderItemId}-${payment.razorpay_payment_id}`,
-            },
-            body: JSON.stringify({ amount: linePaise, notes: { order_item_id: item.id, order_id: item.order_id } }),
-          },
-        );
-        if (!refRes.ok) {
-          const errText = await refRes.text();
-          const errMessage = (errText ?? "").toLowerCase();
-          console.error(
-            "[vendor-approve-return] REFUND FAILED after successful reversal — PARTIAL FAILURE",
-            {
-              order_item_id: item.id,
-              order_id: item.order_id,
-              payment_id: payment.razorpay_payment_id,
-              reversal_id: reversalId,
-              status: refRes.status,
-              body: errText.slice(0, 500),
-            },
-          );
-          const code = errMessage.includes("rate") || errMessage.includes("throttle") ? ERROR_CODES.RATE_LIMIT : ERROR_CODES.INTERNAL_ERROR;
-          const category = errMessage.includes("rate") || errMessage.includes("throttle") ? ErrorCategory.RATE_LIMIT : ErrorCategory.GATEWAY_ERROR;
-          return respondWithError(new PaymentError(category, code, "Return processing failed. Please try again or contact support.", code === ERROR_CODES.RATE_LIMIT), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-        }
-        refundId = (await refRes.json())?.id ?? null;
-
-        const { error: refPersistErr } = await service
-          .from("order_items")
-          .update({ razorpay_refund_id: refundId, return_refunded_at: new Date().toISOString() })
-          .eq("id", item.id);
-        if (refPersistErr) {
-          console.error(
-            "[vendor-approve-return] refund succeeded but id persist FAILED — reconcile manually",
-            { order_item_id: item.id, refund_id: refundId, code: refPersistErr.code },
-          );
-          return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Return processing failed. Please try again or contact support.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
-        }
-      }
+      console.error("[vendor-approve-return] STAGE 3A STOP: Gateway returned no refund ID", { orderItemId, operationKey: currentOperationKey, isIdempotentReplay: currentIsIdempotentReplay });
+      return respondWithError(new PaymentError(ErrorCategory.GATEWAY_ERROR, ERROR_CODES.INTERNAL_ERROR, "Invalid gateway response.", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
-    // ============================================================
-    // STEP 3 — DB reversal via RPC (transitions processing → approved)
-    // ============================================================
-    const { data: rpcData, error: rpcErr } = await service.rpc("vendor_approve_return", { _order_item_id: item.id, _caller_vendor_id: item.vendor_id });
-    if (rpcErr || (rpcData && rpcData.success === false)) {
-      const mappedErr = normalizeRpcError(rpcErr || rpcData);
-      console.error("[vendor-approve-return] Final state commit failed", rpcErr || rpcData);
+    console.log("[vendor-approve-return] STAGE 3B: Invoking create_return_refund_confirm", { orderItemId, operationKey: currentOperationKey, isIdempotentReplay: currentIsIdempotentReplay, refundId });
+    
+    const { data: refData, error: refErr } = await service.rpc("create_return_refund_confirm", {
+      p_order_item_id: orderItemId,
+      p_razorpay_refund_id: refundId
+    });
+
+    if (refErr || !refData?.success) {
+      const errorCode = refData?.errorCode || "INTERNAL_ERROR";
+      // CRITICAL ORCHESTRATION OBSERVABILITY: Gateway succeeded, but local DB confirmation failed.
+      console.error("[vendor-approve-return] STAGE 3B STOP: Gateway refund Succeeded but local DB confirm rejected", { orderItemId, operationKey: currentOperationKey, refundId, errorCode, error: refErr || refData });
+      const mappedErr = normalizeRpcError(refErr || refData);
       return respondWithError(mappedErr, { ...getCorsHeaders(req), "Content-Type": "application/json" });
     }
 
-    return json({
-      ok: true,
-      order_item_id: item.id,
-      reversal_id: reversalId,
-      refund_id: refundId,
-      reversed_amount_paise: transferProcessed ? vendorSharePaise : 0,
-      refunded_amount_paise: refundId ? linePaise : 0,
-    }, 200, req);
+    console.log("[vendor-approve-return] STAGE 3 COMPLETE: Returning canonical RPC response", { orderItemId, operationKey: refData.data.operationKey, isIdempotentReplay: refData.isIdempotentReplay, refundId });
+    return json(refData, 200, req);
+
   } catch (err) {
-    console.error("[vendor-approve-return] unexpected error", (err as Error).message);
+    console.error("[vendor-approve-return] STAGE UNEXPECTED ERROR:", (err as Error).message);
     return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Internal server error", false), { ...getCorsHeaders(req), "Content-Type": "application/json" });
   }
 });

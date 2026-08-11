@@ -1,0 +1,346 @@
+-- Phase 4 Task 3.2 - Structural skeleton for create_return_reversal_confirm.
+
+CREATE OR REPLACE FUNCTION public.create_return_reversal_confirm(
+    p_order_item_id uuid,
+    p_razorpay_reversal_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+VOLATILE
+SET search_path TO 'public', 'pg_temp'
+AS $$
+DECLARE
+    -- order item lookup
+    v_order_item RECORD;
+
+    -- idempotency & ledger provenance
+    v_is_idempotent_replay BOOLEAN := FALSE;
+    v_ledger_entry_id UUID;
+    v_operation_key TEXT;
+    v_ledger_row_count INTEGER;
+    v_ledger_razorpay_reference_id TEXT;
+
+    -- timestamps
+    v_now TIMESTAMPTZ := now();
+
+BEGIN
+    -------------------------------------------------------------------------
+    -- 1. Authorization
+    -------------------------------------------------------------------------
+    -- RPC execution is restricted to service_role.
+    -- Authentication/provider verification belongs to the trusted orchestration boundary.
+    -- Database state/provenance is still independently validated by the RPC.
+
+    -------------------------------------------------------------------------
+    -- 2. Validation, Ownership & Locking
+    -------------------------------------------------------------------------
+    IF p_order_item_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'VALIDATION_MISSING_ORDER_ITEM_ID'
+        );
+    END IF;
+
+    IF p_razorpay_reversal_id IS NULL OR trim(p_razorpay_reversal_id) = '' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'VALIDATION_MISSING_RAZORPAY_REVERSAL_ID'
+        );
+    END IF;
+
+    -- Canonical deterministic lock on the order_item for this return flow.
+    -- This ensures concurrent reversal webhooks for the same item serialize here.
+    SELECT * INTO v_order_item
+    FROM public.order_items
+    WHERE id = p_order_item_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'NOT_FOUND'
+        );
+    END IF;
+
+    -- Relational integrity check:
+    -- 'order_id' is NOT NULL and ON DELETE CASCADE, guaranteeing parent order existence.
+    -- However, 'vendor_id' is ON DELETE SET NULL, permitting nulls.
+    -- We explicitly validate both to ensure the canonical workflow context is intact.
+    IF v_order_item.order_id IS NULL OR v_order_item.vendor_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'VALIDATION_FAILED'
+        );
+    END IF;
+
+    -- State Validation Boundary
+    -- 1. 'reversing': Fresh execution candidate.
+    -- 2. 'refunding': Potential replay candidate (reversal already succeeded).
+    -- 3. Everything else: Invalid state.
+    IF v_order_item.return_status = 'reversing' THEN
+        -- Potential fresh execution: proceed to idempotency/provenance (Task 3.4)
+        NULL;
+    ELSIF v_order_item.return_status = 'refunding' THEN
+        -- Potential replay candidate: proceed to idempotency/provenance (Task 3.4)
+        -- Task 3.4 must prove the stored reversal provenance matches the incoming Razorpay reversal ID.
+        NULL;
+    ELSE
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'CONFLICT'
+        );
+    END IF;
+
+    -------------------------------------------------------------------------
+    -- 3. Idempotency & Reversal Provenance
+    -------------------------------------------------------------------------
+    IF v_order_item.return_status = 'reversing' THEN
+        -- A. FRESH EXECUTION
+        -- 1. Validate that the Razorpay reversal ID hasn't been set yet (corruption guard).
+        IF v_order_item.razorpay_reversal_id IS NOT NULL THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', null,
+                'isIdempotentReplay', false,
+                'errorCode', 'CONFLICT'
+            );
+        END IF;
+
+        -- 2. Prove exactly one canonical pending reversal ledger row exists
+        -- for the completely locked financial context, locking it safely to prevent TOCTOU.
+        -- A single CTE forces PostgreSQL to evaluate the FOR UPDATE lock simultaneously
+        -- with the cardinality/identity snapshot, closing the READ COMMITTED gap.
+        WITH locked_rows AS (
+            SELECT id, operation_key
+            FROM public.ledger_entries
+            WHERE order_item_id = p_order_item_id
+              AND order_id = v_order_item.order_id
+              AND vendor_id = v_order_item.vendor_id
+              AND type = 'reversal'
+              AND status = 'pending'
+              AND razorpay_reference_id IS NULL
+            FOR UPDATE
+        )
+        SELECT 
+            COUNT(*) OVER () as total_rows,
+            id,
+            operation_key
+        INTO v_ledger_row_count, v_ledger_entry_id, v_operation_key
+        FROM locked_rows
+        LIMIT 1;
+
+        IF NOT FOUND OR v_ledger_row_count <> 1 THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', null,
+                'isIdempotentReplay', false,
+                'errorCode', 'CONFLICT'
+            );
+        END IF;
+
+        v_is_idempotent_replay := FALSE;
+
+    ELSIF v_order_item.return_status = 'refunding' THEN
+        -- B. POTENTIAL REPLAY
+        -- 1. Validate that the incoming Razorpay ID matches the persisted authoritative ID.
+        -- If it differs, this is a conflict/provenance violation, not a replay.
+        IF v_order_item.razorpay_reversal_id IS DISTINCT FROM p_razorpay_reversal_id THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', null,
+                'isIdempotentReplay', false,
+                'errorCode', 'CONFLICT'
+            );
+        END IF;
+
+        -- 2. Prove exactly one canonical confirmed reversal ledger row exists
+        -- for the completely locked financial context.
+        WITH candidate_rows AS (
+            SELECT
+                COUNT(*) OVER () as total_rows,
+                id,
+                razorpay_reference_id,
+                operation_key
+            FROM public.ledger_entries
+            WHERE order_item_id = p_order_item_id
+              AND order_id = v_order_item.order_id
+              AND vendor_id = v_order_item.vendor_id
+              AND type = 'reversal'
+              AND status = 'confirmed'
+        )
+        SELECT
+            total_rows,
+            id,
+            razorpay_reference_id,
+            operation_key
+        INTO
+            v_ledger_row_count,
+            v_ledger_entry_id,
+            v_ledger_razorpay_reference_id,
+            v_operation_key
+        FROM candidate_rows
+        LIMIT 1;
+
+        IF NOT FOUND OR v_ledger_row_count <> 1 THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', null,
+                'isIdempotentReplay', false,
+                'errorCode', 'CONFLICT'
+            );
+        END IF;
+
+        -- 3. Verify ledger provider reference perfectly matches the incoming reversal ID.
+        IF v_ledger_razorpay_reference_id IS DISTINCT FROM p_razorpay_reversal_id THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'data', null,
+                'isIdempotentReplay', false,
+                'errorCode', 'CONFLICT'
+            );
+        END IF;
+
+        v_is_idempotent_replay := TRUE;
+    END IF;
+
+    -------------------------------------------------------------------------
+    -- 4. Canonical Reversal Ledger Confirmation
+    -------------------------------------------------------------------------
+    IF NOT v_is_idempotent_replay THEN
+        UPDATE public.ledger_entries
+        SET status = 'confirmed',
+            confirmed_at = v_now,
+            razorpay_reference_id = p_razorpay_reversal_id
+        WHERE id = v_ledger_entry_id
+          AND type = 'reversal'
+          AND status = 'pending'
+          AND razorpay_reference_id IS NULL;
+
+        GET DIAGNOSTICS v_ledger_row_count = ROW_COUNT;
+        IF v_ledger_row_count <> 1 THEN
+            -- Raising an exception guarantees the PL/pgSQL subtransaction rolls back,
+            -- aborting any partial state mutations.
+            RAISE EXCEPTION 'ledger_confirmation_failed' USING ERRCODE = 'P0001';
+        END IF;
+    END IF;
+
+    -------------------------------------------------------------------------
+    -- 5. Atomic Return State Transition
+    -------------------------------------------------------------------------
+    -- Note: The authoritative state transition is 'reversing' -> 'refunding'.
+    -- There is NO 'reversed' state. 'refunding' is the mandatory postcondition.
+    -- (The final 'refunding' -> 'approved' transition will be owned by create_return_refund_confirm).
+    IF NOT v_is_idempotent_replay THEN
+        UPDATE public.order_items
+        SET return_status = 'refunding',
+            razorpay_reversal_id = p_razorpay_reversal_id
+        WHERE id = p_order_item_id
+          AND return_status = 'reversing'
+          AND razorpay_reversal_id IS NULL;
+
+        GET DIAGNOSTICS v_ledger_row_count = ROW_COUNT;
+        IF v_ledger_row_count <> 1 THEN
+            -- Raising an exception here will atomatically roll back the previous ledger confirmation.
+            RAISE EXCEPTION 'order_item_transition_failed' USING ERRCODE = 'P0001';
+        END IF;
+    END IF;
+
+    -------------------------------------------------------------------------
+    -- 6. Response / Replay Hydration
+    -------------------------------------------------------------------------
+    -- Both fresh execution and valid idempotent replay reach this point having proven
+    -- or successfully mutated the canonical authoritative state.
+    -- We do not query v_order_item.return_status because the RECORD is stale (it reads 'reversing').
+    -- Instead, we construct the response exactly matching the proven post-mutation state.
+
+    RETURN jsonb_build_object(
+      'success', true,
+      'data', jsonb_build_object(
+          'orderItemId', p_order_item_id,
+          'returnStatus', 'refunding',
+          'razorpayReversalId', p_razorpay_reversal_id,
+          'ledgerEntryId', v_ledger_entry_id,
+          'operationKey', v_operation_key
+      ),
+      'isIdempotentReplay', v_is_idempotent_replay,
+      'errorCode', null
+    );
+
+    -------------------------------------------------------------------------
+    -- 7. Error & Concurrency Normalization
+    -------------------------------------------------------------------------
+EXCEPTION
+    WHEN serialization_failure OR deadlock_detected OR lock_not_available THEN
+        RAISE; -- Preserve Phase 4 architectural retryable SQLSTATE re-raise behavior
+
+    WHEN unique_violation THEN
+        RAISE WARNING '[return_reversal_confirmation_failure] Unique constraint violation for order_item %: % (SQLSTATE: %)', 
+            p_order_item_id, SQLERRM, SQLSTATE;
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'CONFLICT'
+        );
+
+    WHEN check_violation OR foreign_key_violation THEN
+        RAISE WARNING '[return_reversal_confirmation_failure] Data integrity violation for order_item %: % (SQLSTATE: %)', 
+            p_order_item_id, SQLERRM, SQLSTATE;
+        RETURN jsonb_build_object(
+            'success', false,
+            'data', null,
+            'isIdempotentReplay', false,
+            'errorCode', 'VALIDATION_FAILED'
+        );
+
+    WHEN raise_exception THEN
+        -- Explicitly raised conflicts (e.g., failed defensive UPDATEs) are safely discriminated by message.
+        -- This guarantees the PL/pgSQL subtransaction is fully rolled back before returning CONFLICT.
+        IF SQLERRM IN ('ledger_confirmation_failed', 'order_item_transition_failed') THEN
+            RAISE WARNING '[return_reversal_confirmation_conflict] Defensive invariant failure for order_item %: % (SQLSTATE: %)',
+                p_order_item_id, SQLERRM, SQLSTATE;
+            RETURN jsonb_build_object(
+              'success', false,
+              'data', null,
+              'isIdempotentReplay', false,
+              'errorCode', 'CONFLICT'
+            );
+        END IF;
+        
+        -- Unknown P0001 exceptions are treated as unexpected internal errors to prevent leaking programmer errors.
+        RAISE WARNING '[return_reversal_confirmation_failure] Unhandled raise_exception in create_return_reversal_confirm (order_item_id: %). SQLSTATE: %, SQLERRM: %',
+            p_order_item_id, SQLSTATE, SQLERRM;
+        RETURN jsonb_build_object(
+          'success', false,
+          'data', null,
+          'isIdempotentReplay', false,
+          'errorCode', 'INTERNAL_ERROR'
+        );
+
+    WHEN OTHERS THEN
+        RAISE WARNING '[return_reversal_confirmation_failure] Unhandled exception in create_return_reversal_confirm (order_item_id: %). SQLSTATE: %, SQLERRM: %',
+            p_order_item_id, SQLSTATE, SQLERRM;
+        RETURN jsonb_build_object(
+          'success', false,
+          'data', null,
+          'isIdempotentReplay', false,
+          'errorCode', 'INTERNAL_ERROR'
+        );
+END;
+
+$$;
+
+REVOKE ALL ON FUNCTION public.create_return_reversal_confirm(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.create_return_reversal_confirm(uuid, text) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_return_reversal_confirm(uuid, text) TO service_role;

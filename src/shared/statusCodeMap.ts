@@ -6,6 +6,7 @@ export enum ErrorCategory {
   CONFLICT = 'CONFLICT',
   RATE_LIMIT = 'RATE_LIMIT',
   GATEWAY_ERROR = 'GATEWAY_ERROR',
+  METHOD_NOT_ALLOWED = 'METHOD_NOT_ALLOWED',
   INTERNAL_ERROR = 'INTERNAL_ERROR',
 }
 
@@ -16,6 +17,7 @@ export const statusCodeMap: Record<ErrorCategory, number> = {
   [ErrorCategory.NOT_FOUND]: 404,
   [ErrorCategory.CONFLICT]: 409,
   [ErrorCategory.RATE_LIMIT]: 429,
-  [ErrorCategory.GATEWAY_ERROR]: 502,
   [ErrorCategory.INTERNAL_ERROR]: 500,
+  [ErrorCategory.GATEWAY_ERROR]: 502,
+  [ErrorCategory.METHOD_NOT_ALLOWED]: 405,
 };

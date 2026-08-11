@@ -255,12 +255,25 @@ $$;
 -- 2. Grants
 -- -----------------------------------------------------------------------
 -- Revoke any previous process_vendor_payout overloads (old function name).
-REVOKE EXECUTE ON FUNCTION public.process_vendor_payout(UUID, NUMERIC, TEXT)
-  FROM PUBLIC, anon, authenticated, service_role;
+DO $$
+BEGIN
+  BEGIN
+    REVOKE EXECUTE ON FUNCTION public.process_vendor_payout(UUID, NUMERIC, TEXT)
+      FROM PUBLIC, anon, authenticated, service_role;
+  EXCEPTION
+    WHEN undefined_function THEN
+      NULL;
+  END;
 
-REVOKE EXECUTE ON FUNCTION public.process_vendor_payout(UUID, NUMERIC, TEXT, UUID)
-  FROM PUBLIC, anon, authenticated, service_role;
-
+  BEGIN
+    REVOKE EXECUTE ON FUNCTION public.process_vendor_payout(UUID, NUMERIC, TEXT, UUID)
+      FROM PUBLIC, anon, authenticated, service_role;
+  EXCEPTION
+    WHEN undefined_function THEN
+      NULL;
+  END;
+END;
+$$;
 -- Revoke from all roles before granting narrowly to service_role.
 REVOKE EXECUTE ON FUNCTION public.request_payout(UUID, NUMERIC, TEXT, UUID)
   FROM PUBLIC, anon, authenticated;

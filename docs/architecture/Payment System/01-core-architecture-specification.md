@@ -133,8 +133,8 @@ Being explicit about scope avoids future over-engineering:
 - **Does not require distributed transactions or a saga framework** — the intent→execute→confirm pattern plus idempotent replay is sufficient at the target scale (§ preamble) and is implemented with ordinary Postgres transactions and RPC calls, not a distributed-transaction coordinator.
 - **Does not require event sourcing or CQRS** — the append-only ledger provides auditability without requiring a full event-sourced rebuild of application state.
 - **Does not mandate 100% test coverage retroactively** — coverage expectations are aspirational for new code (see `04-operational-standards.md` §3), not a blocking requirement applied to the existing codebase all at once.
-- **Does not redesign the checkout, OTP, or email-queue subsystems** — these were audited as sound and are out of scope for this specification.
-
+- **Does not redesign the checkout or OTP subsystems** — these were audited as sound and are out of scope for this specification.
+- **Does not redesign the email-queue subsystem** — with the narrow exception of the Phase 4 provider extension (ADR-012) which adds a Brevo adapter to the existing queue exclusively to durably deliver `return_requested` notifications, without modifying existing Lovable consumers or financial logic.
 ---
 
 ## 9. Change Control for This Specification

@@ -31,25 +31,31 @@ async function verifyWebhookSignature(body: string, signature: string, secret: s
 Deno.serve(async (req) => {
 
   try {
-    const signature = req.headers.get("x-razorpay-signature");
     const secret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET");
-    if (!signature || !secret) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.INTERNAL_ERROR, "Missing signature or secret", false), jsonHeaders);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!secret || !supabaseUrl || !supabaseKey) {
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Missing server configuration", false), jsonHeaders);
+    }
+
+    const signature = req.headers.get("x-razorpay-signature");
+    if (!signature) {
+      console.error("Webhook: missing signature");
+      return new Response(JSON.stringify({ ok: true, error: "Missing signature" }), { status: 200, headers: jsonHeaders });
     }
 
     const rawBody = await req.text();
     const valid = await verifyWebhookSignature(rawBody, signature, secret);
     if (!valid) {
-      return respondWithError(new PaymentError(ErrorCategory.VALIDATION, ERROR_CODES.BAD_REQUEST, "Invalid signature", false), jsonHeaders);
+      console.error("Webhook: invalid signature");
+      return new Response(JSON.stringify({ ok: true, error: "Invalid signature" }), { status: 200, headers: jsonHeaders });
     }
 
     const event = JSON.parse(rawBody);
     const eventType: string = event?.event ?? "";
 
-    const service = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const service = createClient(supabaseUrl, supabaseKey);
 
     // ---- Razorpay Route transfer events (per-vendor payout tracking) ----
     // Structurally different from payment.* events (no payment entity), so they
@@ -278,13 +284,18 @@ Deno.serve(async (req) => {
 
     const { data: paymentRow, error: findErr } = await service
       .from("payments")
-      .select("id, order_id, payment_status, amount")
+      .select("id, order_id, payment_status, amount, customer_id")
       .eq("razorpay_order_id", razorpayOrderId)
       .maybeSingle();
 
-    if (findErr || !paymentRow) {
-      console.error("Webhook: payment row not found");
-      return new Response(JSON.stringify({ ok: true, found: false }), {
+    if (findErr) {
+      console.error("Webhook: error fetching payment", findErr);
+      return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Database query failed", false), jsonHeaders);
+    }
+
+    if (!paymentRow) {
+      console.error("Webhook: payment not found for order", razorpayOrderId);
+      return new Response(JSON.stringify({ ok: true, notFound: true }), {
         status: 200,
         headers: jsonHeaders,
       });
@@ -318,47 +329,76 @@ Deno.serve(async (req) => {
         });
       }
 
-      if (paymentRow.payment_status !== "success") {
-        const { error: upErr } = await service.from("payments").update({
-          payment_status: "success",
-          razorpay_payment_id: razorpayPaymentId,
-          transaction_id: razorpayPaymentId,
-          webhook_confirmed_at: new Date().toISOString(),
-        }).eq("id", paymentRow.id);
+      const { data: confirmResult, error: confirmError } = await service.rpc('create_payment_confirm', {
+        p_payment_id: paymentRow.id,
+        p_order_id: paymentRow.order_id,
+        p_customer_id: paymentRow.customer_id,
+        p_razorpay_payment_id: razorpayPaymentId,
+        p_is_webhook: true,
+        p_transaction_id: razorpayPaymentId
+      });
 
-        // 23505 = client verify already won the race; safe to ignore
-        if (upErr && (upErr as { code?: string }).code !== "23505") {
-          console.error("Webhook: payment update failed", upErr.code);
+      if (confirmError) {
+        console.error("Webhook: payment confirm RPC transport failed", confirmError);
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "RPC transport failed", false), jsonHeaders);
+      }
+
+      if (!confirmResult || typeof confirmResult !== 'object') {
+        console.error("Webhook: payment confirm RPC returned malformed payload");
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, "Malformed RPC payload", false), jsonHeaders);
+      }
+
+      if (confirmResult.success !== true) {
+        console.error("Webhook: payment confirm RPC returned failure", confirmResult.errorCode);
+        
+        const DETERMINISTIC_RPC_ERRORS = new Set([
+          'VALIDATION_MISSING_ORDER_ID',
+          'VALIDATION_MISSING_CUSTOMER_ID',
+          'VALIDATION_MISSING_RAZORPAY_PAYMENT_ID',
+          'VALIDATION_MISSING_RAZORPAY_SIGNATURE',
+          'NOT_FOUND'
+        ]);
+
+        if (DETERMINISTIC_RPC_ERRORS.has(confirmResult.errorCode)) {
+          return new Response(JSON.stringify({ ok: true, rpcError: confirmResult.errorCode }), {
+            status: 200,
+            headers: jsonHeaders,
+          });
         }
+        
+        return respondWithError(new PaymentError(ErrorCategory.INTERNAL_ERROR, ERROR_CODES.INTERNAL_ERROR, confirmResult.errorCode, false), jsonHeaders);
+      }
 
-        await service.from("orders").update({
-          payment_status: "completed",
-          order_status: "confirmed",
-          reconciliation_flagged: false,
-          reconciliation_reason: null,
-        }).eq("id", paymentRow.order_id);
+      // Preserve webhook-specific updates because the agnostic RPC does not set them
+      const { error: paymentUpdateError } = await service.from("payments")
+        .update({ webhook_confirmed_at: new Date().toISOString() })
+        .eq("id", paymentRow.id)
+        .is("webhook_confirmed_at", null);
+      if (paymentUpdateError) {
+        console.error("Webhook: non-fatal error updating webhook_confirmed_at", paymentUpdateError);
+      }
+        
+      const { error: orderUpdateError } = await service.from("orders")
+        .update({ reconciliation_flagged: false, reconciliation_reason: null })
+        .eq("id", paymentRow.order_id)
+        .eq("reconciliation_flagged", true);
+      if (orderUpdateError) {
+        console.error("Webhook: non-fatal error clearing reconciliation flags", orderUpdateError);
+      }
 
+      if (confirmResult.isIdempotentReplay) {
+        await service.rpc("log_payment_event", {
+          p_payment_id: paymentRow.id,
+          p_event_type: "webhook_captured_noop",
+          p_message: "Webhook captured received but payment already success (Idempotent Replay)",
+          p_metadata: { razorpay_payment_id: razorpayPaymentId },
+        });
+      } else {
         await service.rpc("log_payment_event", {
           p_payment_id: paymentRow.id,
           p_event_type: "webhook_captured",
           p_message: "Payment captured via Razorpay webhook",
           p_metadata: { razorpay_payment_id: razorpayPaymentId, amount_paise: paidAmount },
-        });
-      } else {
-        // Client verify already won the race — stamp confirmation + clear any flag
-        await service.from("payments")
-          .update({ webhook_confirmed_at: new Date().toISOString() })
-          .eq("id", paymentRow.id)
-          .is("webhook_confirmed_at", null);
-        await service.from("orders")
-          .update({ reconciliation_flagged: false, reconciliation_reason: null })
-          .eq("id", paymentRow.order_id)
-          .eq("reconciliation_flagged", true);
-        await service.rpc("log_payment_event", {
-          p_payment_id: paymentRow.id,
-          p_event_type: "webhook_captured_noop",
-          p_message: "Webhook captured received but payment already success",
-          p_metadata: { razorpay_payment_id: razorpayPaymentId },
         });
       }
     } else if (eventType === "payment.failed") {

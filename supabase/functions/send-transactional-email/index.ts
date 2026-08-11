@@ -2,6 +2,8 @@
 import { ERROR_CODES } from "../../../src/shared/errorCodes.ts";
 import { PaymentError, respondWithError } from "../../../src/shared/errorResponse.ts";
 import { ErrorCategory } from "../../../src/shared/statusCodeMap.ts";
+import { brevoSend } from "../_shared/brevo.ts";
+
 // Supports two template types:
 //   - order_confirmation : sent after a successful purchase
 //   - return_requested   : sent when a customer submits a return request
@@ -17,9 +19,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/brevo";
-const FROM_EMAIL = Deno.env.get("BREVO_FROM_EMAIL") ?? "no-reply@koshurkart.in";
-const FROM_NAME = Deno.env.get("BREVO_FROM_NAME") ?? "Koshur Kart";
 
 interface SendArgs {
   type: "order_confirmation" | "return_requested" | "customer_welcome" | "vendor_kyc_welcome";
@@ -112,37 +111,6 @@ const CUSTOMER_WELCOME_TEMPLATE_ID = Number(
 const VENDOR_KYC_WELCOME_TEMPLATE_ID = Number(
   Deno.env.get("BREVO_VENDOR_KYC_WELCOME_TEMPLATE_ID") ?? "2",
 );
-
-async function brevoSend(payload: Record<string, unknown>) {
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-  const brevoKey = Deno.env.get("BREVO_API_KEY");
-  if (!lovableKey || !brevoKey) throw new Error("Missing Brevo gateway credentials");
-
-  const res = await fetch(`${GATEWAY_URL}/smtp/email`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": brevoKey,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Brevo ${res.status}: ${text.slice(0, 500)}`);
-  }
-  return res.json();
-}
-
-async function sendViaBrevo(to: string, name: string | null, subject: string, html: string) {
-  return brevoSend({
-    sender: { name: FROM_NAME, email: FROM_EMAIL },
-    to: [{ email: to, name: name ?? undefined }],
-    subject,
-    htmlContent: html,
-  });
-}
 
 
 Deno.serve(async (req) => {
@@ -315,9 +283,27 @@ Deno.serve(async (req) => {
       const to = order.recipient_email ?? userData.user.email;
       if (!to) throw new Error("No recipient email");
       const { subject, html } = returnRequestEmail(order, item);
-      const result = await sendViaBrevo(to, order.recipient_name, subject, html);
-      console.log("email.sent", { type: args.type, orderItemId: args.orderItemId, to });
-      return new Response(JSON.stringify({ ok: true, result }), {
+      
+      const { error: enqueueError } = await admin.rpc("enqueue_email", {
+        queue_name: "transactional_emails",
+        payload: {
+          provider: "brevo",
+          to: to,
+          recipient_name: order.recipient_name,
+          subject,
+          html,
+          message_id: `return_requested:${item.id}`,
+          idempotency_key: `return_requested:${item.id}`,
+          label: "return_requested"
+        }
+      });
+      
+      if (enqueueError) {
+        throw new Error(`Failed to enqueue return_requested email: ${enqueueError.message}`);
+      }
+      
+      console.log("email.queued", { type: args.type, orderItemId: args.orderItemId, to });
+      return new Response(JSON.stringify({ ok: true, queued: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
